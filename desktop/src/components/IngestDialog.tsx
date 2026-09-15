@@ -90,6 +90,7 @@ export async function initIngest() {
   await listen<IngestSummary>("ingest-done", (e) => {
     const s = e.payload
     useIngest.setState({ running: false, progress: null, started: null, source: null })
+    useUI.getState().open("ingest", false)
     const size = formatBytes(s.bytes)
     const message = `${s.cancelled ? "Stopped" : "Ingest done"}: copied ${plural(s.copied, "file")} (${size})${s.skipped ? `, skipped ${s.skipped} already ingested` : ""}${s.ejected ? ". Card ejected." : "."}`
     if (s.errors.length) toast.error("Ingest finished with problems", { description: s.errors.slice(0, 5).join("\n"), duration: Infinity })
@@ -169,10 +170,12 @@ export function IngestDialog() {
       skipExisting: prefs.skipExisting,
       eject: prefs.eject,
     }
+    // Mark it running first: a small card can finish before the start call even returns.
+    useIngest.setState({ running: true, source, started: null, progress: null })
     try {
       await startIngest(options)
-      useIngest.setState({ running: true, source, started: null, progress: null })
     } catch (e) {
+      useIngest.setState({ running: false, source: null })
       toast.error("Couldn’t start the ingest", { description: String(e) })
     }
   }
@@ -243,8 +246,9 @@ export function IngestDialog() {
             <Field>
               <FieldLabel htmlFor="ingest-job">Job name</FieldLabel>
               <Input id="ingest-job" value={prefs.job} onChange={(e) => setPrefs({ job: e.target.value })} placeholder="e.g. Fairborn-vs-Tecumseh" />
-              <FieldDescription className="font-mono text-xs">
-                → {example.folder}/{example.file}.CR3
+              <FieldDescription className="text-xs">
+                <span className="font-mono">→ {example.folder}/{example.file}.CR3</span>
+                {prefs.folderPattern.includes("{date}") && " · dated by each photo’s capture day"}
               </FieldDescription>
             </Field>
 

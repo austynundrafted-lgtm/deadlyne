@@ -91,6 +91,19 @@ pub async fn transfer_photos(app: AppHandle, items: Vec<Item>, destination: Stri
     .await
 }
 
+/// Moves one file or folder to the Trash / Recycle Bin (recoverable).
+pub fn move_to_trash(path: &Path) -> Result<(), trash::Error> {
+    #[allow(unused_mut)]
+    let mut ctx = trash::TrashContext::default();
+    // Finder's AppleScript route needs an automation permission and fails silently without it.
+    #[cfg(target_os = "macos")]
+    {
+        use trash::macos::{DeleteMethod, TrashContextExtMacos};
+        ctx.set_delete_method(DeleteMethod::NsFileManager);
+    }
+    ctx.delete(path)
+}
+
 /// Moves files to the Trash / Recycle Bin — never deletes permanently.
 #[tauri::command]
 pub async fn trash_photos(items: Vec<Item>) -> Outcome {
@@ -102,7 +115,7 @@ pub async fn trash_photos(items: Vec<Item>) -> Outcome {
                 if !f.exists() {
                     continue;
                 }
-                match trash::delete(f) {
+                match move_to_trash(f) {
                     Ok(()) => out.files += 1,
                     Err(e) => {
                         out.errors.push(format!("{}: {e}", name(f)));

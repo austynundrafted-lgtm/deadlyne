@@ -293,7 +293,7 @@ pub async fn rename_code_list(file_name: String, new_name: String) -> Result<Str
 /// Moves a lookup file to the Trash / Recycle Bin (recoverable).
 #[tauri::command]
 pub async fn trash_code_list(file_name: String) -> Result<(), String> {
-    jobs::serial(move || trash::delete(dir().join(sanitize(&file_name))).map_err(|e| e.to_string())).await
+    jobs::serial(move || crate::fileops::move_to_trash(&dir().join(sanitize(&file_name))).map_err(|e| e.to_string())).await
 }
 
 #[tauri::command]

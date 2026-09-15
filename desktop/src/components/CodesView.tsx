@@ -246,7 +246,7 @@ function Editor({ list, onRenamed }: { list: CodeList; onRenamed: (fileName: str
               <MoreHorizontal />
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
+          <DropdownMenuContent align="end" className="w-56">
             <DropdownMenuItem onSelect={() => setRenaming(list.name)}>Rename…</DropdownMenuItem>
             <DropdownMenuItem onSelect={() => setPrefix("")}>
               Add prefix to every code…
@@ -369,7 +369,12 @@ function Editor({ list, onRenamed }: { list: CodeList; onRenamed: (fileName: str
             <AlertDialogAction
               variant="destructive"
               onClick={async () => {
-                await invoke("trash_code_list", { fileName: list.fileName })
+                try {
+                  await invoke("trash_code_list", { fileName: list.fileName })
+                  toast.success(`Moved “${list.name}” to the Trash`)
+                } catch (e) {
+                  toast.error("Couldn’t move it to the Trash", { description: String(e) })
+                }
                 await useCodes.getState().load()
               }}
             >

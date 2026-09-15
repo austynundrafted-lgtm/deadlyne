@@ -199,6 +199,9 @@ interface CardProps extends Omit<React.HTMLAttributes<HTMLDivElement>, "onPointe
   onRate: (n: number) => void
 }
 
+/** The photos under the last two pointer presses, oldest first. */
+let pointerHistory: [string | null, string | null] = [null, null]
+
 /** Right-click a photo: culling, captions and file actions for it (or the whole selection). */
 function PhotoMenu({ photo, selected, children }: { photo: Photo; selected: boolean; children: React.ReactNode }) {
   const s = useStore.getState
@@ -277,9 +280,14 @@ const PhotoCard = memo(function PhotoCard({ photo: p, width, selected, focused, 
         className,
       )}
       style={{ ...style, width }}
-      onPointerDown={onPointerDown}
+      onPointerDown={(e) => {
+        pointerHistory = [pointerHistory[1], p.id]
+        onPointerDown(e)
+      }}
       onDoubleClick={(e) => {
-        // Quickly tagging then rating must not count as a double-click on the photo.
+        // Only two clicks on this same photo open it: not a click then a quick shift/⌘-click on
+        // another photo, and not quickly tagging then rating.
+        if (e.shiftKey || e.metaKey || e.ctrlKey || pointerHistory[0] !== p.id) return
         if (!(e.target as HTMLElement).closest("button")) onOpen()
       }}
     >

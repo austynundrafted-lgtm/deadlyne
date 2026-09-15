@@ -400,9 +400,15 @@ export const useStore = create<State>((set, get) => ({
         await get().openFolder(folder!) // one half of each pair stays: re-read the folder
       } else {
         const gone = new Set(r.completed)
+        // Keep culling: land on the photo that followed the first trashed one.
+        const before = visiblePhotos(get())
+        const firstGone = before.findIndex((p) => gone.has(p.id))
+        const next = before.slice(firstGone).find((p) => !gone.has(p.id)) ?? before.slice(0, firstGone).reverse().find((p) => !gone.has(p.id))
         set((s) => ({
           photos: s.photos.filter((p) => !gone.has(p.id)),
-          selected: new Set([...s.selected].filter((id) => !gone.has(id))),
+          selected: new Set(next ? [next.id] : []),
+          anchor: next?.id ?? null,
+          focus: next?.id ?? null,
         }))
       }
       if (r.errors.length) toast.error("Some files couldn’t be moved to the Trash", { description: r.errors.slice(0, 4).join("\n") })
