@@ -132,12 +132,33 @@ enum XMPSidecar {
            text[text.index(before: end)] == "/" {
             text.replaceSubrange(text.index(before: end)...end, with: ">\n  </rdf:Description>")
         }
-        guard let close = text.range(of: "</rdf:Description>") else { return text }
+        guard let close = topDescriptionClose(in: text) else { return text }
         // Keep the closing tag's own indentation intact.
         var lineStart = close.lowerBound
         while lineStart > text.startIndex, text[text.index(before: lineStart)] == " " { lineStart = text.index(before: lineStart) }
         text.insert(contentsOf: element + "\n", at: lineStart)
         return text
+    }
+
+    /// Where the first (top-level) `<rdf:Description>` closes. Lightroom sidecars nest further
+    /// descriptions inside it (Denoise, masks…), so the first `</rdf:Description>` in the file is
+    /// often a nested one — captions put there would be invisible to Lightroom.
+    private static func topDescriptionClose(in text: String) -> Range<String.Index>? {
+        guard let startEnd = descriptionStartTagEnd(in: text), text[text.index(before: startEnd)] != "/" else { return nil }
+        var depth = 0
+        var pos = text.index(after: startEnd)
+        while let close = text.range(of: "</rdf:Description>", range: pos..<text.endIndex) {
+            if let open = text.range(of: "<rdf:Description", range: pos..<close.lowerBound),
+               let tagEnd = text[open.upperBound...].firstIndex(of: ">") {
+                if text[text.index(before: tagEnd)] != "/" { depth += 1 }
+                pos = text.index(after: tagEnd)
+                continue
+            }
+            if depth == 0 { return close }
+            depth -= 1
+            pos = close.upperBound
+        }
+        return nil
     }
 
     private static func removeElement(_ name: String, in text: String) -> String {

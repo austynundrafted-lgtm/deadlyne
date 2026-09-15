@@ -197,14 +197,16 @@ pub fn start_ingest(app: AppHandle, options: Options) -> Result<(), String> {
     }
     CANCEL.store(false, Ordering::SeqCst);
     std::thread::spawn(move || {
-        let summary = run(&app, &options);
+        let summary = run(&options, |p| {
+            let _ = app.emit("ingest-progress", p.clone());
+        });
         RUNNING.store(false, Ordering::SeqCst);
         let _ = app.emit("ingest-done", summary);
     });
     Ok(())
 }
 
-fn run(app: &AppHandle, o: &Options) -> Summary {
+pub fn run(o: &Options, mut emit: impl FnMut(&Progress)) -> Summary {
     use rayon::prelude::*;
     let mut s = Summary::default();
     let source = Path::new(&o.source);
@@ -245,7 +247,7 @@ fn run(app: &AppHandle, o: &Options) -> Summary {
         .collect();
     let bytes_total: u64 = plan.iter().map(|p| p.2).sum();
     let mut progress = Progress { files_done: 0, files_total: plan.len(), bytes_done: 0, bytes_total, current_file: String::new() };
-    let _ = app.emit("ingest-progress", progress.clone());
+    emit(&progress);
     let mut last_emit = std::time::Instant::now();
     let mut copied_photos: HashMap<String, u64> = HashMap::new();
     let mut counted = std::collections::HashSet::new();
@@ -294,7 +296,7 @@ fn run(app: &AppHandle, o: &Options) -> Summary {
         progress.current_file = file_name;
         if last_emit.elapsed().as_millis() > 100 || k + 1 == plan.len() {
             last_emit = std::time::Instant::now();
-            let _ = app.emit("ingest-progress", progress.clone());
+            emit(&progress);
         }
     }
 
@@ -353,5 +355,29 @@ mod tests {
         );
         let no_job = Options { job: String::new(), rename_pattern: None, ..o };
         assert_eq!(names(&no_job, "MCD_0001", "2026-08-22T09:45:27", "", 1), ("2026-08-22".to_string(), "MCD_0001".to_string()));
+    }
+
+    /// A full ingest from a fake card: `DEADLYNE_CARD=/card DEADLYNE_DEST=/dest cargo test --release real_ingest -- --ignored --nocapture`
+    #[test]
+    #[ignore]
+    fn real_ingest() {
+        let (Ok(card), Ok(dest)) = (std::env::var("DEADLYNE_CARD"), std::env::var("DEADLYNE_DEST")) else { return };
+        let o = Options {
+            source: card,
+            destination: dest,
+            job: "Fairborn-vs-Tecumseh".into(),
+            folder_pattern: "{date}_{job}".into(),
+            rename_pattern: Some("{job}_{seq}".into()),
+            first_seq: 1,
+            skip_existing: true,
+            eject: false,
+        };
+        let mut events = 0;
+        let s = run(&o, |_| events += 1);
+        println!("first pass: copied {} skipped {} bytes {} errors {:?} folder {:?} events {events}", s.copied, s.skipped, s.bytes, s.errors, s.first_folder);
+        let again = run(&o, |_| {});
+        println!("second pass: copied {} skipped {} errors {:?}", again.copied, again.skipped, again.errors);
+        assert_eq!(again.copied, 0);
+        assert_eq!(again.skipped, s.copied);
     }
 }

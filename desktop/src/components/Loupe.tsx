@@ -1,28 +1,19 @@
 // Full-size preview over the grid. Shows the thumbnail instantly, swaps in the full embedded
 // JPEG when it's decoded, and pre-loads the neighbours so flipping is instant.
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
+import { useEffect, useLayoutEffect, useRef, useState } from "react"
 import { Check, Star, X } from "lucide-react"
 import { useShallow } from "zustand/react/shallow"
 import { previewUrl, thumbUrl } from "@/lib/api"
 import { labelColor, mod, orientationTransform } from "@/lib/format"
 import { cn } from "@/lib/utils"
-import { useStore, visiblePhotos } from "@/store"
+import { useStore, useVisiblePhotos } from "@/store"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Kbd } from "@/components/ui/kbd"
 
 export function Loupe() {
-  const { photos, focus, tagFilter, minRating, labelFilter, setLoupe } = useStore(
-    useShallow((s) => ({
-      photos: s.photos,
-      focus: s.focus,
-      tagFilter: s.tagFilter,
-      minRating: s.minRating,
-      labelFilter: s.labelFilter,
-      setLoupe: s.setLoupe,
-    })),
-  )
-  const list = useMemo(() => visiblePhotos({ photos, tagFilter, minRating, labelFilter }), [photos, tagFilter, minRating, labelFilter])
+  const { focus, setLoupe } = useStore(useShallow((s) => ({ focus: s.focus, setLoupe: s.setLoupe })))
+  const list = useVisiblePhotos()
   const index = list.findIndex((p) => p.id === focus)
   const photo = list[index]
 

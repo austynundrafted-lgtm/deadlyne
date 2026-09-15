@@ -184,6 +184,18 @@ pub fn embed(path: &Path, captions: &Captions, fields: &[Field], mode: JpegMode,
         app13.extend(payload);
     }
 
+    // EXIF Artist / Copyright: cameras write them (often empty), and some readers prefer them.
+    let exif_patch = segs.iter().position(|s| s.marker == 0xE1 && body(&old, s).starts_with(b"Exif\0\0")).and_then(|i| {
+        let mut updates = vec![];
+        if fields.contains(&Field::Creator) {
+            updates.push((0x013B, captions.creator.clone()));
+        }
+        if fields.contains(&Field::Copyright) {
+            updates.push((0x8298, captions.copyright.clone()));
+        }
+        patch_exif_strings(&old[segs[i].start..segs[i].end], &updates).map(|seg| (i, seg))
+    });
+
     // Reassemble: new blocks where the old ones were, else after the leading APPn segments.
     let first_non_app = |upto: u8| segs.iter().position(|s| !(0xE0..=upto).contains(&s.marker)).unwrap_or(segs.len());
     let xmp_at = segs.iter().position(|s| is_xmp(&old, s)).unwrap_or_else(|| first_non_app(0xE1));
@@ -197,7 +209,9 @@ pub fn embed(path: &Path, captions: &Captions, fields: &[Field], mode: JpegMode,
         if n == ps_at {
             out.extend_from_slice(&app13);
         }
-        if !is_xmp(&old, s) && !is_photoshop(&old, s) {
+        if let Some((_, seg)) = exif_patch.as_ref().filter(|(i, _)| *i == n) {
+            out.extend_from_slice(seg);
+        } else if !is_xmp(&old, s) && !is_photoshop(&old, s) {
             out.extend_from_slice(&old[s.start..s.end]);
         }
     }
@@ -216,6 +230,68 @@ pub fn embed(path: &Path, captions: &Captions, fields: &[Field], mode: JpegMode,
         return Err("the rewritten file didn’t verify, so the original was kept".into());
     }
     xmp::write_atomic(path, &out).map_err(|e| e.to_string())
+}
+
+/// Rewrites existing ASCII tags in IFD0 of an EXIF APP1 segment (`FF E1 len "Exif\0\0" TIFF…`).
+/// New strings are appended after the TIFF data, so no other offset moves. Tags the camera
+/// didn't write are left alone. Returns the new segment, or None when nothing changed.
+fn patch_exif_strings(seg: &[u8], updates: &[(u16, String)]) -> Option<Vec<u8>> {
+    const HEADER: usize = 10; // FF E1 len(2) "Exif\0\0"
+    let mut tiff = seg.get(HEADER..)?.to_vec();
+    if tiff.len() < 8 || updates.is_empty() {
+        return None;
+    }
+    let le = tiff[0] == 0x49;
+    let rd16 = |b: &[u8], o: usize| if le { u16::from_le_bytes([b[o], b[o + 1]]) } else { u16::from_be_bytes([b[o], b[o + 1]]) };
+    let rd32 = |b: &[u8], o: usize| if le { u32::from_le_bytes(b[o..o + 4].try_into().unwrap()) } else { u32::from_be_bytes(b[o..o + 4].try_into().unwrap()) };
+    let wr32 = |v: u32| if le { v.to_le_bytes() } else { v.to_be_bytes() };
+    let ifd = rd32(&tiff, 4) as usize;
+    if ifd + 2 > tiff.len() {
+        return None;
+    }
+    let count = rd16(&tiff, ifd) as usize;
+    let mut changed = false;
+    for k in 0..count {
+        let e = ifd + 2 + k * 12;
+        if e + 12 > tiff.len() {
+            break;
+        }
+        let tag = rd16(&tiff, e);
+        let Some((_, value)) = updates.iter().find(|(t, _)| *t == tag) else { continue };
+        if rd16(&tiff, e + 2) != 2 {
+            continue; // not ASCII
+        }
+        let mut bytes = value.as_bytes().to_vec();
+        bytes.push(0);
+        // Same value already? Leave it.
+        let old_count = rd32(&tiff, e + 4) as usize;
+        let old_off = if old_count <= 4 { e + 8 } else { rd32(&tiff, e + 8) as usize };
+        if tiff.get(old_off..old_off + old_count) == Some(&bytes[..]) {
+            continue;
+        }
+        tiff[e + 4..e + 8].copy_from_slice(&wr32(bytes.len() as u32));
+        if bytes.len() <= 4 {
+            let mut inline = [0u8; 4];
+            inline[..bytes.len()].copy_from_slice(&bytes);
+            tiff[e + 8..e + 12].copy_from_slice(&inline);
+        } else {
+            if tiff.len() % 2 == 1 {
+                tiff.push(0);
+            }
+            let at = tiff.len() as u32;
+            tiff.extend_from_slice(&bytes);
+            tiff[e + 8..e + 12].copy_from_slice(&wr32(at));
+        }
+        changed = true;
+    }
+    let len = 2 + 6 + tiff.len();
+    if !changed || len > 0xFFFF {
+        return None;
+    }
+    let mut out = vec![0xFF, 0xE1, (len >> 8) as u8, len as u8];
+    out.extend_from_slice(b"Exif\0\0");
+    out.extend(tiff);
+    Some(out)
 }
 
 // MARK: - IPTC-IIM
@@ -442,5 +518,31 @@ mod tests {
         assert!(iim_captions(&iim_datasets(&b, &segs)).is_empty());
         assert_eq!(read_captions(&path).headline, "Fairborn wins");
         std::fs::remove_dir_all(dir).ok();
+    }
+
+    /// On a copy of a real camera JPEG: `DEADLYNE_JPEG=/path/copy.jpg cargo test real_jpeg -- --ignored`
+    #[test]
+    #[ignore]
+    fn real_jpeg() {
+        let Ok(p) = std::env::var("DEADLYNE_JPEG") else { return };
+        let path = Path::new(&p);
+        let before = std::fs::read(path).unwrap();
+        let (bsegs, bscan) = layout(&before).unwrap();
+        let mut c = Captions::default();
+        c.headline = "Fairborn vs. Tecumseh".into();
+        c.caption = "Jordan Sample (10) scores for the Fairborn Skyhawks — Dončić-style".into();
+        c.keywords = vec!["Fairborn".into(), "Football".into(), "Ohio".into()];
+        c.creator = "Austyn McFadden".into();
+        c.credit = "Deadlyne Test".into();
+        c.copyright = "© 2026 Austyn McFadden".into();
+        c.city = "Tipp City".into();
+        let m = crate::exif::read(path);
+        embed(path, &c, &Field::ALL, JpegMode::XmpAndIim, crate::exif::iim_date_time(&m)).unwrap();
+        let after = std::fs::read(path).unwrap();
+        let (asegs, ascan) = layout(&after).unwrap();
+        assert_eq!(&after[ascan..], &before[bscan..], "image data must be byte-identical");
+        assert_eq!(dimensions(&after, &asegs), dimensions(&before, &bsegs));
+        assert_eq!(read_captions(path), c);
+        println!("ok: {} → {} bytes, iim date {:?}", before.len(), after.len(), crate::exif::iim_date_time(&m));
     }
 }

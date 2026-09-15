@@ -113,3 +113,116 @@ export const thumbUrl = (p: PhotoEntry) => convertFileSrc(p.id, "thumb")
 
 /** The largest embedded JPEG, untouched (apply `meta.orientation` when showing it). */
 export const previewUrl = (p: PhotoEntry) => convertFileSrc(p.id, "preview")
+
+// MARK: - Files
+
+/** Which half of a RAW+JPEG pair copy/move/trash act on. */
+export type FileScope = "both" | "raw" | "jpeg"
+export const FILE_SCOPES: { value: FileScope; label: string }[] = [
+  { value: "both", label: "RAW + JPG" },
+  { value: "raw", label: "RAW only" },
+  { value: "jpeg", label: "JPG only" },
+]
+
+/** The files an action on `p` touches. The sidecar travels with the RAW; a JPG carries its own captions. */
+export function filesFor(p: PhotoEntry, scope: FileScope): string[] {
+  if (scope === "raw") return p.raw ? [p.raw, p.sidecar] : []
+  if (scope === "jpeg") return p.jpeg ? [p.jpeg] : []
+  return [p.raw, p.jpeg, p.sidecar].filter((f): f is string => !!f)
+}
+
+export interface FileOutcome {
+  completed: string[]
+  files: number
+  skipped: number
+  errors: string[]
+}
+
+export function transferPhotos(photos: PhotoEntry[], scope: FileScope, destination: string, moveFiles: boolean) {
+  const items = photos.map((p) => ({ id: p.id, files: filesFor(p, scope) })).filter((i) => i.files.length)
+  return invoke<FileOutcome>("transfer_photos", { items, destination, moveFiles })
+}
+
+export function trashPhotos(photos: PhotoEntry[], scope: FileScope) {
+  const items = photos.map((p) => ({ id: p.id, files: filesFor(p, scope) })).filter((i) => i.files.length)
+  return invoke<FileOutcome>("trash_photos", { items })
+}
+
+export const reveal = (path: string) => invoke("reveal", { path })
+
+// MARK: - Ingest
+
+export interface Card {
+  path: string
+  name: string
+}
+export interface SourceInfo {
+  camera: string
+  photos: number
+  bytes: number
+}
+export interface IngestOptions {
+  source: string
+  destination: string
+  job: string
+  folderPattern: string
+  renamePattern: string | null
+  firstSeq: number
+  skipExisting: boolean
+  eject: boolean
+}
+export interface IngestProgress {
+  filesDone: number
+  filesTotal: number
+  bytesDone: number
+  bytesTotal: number
+  currentFile: string
+}
+export interface IngestSummary {
+  copied: number
+  skipped: number
+  bytes: number
+  errors: string[]
+  firstFolder: string | null
+  cancelled: boolean
+  ejected: boolean
+  unlocked: Badge[]
+}
+
+export const memoryCards = () => invoke<Card[]>("memory_cards")
+export const inspectSource = (path: string) => invoke<SourceInfo>("inspect_source", { path })
+export const freeSpace = (path: string) => invoke<number | null>("free_space", { path })
+export const startIngest = (options: IngestOptions) => invoke("start_ingest", { options })
+export const cancelIngest = () => invoke("cancel_ingest")
+
+// MARK: - Badges
+
+export interface Badge {
+  id: string
+  track: "photos" | "shoots"
+  threshold: number
+  name: string
+  tier: number
+}
+export interface AchievementSummary {
+  photos: number
+  shoots: number
+  month: { photos: number; shoots: number }
+  badges: Badge[]
+  earned: Record<string, number>
+}
+
+export const achievements = () => invoke<AchievementSummary>("achievements")
+export const recordFolderOpened = (folder: string, photos: number) => invoke<Badge[]>("record_folder_opened", { folder, photos })
+
+export function formatBytes(n: number): string {
+  if (n < 1024) return `${n} B`
+  const units = ["KB", "MB", "GB", "TB"]
+  let v = n / 1024
+  let i = 0
+  while (v >= 1000 && i < units.length - 1) {
+    v /= 1024
+    i++
+  }
+  return `${v >= 100 ? Math.round(v) : v.toFixed(1)} ${units[i]}`
+}

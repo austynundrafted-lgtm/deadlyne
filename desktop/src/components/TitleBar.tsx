@@ -1,10 +1,11 @@
 // The one bar at the top: workspace tabs on the left, the current shoot's controls on the right.
 // On macOS it sits in the title bar beside the window buttons (titleBarStyle "Overlay").
-import { Filter, FolderOpen, House, Images } from "lucide-react"
+import { Filter, FolderOpen, House, Images, MessageSquareText, MoreHorizontal, Search, TextCursorInput } from "lucide-react"
 import { useShallow } from "zustand/react/shallow"
 import logo from "@/assets/logo.png"
-import { LABELS } from "@/lib/api"
+import { FILE_SCOPES, LABELS, type FileScope } from "@/lib/api"
 import { isMac, labelColor, mod } from "@/lib/format"
+import { cn } from "@/lib/utils"
 import { useStore, type Workspace } from "@/store"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -16,18 +17,22 @@ import {
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
   DropdownMenuSeparator,
+  DropdownMenuShortcut,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Kbd } from "@/components/ui/kbd"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
-import { openFolderDialog } from "@/lib/actions"
+import { askTrash, copyOrMove, openFolderDialog } from "@/lib/actions"
+import { Input } from "@/components/ui/input"
+import { useUI } from "@/ui"
 import { shootName } from "@/lib/shootName"
 
 const WORKSPACES: { value: Workspace; label: string; icon: typeof House; key: string }[] = [
   { value: "home", label: "Home", icon: House, key: "1" },
   { value: "photos", label: "Photos", icon: Images, key: "2" },
+  { value: "codes", label: "Codes", icon: TextCursorInput, key: "3" },
 ]
 
 export function TitleBar() {
@@ -77,7 +82,14 @@ export function TitleBar() {
         )}
       </div>
 
-      {workspace === "photos" && folder && <PhotoFilters />}
+      {workspace === "photos" && folder && (
+        <>
+          <PhotoSearch />
+          <PhotoFilters />
+          <PhotoActions />
+          <CaptionToggle />
+        </>
+      )}
 
       <Tooltip>
         <TooltipTrigger asChild>
@@ -108,7 +120,8 @@ function PhotoFilters() {
       clearFilters: s.clearFilters,
     })),
   )
-  const extra = (minRating > 0 ? 1 : 0) + (labelFilter ? 1 : 0)
+  const fileScope = useStore((s) => s.fileScope)
+  const extra = (minRating > 0 ? 1 : 0) + (labelFilter ? 1 : 0) + (fileScope !== "both" ? 1 : 0)
 
   return (
     <div className="flex items-center gap-1">
@@ -156,14 +169,115 @@ function PhotoFilters() {
               </DropdownMenuRadioItem>
             ))}
           </DropdownMenuRadioGroup>
+          <DropdownMenuSeparator />
+          <DropdownMenuLabel>Files</DropdownMenuLabel>
+          <DropdownMenuRadioGroup value={fileScope} onValueChange={(v) => setFilter({ fileScope: v as FileScope })}>
+            {FILE_SCOPES.map((f, i) => (
+              <DropdownMenuRadioItem key={f.value} value={f.value}>
+                {f.label}
+                <DropdownMenuShortcut>⌥{mod}{i + 4}</DropdownMenuShortcut>
+              </DropdownMenuRadioItem>
+            ))}
+          </DropdownMenuRadioGroup>
           {extra > 0 && (
             <>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onSelect={clearFilters}>Clear filters</DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => { clearFilters(); setFilter({ fileScope: "both" }) }}>Clear filters</DropdownMenuItem>
             </>
           )}
         </DropdownMenuContent>
       </DropdownMenu>
     </div>
+  )
+}
+
+/** Searches file names, captions and keywords. ⌘F focuses it. */
+function PhotoSearch() {
+  const { search, setFilter } = useStore(useShallow((s) => ({ search: s.search, setFilter: s.setFilter })))
+  return (
+    <div className="relative w-44 shrink">
+      <Search className="pointer-events-none absolute top-1/2 left-2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+      <Input
+        id="photo-search"
+        value={search}
+        onChange={(e) => setFilter({ search: e.target.value })}
+        onKeyDown={(e) => {
+          if (e.key === "Escape" || e.key === "Enter") e.currentTarget.blur()
+        }}
+        placeholder={`Search  ${mod}F`}
+        className="h-7 pl-7 text-sm"
+        aria-label="Search file names, captions and keywords"
+      />
+    </div>
+  )
+}
+
+/** Everything you do to a batch of photos, in one menu. */
+function PhotoActions() {
+  const s = useStore.getState
+  return (
+    <DropdownMenu>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="icon-sm" aria-label="Photo actions">
+              <MoreHorizontal />
+            </Button>
+          </DropdownMenuTrigger>
+        </TooltipTrigger>
+        <TooltipContent>Copy, move, captions…</TooltipContent>
+      </Tooltip>
+      <DropdownMenuContent align="end" className="w-64">
+        <DropdownMenuItem onSelect={() => s().selectTagged()}>
+          Select tagged <DropdownMenuShortcut>⇧{mod}T</DropdownMenuShortcut>
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onSelect={() => copyOrMove("tagged", false)}>
+          Copy tagged to… <DropdownMenuShortcut>⇧{mod}C</DropdownMenuShortcut>
+        </DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => copyOrMove("tagged", true)}>
+          Move tagged to… <DropdownMenuShortcut>⇧{mod}M</DropdownMenuShortcut>
+        </DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => copyOrMove("selected", false)}>Copy selected to…</DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => copyOrMove("selected", true)}>Move selected to…</DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onSelect={() => s().copyCaptions()}>
+          Copy caption info <DropdownMenuShortcut>⌥{mod}C</DropdownMenuShortcut>
+        </DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => s().pasteCaptions()}>
+          Paste caption info <DropdownMenuShortcut>⌥{mod}V</DropdownMenuShortcut>
+        </DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => s().fillCredits() || useUI.getState().open("profile")}>
+          Fill credits from profile <DropdownMenuShortcut>⌥{mod}P</DropdownMenuShortcut>
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem variant="destructive" onSelect={askTrash}>
+          Move to Trash… <DropdownMenuShortcut>{mod}⌫</DropdownMenuShortcut>
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+
+function CaptionToggle() {
+  const { captionPanel, setCaptionPanel } = useStore(useShallow((s) => ({ captionPanel: s.captionPanel, setCaptionPanel: s.setCaptionPanel })))
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          aria-pressed={captionPanel}
+          aria-label="Captions"
+          className={cn(captionPanel && "bg-(--workspace-photos)/15 text-(--workspace-photos)")}
+          onClick={() => setCaptionPanel(!captionPanel)}
+        >
+          <MessageSquareText />
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent>
+        Captions <Kbd>{mod}I</Kbd>
+      </TooltipContent>
+    </Tooltip>
   )
 }

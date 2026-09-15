@@ -173,7 +173,7 @@ fn insert_element(element: &str, original: &str) -> String {
             }
         }
     }
-    let Some(close) = text.find("</rdf:Description>") else { return text };
+    let Some(close) = top_description_close(&text) else { return text };
     // Keep the closing tag's own indentation intact.
     let mut line_start = close;
     while line_start > 0 && text.as_bytes()[line_start - 1] == b' ' {
@@ -181,6 +181,56 @@ fn insert_element(element: &str, original: &str) -> String {
     }
     text.insert_str(line_start, &format!("{element}\n"));
     text
+}
+
+/// Where the first (top-level) `<rdf:Description>` closes. Lightroom sidecars nest further
+/// descriptions inside it (Denoise, masks…), so the first `</rdf:Description>` in the file is
+/// often a nested one — captions put there would be invisible to other apps.
+fn top_description_close(text: &str) -> Option<usize> {
+    const OPEN: &str = "<rdf:Description";
+    const CLOSE: &str = "</rdf:Description>";
+    let (_, start_end) = description_start_tag_end(text)?;
+    if text.as_bytes()[start_end - 1] == b'/' {
+        return None;
+    }
+    let mut depth = 0;
+    let mut pos = start_end + 1;
+    loop {
+        let next_open = text[pos..].find(OPEN).map(|i| i + pos);
+        let next_close = text[pos..].find(CLOSE).map(|i| i + pos)?;
+        match next_open {
+            Some(o) if o < next_close => {
+                // A nested description: self-closing ones don't change the depth.
+                let tag_end = description_tag_end_from(text, o)?;
+                if text.as_bytes()[tag_end - 1] != b'/' {
+                    depth += 1;
+                }
+                pos = tag_end + 1;
+            }
+            _ => {
+                if depth == 0 {
+                    return Some(next_close);
+                }
+                depth -= 1;
+                pos = next_close + CLOSE.len();
+            }
+        }
+    }
+}
+
+/// Byte index of the `>` ending the `<rdf:Description …` tag that starts at `start`.
+fn description_tag_end_from(text: &str, start: usize) -> Option<usize> {
+    let mut quote: Option<u8> = None;
+    for (i, &c) in text.as_bytes().iter().enumerate().skip(start + "<rdf:Description".len()) {
+        match quote {
+            Some(q) if c == q => quote = None,
+            Some(_) => {}
+            None if c == b'"' || c == b'\'' => quote = Some(c),
+            None if c == b'>' => return Some(i),
+            None => {}
+        }
+    }
+    None
 }
 
 fn remove_element(name: &str, text: &str) -> String {
@@ -326,6 +376,19 @@ mod tests {
     }
 
     #[test]
+    fn captions_go_in_the_top_level_description() {
+        let lr = "<x:xmpmeta><rdf:RDF><rdf:Description rdf:about=\"\" xmlns:crs=\"c\" crs:A=\"1\">\n <crs:Look>\n  <rdf:Description crs:Name=\"x\">\n   <crs:Group/>\n  </rdf:Description>\n </crs:Look>\n <crs:Mask><rdf:Description crs:B=\"2\"/></crs:Mask>\n </rdf:Description>\n</rdf:RDF></x:xmpmeta>";
+        let mut c = Captions::default();
+        c.caption = "Top".into();
+        let text = apply_captions(&c, &[Field::Caption], lr);
+        let caption_at = text.find("<dc:description>").unwrap();
+        let look_end = text.find("</crs:Look>").unwrap();
+        let mask_end = text.find("</crs:Mask>").unwrap();
+        assert!(caption_at > look_end && caption_at > mask_end, "{text}");
+        assert_eq!(read_captions(&text).caption, "Top");
+    }
+
+    #[test]
     fn captions_round_trip_and_clear() {
         let mut c = Captions::default();
         c.headline = "Fairborn wins".into();
@@ -343,5 +406,24 @@ mod tests {
         assert_eq!(read_captions(&text2).caption, "Updated");
         let cleared = apply_captions(&Captions::default(), &Field::ALL, &text2);
         assert!(read_captions(&cleared).is_empty());
+    }
+
+    /// On a copy of a real Lightroom sidecar: `DEADLYNE_XMP=/copy.xmp cargo test real_sidecar -- --ignored`
+    #[test]
+    #[ignore]
+    fn real_sidecar() {
+        let Ok(p) = std::env::var("DEADLYNE_XMP") else { return };
+        let path = Path::new(&p);
+        let before = std::fs::read_to_string(path).unwrap();
+        let mut c = Captions::default();
+        c.caption = "Jordan Sample (10) & friends".into();
+        c.keywords = vec!["Fairborn".into(), "Football".into()];
+        c.creator = "Austyn McFadden".into();
+        update(path, "CR3", Some(&Culling { rating: 3, label: Some("Green".into()), tagged: true }), Some((&c, &Field::ALL))).unwrap();
+        let after = std::fs::read_to_string(path).unwrap();
+        let crs = |t: &str| t.split(|c: char| c.is_whitespace() || c == '>').filter(|w| w.starts_with("crs:") || w.starts_with("<crs:")).map(String::from).collect::<Vec<String>>();
+        assert_eq!(crs(&before), crs(&after), "develop settings must be untouched");
+        assert_eq!(read_captions(&after), c);
+        println!("ok: {} crs lines kept", crs(&after).len());
     }
 }
