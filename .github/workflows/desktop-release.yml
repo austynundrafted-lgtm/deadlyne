@@ -1,0 +1,63 @@
+# Builds Deadlyne for macOS (Apple silicon + Intel) and Windows, signs the update bundles, and
+# attaches everything to a draft GitHub Release with the `latest.json` the in-app updater reads.
+#
+# Release: bump the version (`npm run release -- 0.2.0` in desktop/), commit, then
+#   git tag desktop-v0.2.0 && git push origin main desktop-v0.2.0
+# Review the draft release on GitHub and publish it — installed copies update from published releases.
+name: Desktop release
+
+on:
+  push:
+    tags: ["desktop-v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos-latest
+            args: --target universal-apple-darwin
+          - platform: windows-latest
+            args: ""
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: desktop/src-tauri -> target
+
+      - name: Install frontend dependencies
+        working-directory: desktop
+        run: npm ci
+
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          projectPath: desktop
+          tagName: desktop-v__VERSION__
+          releaseName: Deadlyne __VERSION__
+          releaseBody: |
+            **Mac:** download the `.dmg`. **Windows:** download the `-setup.exe`.
+            Already installed? Deadlyne updates itself — you'll see "Update" when this release is published.
+          releaseDraft: true
+          includeUpdaterJson: true
+          args: ${{ matrix.args }}
