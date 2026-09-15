@@ -2,6 +2,17 @@
 
 Read this before changing anything. It covers what the app is, who it's for, how the code is organized, the rules that must not be broken, and step-by-step recipes for the most common kinds of additions. `README.md` is the user-facing feature list; this file is the engineering view.
 
+> **Two codebases.**
+> - **`desktop/` is the future:** Deadlyne for macOS **and Windows**, built with Tauri 2. Rust in `desktop/src-tauri` does files, RAW previews, EXIF, sidecars and thumbnails; the interface in `desktop/src` is React + Tailwind + **shadcn/ui only**, designed "less is more" (reusable components, fewest steps). It updates itself from GitHub Releases. Read [desktop/README.md](desktop/README.md) for its layout, commands and release process.
+> - **The Swift/AppKit app at the repo root** (sections 3–6 below) is the reference implementation. Port features from it into `desktop/` in the order the photographer uses them: captions + code replacements, then ingest, copy/move, search, badges. Keep sidecar and file formats identical, so both apps (and Lightroom) read each other's work.
+> - Rules in section 2 apply to both apps.
+> - Desktop specifics:
+>   - Never pass image bytes through JavaScript; use the `thumb://` / `preview://` schemes in `images.rs`.
+>   - Keep heavy work in Rust on rayon or `spawn_blocking`.
+>   - Add UI only from shadcn (`npx shadcn@latest add …`).
+>   - Keep keyboard shortcuts the same as the Mac app.
+>   - Never commit `~/.tauri/deadlyne-updater.key`.
+
 ---
 
 ## 1. What Deadlyne is

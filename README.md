@@ -1,6 +1,11 @@
 # Deadlyne
 
-A native macOS photo browser and culler in the spirit of Photo Mechanic, built for flipping through thousands of RAW frames with no render delay.
+A photo browser and culler in the spirit of Photo Mechanic, built for flipping through thousands of RAW frames with no render delay.
+
+This repo holds two apps:
+
+- **`desktop/`: Deadlyne for macOS and Windows** (Tauri: Rust + React + shadcn/ui), with auto-updates from GitHub Releases. This is where new work goes. See [desktop/README.md](desktop/README.md).
+- **The repo root: the original native Mac app** (Swift/AppKit), described below. It stays usable until the desktop app has all its features.
 
 ## Why Photo Mechanic (and Deadlyne) are fast
 
