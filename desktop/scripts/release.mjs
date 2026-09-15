@@ -8,6 +8,8 @@ if (!/^\d+\.\d+\.\d+$/.test(version ?? "")) {
 }
 const edit = (file, fn) => writeFileSync(file, fn(readFileSync(file, "utf8")))
 edit("package.json", (s) => s.replace(/"version": "[^"]+"/, `"version": "${version}"`))
+// The lockfile records the app's own version twice (top level and packages[""]).
+edit("package-lock.json", (s) => s.replace(/("name": "deadlyne",\s*"version": )"[^"]+"/g, `$1"${version}"`))
 edit("src-tauri/tauri.conf.json", (s) => s.replace(/"version": "[^"]+"/, `"version": "${version}"`))
 edit("src-tauri/Cargo.toml", (s) => s.replace(/^version = "[^"]+"/m, `version = "${version}"`))
 console.log(`Deadlyne is now ${version}. Next:

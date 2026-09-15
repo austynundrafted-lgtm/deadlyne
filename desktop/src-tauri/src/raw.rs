@@ -62,7 +62,7 @@ fn read_at(f: &File, buf: &mut [u8], off: u64) -> std::io::Result<usize> {
 #[cfg(windows)]
 fn read_at(f: &File, buf: &mut [u8], off: u64) -> std::io::Result<usize> {
     use std::os::windows::fs::FileExt;
-    f.read_at(buf, off)
+    f.seek_read(buf, off)
 }
 
 // MARK: - Byte helpers
