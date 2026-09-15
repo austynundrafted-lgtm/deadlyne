@@ -22,6 +22,8 @@ interface State {
   anchor: string | null
   focus: string | null
   loupe: boolean
+  /** True until the user picks or moves to a photo after opening a shoot. */
+  pristine: boolean
   thumbSize: number
   /** Columns in the grid right now, for ↑ ↓ navigation. */
   columns: number
@@ -73,6 +75,7 @@ export const useStore = create<State>((set, get) => ({
   anchor: null,
   focus: null,
   loupe: false,
+  pristine: true,
   thumbSize: Number(localStorage.getItem("thumbSize")) || 220,
   columns: 1,
 
@@ -88,7 +91,7 @@ export const useStore = create<State>((set, get) => ({
       const first = photos[0]?.id ?? null
       set({
         folder, photos, loading: false, detailsReady: false,
-        selected: new Set(first ? [first] : []), anchor: first, focus: first,
+        selected: new Set(first ? [first] : []), anchor: first, focus: first, pristine: true,
         tagFilter: "all", minRating: 0, labelFilter: null,
       })
       noteRecentShoot(folder, photos.length)
@@ -105,6 +108,13 @@ export const useStore = create<State>((set, get) => ({
       }))
       loaded.sort((a, b) => (a.meta?.captured ?? "").localeCompare(b.meta?.captured ?? ""))
       set({ photos: loaded, detailsReady: true })
+      // Sorting by capture time can move the first-named file (e.g. MCD_0001 after a counter
+      // rollover) to the end. Start on the first frame shot, unless the user has already moved.
+      const s = get()
+      if (s.pristine && !s.loupe && loaded[0]) {
+        const id = loaded[0].id
+        set({ selected: new Set([id]), anchor: id, focus: id })
+      }
     } catch (e) {
       if (gen !== openGeneration) return
       set({ loading: false })
@@ -117,6 +127,7 @@ export const useStore = create<State>((set, get) => ({
 
   click: (id, { shift, toggle }) => {
     const s = get()
+    set({ pristine: false })
     if (shift && s.anchor) {
       const list = visiblePhotos(s)
       const a = list.findIndex((p) => p.id === s.anchor)
@@ -137,10 +148,11 @@ export const useStore = create<State>((set, get) => ({
     set({ selected: new Set([id]), anchor: id, focus: id })
   },
 
-  selectAll: () => set((s) => ({ selected: new Set(visiblePhotos(s).map((p) => p.id)) })),
+  selectAll: () => set((s) => ({ selected: new Set(visiblePhotos(s).map((p) => p.id)), pristine: false })),
 
   move: (delta, extend) => {
     const s = get()
+    set({ pristine: false })
     const list = visiblePhotos(s)
     if (!list.length) return
     const i = Math.max(0, list.findIndex((p) => p.id === s.focus))

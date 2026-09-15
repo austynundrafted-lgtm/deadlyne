@@ -4,7 +4,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 import { Check, Star, X } from "lucide-react"
 import { useShallow } from "zustand/react/shallow"
 import { previewUrl, thumbUrl } from "@/lib/api"
-import { captureTime, exposureLine, labelColor, mod, orientationTransform } from "@/lib/format"
+import { labelColor, mod, orientationTransform } from "@/lib/format"
 import { cn } from "@/lib/utils"
 import { useStore, visiblePhotos } from "@/store"
 import { Badge } from "@/components/ui/badge"
@@ -121,10 +121,8 @@ export function Loupe() {
             {photo.label}
           </Badge>
         )}
-        <span className="min-w-0 flex-1 truncate text-right text-muted-foreground">
-          {[photo.meta?.camera, photo.meta?.lens, exposureLine(photo.meta), captureTime(photo.meta)].filter(Boolean).join("   ·   ")}
-        </span>
-        <span className="hidden items-center gap-1 text-muted-foreground xl:flex">
+        <span className="flex-1" />
+        <span className="hidden items-center gap-1 text-muted-foreground md:flex">
           <Kbd>←</Kbd>
           <Kbd>→</Kbd> flip · <Kbd>T</Kbd> tag · <Kbd>1–5</Kbd> rate · <Kbd>Esc</Kbd> grid
         </span>

@@ -6,6 +6,7 @@ import logo from "@/assets/logo.png"
 import { openFolderDialog } from "@/lib/actions"
 import { mod, plural, relativeTime } from "@/lib/format"
 import { forgetRecentShoot, onRecentShoots, recentShoots, type RecentShoot } from "@/lib/recents"
+import { shootName, shootSubtitle } from "@/lib/shootName"
 import { checkForUpdates } from "@/lib/updates"
 import { useStore } from "@/store"
 import { Button } from "@/components/ui/button"
@@ -55,7 +56,9 @@ export function HomeView() {
           <section className="mt-10">
             <h2 className="mb-2 px-1 text-xs font-medium tracking-wide text-muted-foreground uppercase">Recent shoots</h2>
             <ItemGroup className="gap-1">
-              {recents.map((s) => (
+              {recents.map((s) => {
+                const name = shootName(s.name)
+                return (
                 <Item
                   key={s.path}
                   variant="outline"
@@ -68,9 +71,9 @@ export function HomeView() {
                     <Images />
                   </ItemMedia>
                   <ItemContent>
-                    <ItemTitle>{s.name}</ItemTitle>
+                    <ItemTitle>{name.title}</ItemTitle>
                     <ItemDescription>
-                      {plural(s.photos, "photo")} · {relativeTime(s.openedAt)}
+                      {[shootSubtitle(name), plural(s.photos, "photo"), relativeTime(s.openedAt)].filter(Boolean).join(" · ")}
                     </ItemDescription>
                   </ItemContent>
                   <ItemActions>
@@ -78,7 +81,7 @@ export function HomeView() {
                       variant="ghost"
                       size="icon-xs"
                       className="opacity-0 group-hover:opacity-100"
-                      aria-label={`Remove ${s.name} from recent shoots`}
+                      aria-label={`Remove ${name.title} from recent shoots`}
                       onClick={(e) => {
                         e.stopPropagation()
                         forgetRecentShoot(s.path)
@@ -89,7 +92,8 @@ export function HomeView() {
                     <ChevronRight className="size-4 text-muted-foreground" />
                   </ItemActions>
                 </Item>
-              ))}
+                )
+              })}
             </ItemGroup>
           </section>
         )}
