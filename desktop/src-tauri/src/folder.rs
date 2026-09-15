@@ -1,7 +1,7 @@
 //! Opening a shoot: list the folder and pair RAW+JPEG files into photos (instant, no file is
 //! opened), then read capture metadata and sidecars for every photo in parallel.
 
-use crate::{exif, xmp};
+use crate::{captions, exif, iptc::Captions, xmp};
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -121,6 +121,7 @@ fn natural_cmp(a: &str, b: &str) -> std::cmp::Ordering {
 pub struct Details {
     pub meta: exif::Meta,
     pub culling: xmp::Culling,
+    pub captions: Captions,
 }
 
 #[derive(Deserialize)]
@@ -128,6 +129,8 @@ pub struct Details {
 pub struct DetailsRequest {
     pub id: String,
     pub sidecar: String,
+    pub raw: Option<String>,
+    pub jpeg: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -160,15 +163,21 @@ pub fn launch_folder() -> Option<String> {
 /// Capture metadata and sidecar culling for every photo, index-aligned with the request.
 #[tauri::command]
 pub async fn load_details(photos: Vec<DetailsRequest>) -> Vec<Details> {
-    tauri::async_runtime::spawn_blocking(move || {
+    crate::jobs::blocking(move || {
         photos
             .par_iter()
-            .map(|p| Details {
-                meta: exif::read(Path::new(&p.id)),
-                culling: xmp::read(Path::new(&p.sidecar)).unwrap_or_default(),
+            .map(|p| {
+                let (culling, sidecar_captions) = match xmp::read_all(Path::new(&p.sidecar)) {
+                    Some((c, cap)) => (c, Some(cap)),
+                    None => (Default::default(), None),
+                };
+                Details {
+                    meta: exif::read(Path::new(&p.id)),
+                    culling,
+                    captions: captions::load(sidecar_captions, p.raw.is_some(), p.jpeg.as_deref()),
+                }
             })
             .collect()
     })
     .await
-    .unwrap_or_default()
 }

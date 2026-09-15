@@ -6,32 +6,38 @@ The original native Mac app (Swift/AppKit) still lives at the repo root and keep
 
 ## What works today
 
-- **Home:** open a shoot (⌘O / Ctrl+O, or drop a folder on the window) and a recent shoots list.
+- **Home:**
+  - Ingest a card (⇧⌘I) or open a shoot (⌘O, or drop a folder on the window).
+  - Recent shoots with readable names, a live ingest progress bar, this month's photos and the next badge.
 - **Photos:**
-  - An instant contact sheet for thousands of RAW+JPEG files, virtualized so only visible rows render.
-  - RAW+JPEG pairing.
-  - Capture-time sort.
-  - Camera, lens and exposure in the status bar.
-- **Culling:**
-  - `T` tag; `0–5` rate; `6–9` red/yellow/green/blue label; arrows move; Space/Return opens the loupe; Esc goes back.
-  - Mouse: the tag checkbox, stars, and double-click for the loupe.
-  - Everything is saved to Adobe-compatible XMP sidecars, so Lightroom reads it, and the Mac app reads the same files.
-- **Filters:** All / Tagged / Untagged, plus one Filter menu for minimum rating and label.
-- **Thumbnail size:** the slider, ⌘/Ctrl +/−, or ⌘/Ctrl + scroll.
+  - An instant contact sheet for thousands of RAW+JPEG files, with pairing and capture-time order.
+  - Search (⌘F) across file names, captions and keywords.
+  - A slim filter bar (All / Tagged / Untagged, plus one Filter menu for rating, label and file type) and one actions menu.
+  - Right-click menus on photos.
+- **Culling:** `T` tags, `0–5` rates, `6–9` sets red/yellow/green/blue labels. Arrows move, Space opens the loupe, Esc closes it. Everything saves to Adobe-compatible XMP sidecars.
+- **Captions (⌘I):**
+  - Headline, Caption and Keywords are always visible. Event & location and Credits fold open.
+  - Edits apply to every selected photo and save when you leave a field. Keywords merge across photos.
+  - RAW photos keep captions in the sidecar. JPGs get XMP + legacy IPTC embedded without touching the image data; the camera's EXIF Artist/Copyright are filled too.
+  - Variables like `{date}` and `{camera}` fill in per photo.
+  - Copy/paste caption info with ⌥⌘C / ⌥⌘V.
+  - Fill credits from your profile with ⌥⌘P.
+- **Codes (⌘3):**
+  - Photo Mechanic–style code replacements: `=f10=` becomes "Jordan Sample (10)", and `=f10#2=` gives column 2. Codes expand as you type or paste.
+  - Several lookup files can be on at once. Import `.txt`/`.csv` rosters (or drop them on the window), then edit them as a table or as text.
+  - Name columns, add a prefix to every code, and try codes out in the Try It box.
+  - On macOS the rosters are shared with the original Swift app.
+- **Ingest:**
+  - Picks the card automatically and remembers your destination and naming.
+  - `{date}_{job}` folders with optional renaming (`{job}_{seq}`). RAW+JPG pairs share a number.
+  - Skips photos already ingested, verifies sizes, warns when the destination is short on space, and can eject the card.
+  - Opens the new folder when it's done.
+- **Copy / move / Trash:** copy or move the tagged photos (⇧⌘C / ⇧⌘M) or the selection. The Files filter sets whether RAW, JPG or both travel. Files are never overwritten, and "delete" always means the Trash or Recycle Bin.
+- **Badges:** photos and shoots milestones with the same ids as the Mac app. On a Mac, progress is imported from the Swift app the first time.
+- **Profile:** name, credit line and copyright (`{year}` becomes each photo's capture year), kept on this computer.
 - **Updates:** checked at launch and from Home → Check for updates.
 
-### Speed (Canon R3, 2,191-frame shoot, M-series Mac, release build)
-
-| Step | Time |
-|---|---|
-| Scan + pair folder | 12 ms |
-| EXIF for all 2,191 photos | 72 ms |
-| Grid thumbnail (810×540) | ~0.7 ms each, in parallel |
-| Full 24 MP embedded JPEG for the loupe | 0.5 ms |
-
-## Not yet ported from the Mac app
-
-Captions and IPTC, code replacements (Codes workspace), ingest from card, copy/move/trash, search, badges, the profile, and 100% zoom.
+Tests: `npm test` covers the code replacement engine and shoot names. `cd src-tauri && cargo test` covers sidecars, Lightroom-sidecar safety, JPG embedding, roster parsing and ingest naming. Ignored tests exercise real files (see the comments in `jpeg_meta.rs`, `xmp.rs` and `ingest.rs`).
 
 ## Develop
 
@@ -61,6 +67,10 @@ desktop/
     lib/hotkeys.ts          keyboard shortcuts (same keys as the Mac app)
     lib/recents.ts          recent shoots (Tauri store plugin)
     lib/updates.ts          self-update flow
+    lib/codes.ts            code replacement engine + lookup file state
+    lib/variables.ts        {date} {camera}… caption variables
+    lib/actions.ts          copy/move/trash and open actions shared by menus and keys
+    components/CaptionPanel.tsx, CodesView.tsx, IngestDialog.tsx, BadgesDialog.tsx, ProfileDialog.tsx
     components/TitleBar.tsx workspace tabs + filters (sits in the macOS title bar)
     components/HomeView.tsx, PhotosView.tsx, Loupe.tsx
     components/ui/          shadcn/ui components (add more with `npx shadcn@latest add <name>`)
@@ -68,7 +78,15 @@ desktop/
     src/raw.rs              embedded-JPEG extraction: CR3, RAF, TIFF-based RAWs (CR2/NEF/ARW/DNG…)
     src/exif.rs             minimal TIFF/EXIF reader (orientation, time, camera, lens, exposure)
     src/folder.rs           scan + pair folders, parallel metadata/sidecar load
-    src/xmp.rs              XMP sidecar read/write (port of the Mac app's XMPSidecar.swift)
+    src/xmp.rs              XMP sidecars: culling + IPTC captions (port of XMPSidecar.swift)
+    src/iptc.rs             caption fields and their XMP properties
+    src/jpeg_meta.rs        captions inside JPGs: XMP, legacy IPTC-IIM, EXIF Artist/Copyright
+    src/captions.rs         save_captions command (sidecar vs. JPG)
+    src/codes.rs            lookup files (rosters): list, import, save, rename, trash
+    src/ingest.rs           memory cards, naming templates, copy + verify, eject
+    src/fileops.rs          copy / move / trash / reveal
+    src/achievements.rs     badges and photo/shoot counting
+    src/jobs.rs             background threads; one lock for all file writes
     src/images.rs           thumb:// and preview:// URL schemes + thumbnail cache
     tauri.conf.json         window, bundle, updater config
 ```

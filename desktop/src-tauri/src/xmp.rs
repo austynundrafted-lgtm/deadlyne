@@ -1,10 +1,12 @@
-//! Culling data (rating, color label, tag) in Adobe-compatible XMP sidecars (`BASENAME.xmp`).
+//! Culling data (rating, color label, tag) and IPTC captions in Adobe-compatible XMP sidecars
+//! (`BASENAME.xmp`), plus the same text surgery for XMP packets embedded in JPEGs.
 //!
-//! Lightroom, Camera Raw, Bridge, Capture One and Photo Mechanic read `xmp:Rating` and
-//! `xmp:Label` from the same sidecar. Existing sidecars (with Camera Raw develop settings) are
-//! edited in place: only our own properties are touched, never the rest of the file. This is a
-//! port of the Mac app's `XMPSidecar.swift` and must stay byte-compatible with it.
+//! Lightroom, Camera Raw, Bridge, Capture One and Photo Mechanic read `xmp:Rating`, `xmp:Label`
+//! and the IPTC properties from the same sidecar. Existing sidecars (with Camera Raw develop
+//! settings) are edited in place: only our own properties are touched, never the rest of the
+//! file. This is a port of the Mac app's `XMPSidecar.swift` and must stay compatible with it.
 
+use crate::iptc::{Captions, Field, Kind};
 use regex::{NoExpand, Regex};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
@@ -20,9 +22,10 @@ pub struct Culling {
     pub tagged: bool,
 }
 
-pub fn read(sidecar: &Path) -> Option<Culling> {
+/// Culling and captions from one read of a sidecar.
+pub fn read_all(sidecar: &Path) -> Option<(Culling, Captions)> {
     let text = std::fs::read_to_string(sidecar).ok()?;
-    Some(read_culling(&text))
+    Some((read_culling(&text), read_captions(&text)))
 }
 
 pub fn read_culling(text: &str) -> Culling {
@@ -41,32 +44,72 @@ pub fn read_culling(text: &str) -> Culling {
     v
 }
 
-/// Writes culling values, creating the sidecar only when there's something worth writing.
-pub fn write(sidecar: &Path, ext: &str, v: &Culling) -> std::io::Result<()> {
+pub fn read_captions(text: &str) -> Captions {
+    let mut c = Captions::default();
+    for f in Field::ALL {
+        let path = f.xmp_path();
+        match f.kind() {
+            Kind::Simple => {
+                if let Some(v) = value(&path, text) {
+                    c.set(f, &unescape(&v));
+                }
+            }
+            Kind::LangAlt | Kind::Bag | Kind::Seq => {
+                let items = list_items(&path, text);
+                if f == Field::Keywords {
+                    c.keywords = items;
+                } else if !items.is_empty() {
+                    let joined = if f.kind() == Kind::Seq { items.join("; ") } else { items[0].clone() };
+                    c.set(f, &joined);
+                } else if let Some(v) = value(&path, text) {
+                    c.set(f, &unescape(&v));
+                }
+            }
+        }
+    }
+    c
+}
+
+/// Updates culling and/or caption fields in a sidecar, leaving everything else untouched.
+/// A new sidecar is created only when there's something worth writing.
+pub fn update(sidecar: &Path, ext: &str, culling: Option<&Culling>, captions: Option<(&Captions, &[Field])>) -> std::io::Result<()> {
     let mut text = match std::fs::read_to_string(sidecar) {
         Ok(t) => t,
         Err(_) => {
-            if v.rating == 0 && v.label.is_none() && !v.tagged {
+            let culling_empty = culling.is_none_or(|v| v.rating == 0 && v.label.is_none() && !v.tagged);
+            let captions_empty = captions.is_none_or(|(c, fields)| fields.iter().all(|f| c.get(*f).is_empty()));
+            if culling_empty && captions_empty {
                 return Ok(());
             }
             template(ext)
         }
     };
-    let rating = if v.rating == 0 && !text.contains("xmp:Rating") { None } else { Some(v.rating.to_string()) };
-    text = set("xmp:Rating", rating.as_deref(), &text);
-    text = set("xmp:Label", v.label.as_deref(), &text);
-    text = set("deadlyne:Tagged", v.tagged.then_some("True"), &text);
-    if text.contains("deadlyne:Tagged") && !text.contains("xmlns:deadlyne") {
-        text = insert_attribute(&format!("xmlns:deadlyne=\"{DEADLYNE_NS}\""), &text);
+    if let Some(v) = culling {
+        let rating = if v.rating == 0 && !text.contains("xmp:Rating") { None } else { Some(v.rating.to_string()) };
+        text = set("xmp:Rating", rating.as_deref(), &text);
+        text = set("xmp:Label", v.label.as_deref(), &text);
+        text = set("deadlyne:Tagged", v.tagged.then_some("True"), &text);
+        if text.contains("deadlyne:Tagged") && !text.contains("xmlns:deadlyne") {
+            text = insert_attribute(&format!("xmlns:deadlyne=\"{DEADLYNE_NS}\""), &text);
+        }
+        // Migrate the pre-rename tag so it can't resurface after the photo is untagged.
+        text = set("lensdesk:Tagged", None, &text);
+        text = set("xmlns:lensdesk", None, &text);
     }
-    // Migrate the pre-rename tag so it can't resurface after the photo is untagged.
-    text = set("lensdesk:Tagged", None, &text);
-    text = set("xmlns:lensdesk", None, &text);
+    if let Some((c, fields)) = captions {
+        text = apply_captions(c, fields, &text);
+    }
+    write_atomic(sidecar, text.as_bytes())
+}
 
-    // Write beside the original, then swap, so a crash never leaves half a sidecar.
-    let tmp = sidecar.with_extension("xmp.deadlyne-tmp");
-    std::fs::write(&tmp, text)?;
-    std::fs::rename(&tmp, sidecar)
+/// Writes beside the original, then swaps, so a crash never leaves half a file.
+pub fn write_atomic(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
+    let name = path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+    let tmp = path.with_file_name(format!(".{name}.deadlyne-tmp"));
+    std::fs::write(&tmp, bytes)?;
+    std::fs::rename(&tmp, path).inspect_err(|_| {
+        let _ = std::fs::remove_file(&tmp);
+    })
 }
 
 fn template(ext: &str) -> String {
@@ -75,8 +118,149 @@ fn template(ext: &str) -> String {
     )
 }
 
+/// A fresh XMP packet for a JPEG that has none.
+pub fn jpeg_packet() -> String {
+    "<?xpacket begin=\"\u{feff}\" id=\"W5M0MpCehiHzreSzNTczkc9d\"?>\n<x:xmpmeta xmlns:x=\"adobe:ns:meta/\" x:xmptk=\"Deadlyne\">\n <rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\">\n  <rdf:Description rdf:about=\"\">\n  </rdf:Description>\n </rdf:RDF>\n</x:xmpmeta>\n<?xpacket end=\"w\"?>".to_string()
+}
+
+// MARK: - IPTC writing
+
+pub fn apply_captions(c: &Captions, fields: &[Field], original: &str) -> String {
+    let mut text = original.to_string();
+    for f in Field::ALL.into_iter().filter(|f| fields.contains(f)) {
+        let path = f.xmp_path();
+        text = remove_element(&path, &text);
+        text = set(&path, None, &text);
+        let value = c.get(f);
+        if value.is_empty() {
+            continue;
+        }
+        if !text.contains(&format!("xmlns:{}=", f.prefix())) {
+            text = insert_attribute(&format!("xmlns:{}=\"{}\"", f.prefix(), f.namespace()), &text);
+        }
+        text = match f.kind() {
+            Kind::Simple => set(&path, Some(&value.replace('\n', " ")), &text),
+            Kind::LangAlt => insert_element(&structure(&path, "rdf:Alt", &[value], true), &text),
+            Kind::Bag => insert_element(&structure(&path, "rdf:Bag", &c.keywords, false), &text),
+            Kind::Seq => {
+                let items: Vec<String> = value.split(';').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect();
+                insert_element(&structure(&path, "rdf:Seq", &items, false), &text)
+            }
+        };
+    }
+    text
+}
+
+fn structure(name: &str, container: &str, items: &[String], lang: bool) -> String {
+    let mut lines = vec![format!("   <{name}>"), format!("    <{container}>")];
+    for it in items {
+        let attr = if lang { " xml:lang=\"x-default\"" } else { "" };
+        lines.push(format!("     <rdf:li{attr}>{}</rdf:li>", escape(it)));
+    }
+    lines.push(format!("    </{container}>"));
+    lines.push(format!("   </{name}>"));
+    lines.join("\n")
+}
+
+/// Inserts a child element just before the first `</rdf:Description>`, converting a
+/// self-closing description into an open/close pair if needed.
+fn insert_element(element: &str, original: &str) -> String {
+    let mut text = original.to_string();
+    if !text.contains("</rdf:Description>") {
+        if let Some((_, end)) = description_start_tag_end(&text) {
+            if text.as_bytes()[end - 1] == b'/' {
+                text.replace_range(end - 1..=end, ">\n  </rdf:Description>");
+            }
+        }
+    }
+    let Some(close) = top_description_close(&text) else { return text };
+    // Keep the closing tag's own indentation intact.
+    let mut line_start = close;
+    while line_start > 0 && text.as_bytes()[line_start - 1] == b' ' {
+        line_start -= 1;
+    }
+    text.insert_str(line_start, &format!("{element}\n"));
+    text
+}
+
+/// Where the first (top-level) `<rdf:Description>` closes. Lightroom sidecars nest further
+/// descriptions inside it (Denoise, masks…), so the first `</rdf:Description>` in the file is
+/// often a nested one — captions put there would be invisible to other apps.
+fn top_description_close(text: &str) -> Option<usize> {
+    const OPEN: &str = "<rdf:Description";
+    const CLOSE: &str = "</rdf:Description>";
+    let (_, start_end) = description_start_tag_end(text)?;
+    if text.as_bytes()[start_end - 1] == b'/' {
+        return None;
+    }
+    let mut depth = 0;
+    let mut pos = start_end + 1;
+    loop {
+        let next_open = text[pos..].find(OPEN).map(|i| i + pos);
+        let next_close = text[pos..].find(CLOSE).map(|i| i + pos)?;
+        match next_open {
+            Some(o) if o < next_close => {
+                // A nested description: self-closing ones don't change the depth.
+                let tag_end = description_tag_end_from(text, o)?;
+                if text.as_bytes()[tag_end - 1] != b'/' {
+                    depth += 1;
+                }
+                pos = tag_end + 1;
+            }
+            _ => {
+                if depth == 0 {
+                    return Some(next_close);
+                }
+                depth -= 1;
+                pos = next_close + CLOSE.len();
+            }
+        }
+    }
+}
+
+/// Byte index of the `>` ending the `<rdf:Description …` tag that starts at `start`.
+fn description_tag_end_from(text: &str, start: usize) -> Option<usize> {
+    let mut quote: Option<u8> = None;
+    for (i, &c) in text.as_bytes().iter().enumerate().skip(start + "<rdf:Description".len()) {
+        match quote {
+            Some(q) if c == q => quote = None,
+            Some(_) => {}
+            None if c == b'"' || c == b'\'' => quote = Some(c),
+            None if c == b'>' => return Some(i),
+            None => {}
+        }
+    }
+    None
+}
+
+fn remove_element(name: &str, text: &str) -> String {
+    let n = regex::escape(name);
+    let re = Regex::new(&format!(r"\n?[ \t]*<{n}(\s*/>|>[\s\S]*?</{n}>)")).unwrap();
+    re.replace_all(text, "").into_owned()
+}
+
+fn list_items(name: &str, text: &str) -> Vec<String> {
+    let n = regex::escape(name);
+    let block = Regex::new(&format!(r"<{n}>([\s\S]*?)</{n}>")).unwrap();
+    let Some(inner) = block.captures(text).map(|c| c[1].to_string()) else { return vec![] };
+    let li = Regex::new(r"<rdf:li[^>]*>([\s\S]*?)</rdf:li>").unwrap();
+    li.captures_iter(&inner).map(|c| unescape(&c[1])).filter(|s| !s.is_empty()).collect()
+}
+
+// MARK: - Helpers
+
 fn escape(s: &str) -> String {
     s.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;").replace('"', "&quot;")
+}
+
+fn unescape(s: &str) -> String {
+    s.replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&quot;", "\"")
+        .replace("&apos;", "'")
+        .replace("&#xA;", "\n")
+        .replace("&#10;", "\n")
+        .replace("&amp;", "&")
 }
 
 /// Attribute form (`xmp:Rating="3"`) or element form (`<xmp:Rating>3</xmp:Rating>`).
@@ -114,7 +298,7 @@ fn set(name: &str, val: Option<&str>, text: &str) -> String {
     out
 }
 
-/// Byte index of the `>` closing the first `<rdf:Description …>` start tag.
+/// Byte indexes of `<rdf:Description` and the `>` closing that start tag.
 fn description_start_tag_end(text: &str) -> Option<(usize, usize)> {
     let start = text.find("<rdf:Description")?;
     let mut quote: Option<u8> = None;
@@ -158,16 +342,15 @@ pub struct CullingWrite {
 /// Saves culling for many photos off the main thread. Returns the files that failed.
 #[tauri::command]
 pub async fn save_culling(items: Vec<CullingWrite>) -> Vec<String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    crate::jobs::serial(move || {
         items
             .iter()
             .filter_map(|it| {
-                write(Path::new(&it.sidecar), &it.ext, &it.values).err().map(|e| format!("{}: {e}", it.sidecar))
+                update(Path::new(&it.sidecar), &it.ext, Some(&it.values), None).err().map(|e| format!("{}: {e}", it.sidecar))
             })
             .collect()
     })
     .await
-    .unwrap_or_default()
 }
 
 #[cfg(test)]
@@ -190,5 +373,57 @@ mod tests {
     #[test]
     fn reads_legacy_lensdesk_tag() {
         assert!(read_culling("<rdf:Description lensdesk:Tagged=\"True\">").tagged);
+    }
+
+    #[test]
+    fn captions_go_in_the_top_level_description() {
+        let lr = "<x:xmpmeta><rdf:RDF><rdf:Description rdf:about=\"\" xmlns:crs=\"c\" crs:A=\"1\">\n <crs:Look>\n  <rdf:Description crs:Name=\"x\">\n   <crs:Group/>\n  </rdf:Description>\n </crs:Look>\n <crs:Mask><rdf:Description crs:B=\"2\"/></crs:Mask>\n </rdf:Description>\n</rdf:RDF></x:xmpmeta>";
+        let mut c = Captions::default();
+        c.caption = "Top".into();
+        let text = apply_captions(&c, &[Field::Caption], lr);
+        let caption_at = text.find("<dc:description>").unwrap();
+        let look_end = text.find("</crs:Look>").unwrap();
+        let mask_end = text.find("</crs:Mask>").unwrap();
+        assert!(caption_at > look_end && caption_at > mask_end, "{text}");
+        assert_eq!(read_captions(&text).caption, "Top");
+    }
+
+    #[test]
+    fn captions_round_trip_and_clear() {
+        let mut c = Captions::default();
+        c.headline = "Fairborn wins".into();
+        c.caption = "Jordan Sample (10) scores & celebrates <big>".into();
+        c.keywords = vec!["Fairborn".into(), "football".into()];
+        c.creator = "Austyn McFadden; Second Shooter".into();
+        c.city = "Tipp City".into();
+        let text = apply_captions(&c, &Field::ALL, &template("CR3"));
+        assert_eq!(read_captions(&text), c);
+        // Editing one field again replaces it rather than duplicating.
+        let mut c2 = c.clone();
+        c2.caption = "Updated".into();
+        let text2 = apply_captions(&c2, &[Field::Caption], &text);
+        assert_eq!(text2.matches("dc:description>").count(), 2);
+        assert_eq!(read_captions(&text2).caption, "Updated");
+        let cleared = apply_captions(&Captions::default(), &Field::ALL, &text2);
+        assert!(read_captions(&cleared).is_empty());
+    }
+
+    /// On a copy of a real Lightroom sidecar: `DEADLYNE_XMP=/copy.xmp cargo test real_sidecar -- --ignored`
+    #[test]
+    #[ignore]
+    fn real_sidecar() {
+        let Ok(p) = std::env::var("DEADLYNE_XMP") else { return };
+        let path = Path::new(&p);
+        let before = std::fs::read_to_string(path).unwrap();
+        let mut c = Captions::default();
+        c.caption = "Jordan Sample (10) & friends".into();
+        c.keywords = vec!["Fairborn".into(), "Football".into()];
+        c.creator = "Austyn McFadden".into();
+        update(path, "CR3", Some(&Culling { rating: 3, label: Some("Green".into()), tagged: true }), Some((&c, &Field::ALL))).unwrap();
+        let after = std::fs::read_to_string(path).unwrap();
+        let crs = |t: &str| t.split(|c: char| c.is_whitespace() || c == '>').filter(|w| w.starts_with("crs:") || w.starts_with("<crs:")).map(String::from).collect::<Vec<String>>();
+        assert_eq!(crs(&before), crs(&after), "develop settings must be untouched");
+        assert_eq!(read_captions(&after), c);
+        println!("ok: {} crs lines kept", crs(&after).len());
     }
 }
