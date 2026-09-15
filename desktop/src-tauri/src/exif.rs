@@ -19,6 +19,23 @@ pub struct Meta {
     pub f_number: Option<f64>,
     pub iso: Option<u32>,
     pub focal_length: Option<f64>,
+    /// EXIF OffsetTimeOriginal ("-04:00"), for IPTC Time Created.
+    #[serde(skip)]
+    pub offset: Option<String>,
+}
+
+/// IPTC-IIM Date Created (CCYYMMDD) and Time Created (HHMMSS±HHMM) from the capture time.
+pub fn iim_date_time(m: &Meta) -> Option<(String, String)> {
+    let digits: String = m.captured.as_deref()?.chars().filter(char::is_ascii_digit).collect();
+    if digits.len() < 14 {
+        return None;
+    }
+    let mut time = digits[8..14].to_string();
+    if let Some(o) = m.offset.as_deref().filter(|o| o.len() == 6 && (o.starts_with('+') || o.starts_with('-'))) {
+        time.push_str(&o[..1]);
+        time.extend(o[1..].chars().filter(char::is_ascii_digit));
+    }
+    Some((digits[..8].to_string(), time))
 }
 
 pub fn read(path: &Path) -> Meta {
@@ -162,6 +179,7 @@ pub fn parse_tiff(t: &[u8], m: &mut Meta) {
                 0x9003 => date = Some(ascii()),
                 0x9291 => subsec = Some(ascii()),
                 0x920A => m.focal_length = rational(),
+                0x9011 => m.offset = Some(ascii()),
                 0xA434 => m.lens = ascii(),
                 _ => {}
             }
