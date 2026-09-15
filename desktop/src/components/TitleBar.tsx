@@ -23,6 +23,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { openFolderDialog } from "@/lib/actions"
+import { shootName } from "@/lib/shootName"
 
 const WORKSPACES: { value: Workspace; label: string; icon: typeof House; key: string }[] = [
   { value: "home", label: "Home", icon: House, key: "1" },
@@ -33,7 +34,7 @@ export function TitleBar() {
   const { workspace, setWorkspace, folder } = useStore(
     useShallow((s) => ({ workspace: s.workspace, setWorkspace: s.setWorkspace, folder: s.folder })),
   )
-  const folderName = folder?.split(/[\\/]/).filter(Boolean).pop()
+  const folderName = folder ? shootName(folder.split(/[\\/]/).filter(Boolean).pop() ?? folder).title : undefined
 
   return (
     <header
@@ -93,6 +94,9 @@ export function TitleBar() {
   )
 }
 
+/** The chosen filter is lit in the Photos workspace color. */
+const ACTIVE = "text-muted-foreground data-[state=on]:bg-(--workspace-photos)/15 data-[state=on]:text-(--workspace-photos)"
+
 /** All / Tagged / Untagged, plus one menu for rating and label — instead of five controls. */
 function PhotoFilters() {
   const { tagFilter, minRating, labelFilter, setFilter, clearFilters } = useStore(
@@ -114,9 +118,9 @@ function PhotoFilters() {
         value={tagFilter}
         onValueChange={(v) => v && setFilter({ tagFilter: v as typeof tagFilter })}
       >
-        <ToggleGroupItem value="all">All</ToggleGroupItem>
-        <ToggleGroupItem value="tagged">Tagged</ToggleGroupItem>
-        <ToggleGroupItem value="untagged">Untagged</ToggleGroupItem>
+        <ToggleGroupItem value="all" className={ACTIVE}>All</ToggleGroupItem>
+        <ToggleGroupItem value="tagged" className={ACTIVE}>Tagged</ToggleGroupItem>
+        <ToggleGroupItem value="untagged" className={ACTIVE}>Untagged</ToggleGroupItem>
       </ToggleGroup>
 
       <DropdownMenu>
