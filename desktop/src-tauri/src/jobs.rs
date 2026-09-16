@@ -3,7 +3,7 @@
 
 use std::sync::Mutex;
 
-static WRITES: Mutex<()> = Mutex::new(());
+pub static WRITES: Mutex<()> = Mutex::new(());
 
 /// Runs `f` on a blocking thread, one write job at a time.
 pub async fn serial<T: Send + 'static>(f: impl FnOnce() -> T + Send + 'static) -> T {

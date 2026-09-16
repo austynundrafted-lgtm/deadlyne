@@ -35,18 +35,22 @@ export interface Culling {
 
 export const CAPTION_FIELDS = [
   "headline", "caption", "keywords", "event", "location", "city", "state", "country", "creator", "credit", "copyright",
+  "title", "bylineTitle", "source", "instructions", "jobId", "captionWriter", "countryCode", "usageTerms",
 ] as const
 export type CaptionField = (typeof CAPTION_FIELDS)[number]
 
 export const FIELD_LABELS: Record<CaptionField, string> = {
   headline: "Headline", caption: "Caption", keywords: "Keywords", event: "Event", location: "Venue",
   city: "City", state: "State", country: "Country", creator: "Photographer", credit: "Credit", copyright: "Copyright",
+  title: "Object name", bylineTitle: "Photographer title", source: "Source", instructions: "Special instructions",
+  jobId: "Job ID", captionWriter: "Caption writer", countryCode: "Country code", usageTerms: "Usage terms",
 }
 
 export type Captions = Omit<Record<CaptionField, string>, "keywords"> & { keywords: string[] }
 
 export const emptyCaptions = (): Captions => ({
   headline: "", caption: "", keywords: [], event: "", location: "", city: "", state: "", country: "", creator: "", credit: "", copyright: "",
+  title: "", bylineTitle: "", source: "", instructions: "", jobId: "", captionWriter: "", countryCode: "", usageTerms: "",
 })
 
 export const captionValue = (c: Captions, f: CaptionField) => (f === "keywords" ? c.keywords.join(", ") : c[f])

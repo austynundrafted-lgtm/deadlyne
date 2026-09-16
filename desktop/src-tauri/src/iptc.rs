@@ -4,7 +4,7 @@
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Hash, Debug)]
-#[serde(rename_all = "lowercase")]
+#[serde(rename_all = "camelCase")]
 pub enum Field {
     Headline,
     Caption,
@@ -17,6 +17,18 @@ pub enum Field {
     Creator,
     Credit,
     Copyright,
+    /// IPTC Title / IIM Object Name: a short slug such as "FBO-Tecumseh-Fairborn".
+    Title,
+    /// By-line Title: "Staff Photographer", "Contributor".
+    BylineTitle,
+    Source,
+    /// Special instructions for the desk: embargoes, corrections, "Refiled with corrected name".
+    Instructions,
+    /// Job Identifier / IIM Transmission Reference, e.g. an assignment number.
+    JobId,
+    CaptionWriter,
+    CountryCode,
+    UsageTerms,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -28,7 +40,7 @@ pub enum Kind {
 }
 
 impl Field {
-    pub const ALL: [Field; 11] = [
+    pub const ALL: [Field; 19] = [
         Field::Headline,
         Field::Caption,
         Field::Keywords,
@@ -40,14 +52,32 @@ impl Field {
         Field::Creator,
         Field::Credit,
         Field::Copyright,
+        Field::Title,
+        Field::BylineTitle,
+        Field::Source,
+        Field::Instructions,
+        Field::JobId,
+        Field::CaptionWriter,
+        Field::CountryCode,
+        Field::UsageTerms,
     ];
 
     pub fn prefix(self) -> &'static str {
         match self {
-            Field::Caption | Field::Keywords | Field::Creator | Field::Copyright => "dc",
-            Field::Headline | Field::City | Field::State | Field::Country | Field::Credit => "photoshop",
-            Field::Location => "Iptc4xmpCore",
+            Field::Caption | Field::Keywords | Field::Creator | Field::Copyright | Field::Title => "dc",
+            Field::Headline
+            | Field::City
+            | Field::State
+            | Field::Country
+            | Field::Credit
+            | Field::BylineTitle
+            | Field::Source
+            | Field::Instructions
+            | Field::JobId
+            | Field::CaptionWriter => "photoshop",
+            Field::Location | Field::CountryCode => "Iptc4xmpCore",
             Field::Event => "Iptc4xmpExt",
+            Field::UsageTerms => "xmpRights",
         }
     }
 
@@ -56,6 +86,7 @@ impl Field {
             "dc" => "http://purl.org/dc/elements/1.1/",
             "photoshop" => "http://ns.adobe.com/photoshop/1.0/",
             "Iptc4xmpCore" => "http://iptc.org/std/Iptc4xmpCore/1.0/xmlns/",
+            "xmpRights" => "http://ns.adobe.com/xap/1.0/rights/",
             _ => "http://iptc.org/std/Iptc4xmpExt/2008-02-29/",
         }
     }
@@ -73,12 +104,20 @@ impl Field {
             Field::Creator => "creator",
             Field::Credit => "Credit",
             Field::Copyright => "rights",
+            Field::Title => "title",
+            Field::BylineTitle => "AuthorsPosition",
+            Field::Source => "Source",
+            Field::Instructions => "Instructions",
+            Field::JobId => "TransmissionReference",
+            Field::CaptionWriter => "CaptionWriter",
+            Field::CountryCode => "CountryCode",
+            Field::UsageTerms => "UsageTerms",
         }
     }
 
     pub fn kind(self) -> Kind {
         match self {
-            Field::Caption | Field::Event | Field::Copyright => Kind::LangAlt,
+            Field::Caption | Field::Event | Field::Copyright | Field::Title | Field::UsageTerms => Kind::LangAlt,
             Field::Keywords => Kind::Bag,
             Field::Creator => Kind::Seq,
             _ => Kind::Simple,
@@ -105,6 +144,14 @@ pub struct Captions {
     pub creator: String,
     pub credit: String,
     pub copyright: String,
+    pub title: String,
+    pub byline_title: String,
+    pub source: String,
+    pub instructions: String,
+    pub job_id: String,
+    pub caption_writer: String,
+    pub country_code: String,
+    pub usage_terms: String,
 }
 
 impl Captions {
@@ -121,6 +168,14 @@ impl Captions {
             Field::Creator => self.creator.clone(),
             Field::Credit => self.credit.clone(),
             Field::Copyright => self.copyright.clone(),
+            Field::Title => self.title.clone(),
+            Field::BylineTitle => self.byline_title.clone(),
+            Field::Source => self.source.clone(),
+            Field::Instructions => self.instructions.clone(),
+            Field::JobId => self.job_id.clone(),
+            Field::CaptionWriter => self.caption_writer.clone(),
+            Field::CountryCode => self.country_code.clone(),
+            Field::UsageTerms => self.usage_terms.clone(),
         }
     }
 
@@ -138,6 +193,14 @@ impl Captions {
             Field::Creator => self.creator = v,
             Field::Credit => self.credit = v,
             Field::Copyright => self.copyright = v,
+            Field::Title => self.title = v,
+            Field::BylineTitle => self.byline_title = v,
+            Field::Source => self.source = v,
+            Field::Instructions => self.instructions = v,
+            Field::JobId => self.job_id = v,
+            Field::CaptionWriter => self.caption_writer = v,
+            Field::CountryCode => self.country_code = v,
+            Field::UsageTerms => self.usage_terms = v,
         }
     }
 

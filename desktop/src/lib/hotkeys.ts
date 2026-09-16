@@ -62,6 +62,7 @@ export function useHotkeys() {
         if (e.code === "KeyC") return run(e, () => copyOrMove("tagged", false))
         if (e.code === "KeyM") return run(e, () => copyOrMove("tagged", true))
         if (e.code === "KeyT") return run(e, s.selectTagged)
+        if (e.code === "KeyU") return run(e, () => ui.openSend("tagged"))
       }
       if (cmd && (e.key === "Backspace" || e.key === "Delete")) return run(e, askTrash)
       if (cmd && key === "a") return run(e, s.selectAll)

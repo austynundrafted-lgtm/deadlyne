@@ -297,7 +297,15 @@ fn patch_exif_strings(seg: &[u8], updates: &[(u16, String)]) -> Option<Vec<u8>> 
 // MARK: - IPTC-IIM
 
 /// IIM dataset numbers (record 2) and their standard maximum lengths in bytes.
-const IIM_MAP: [(Field, u8, usize); 10] = [
+/// Usage Terms has no IIM dataset; it lives only in XMP.
+const IIM_MAP: [(Field, u8, usize); 17] = [
+    (Field::Title, 5, 64),
+    (Field::Instructions, 40, 256),
+    (Field::BylineTitle, 85, 32),
+    (Field::CountryCode, 100, 3),
+    (Field::JobId, 103, 32),
+    (Field::Source, 115, 32),
+    (Field::CaptionWriter, 122, 32),
     (Field::Keywords, 25, 64),
     (Field::Creator, 80, 32),
     (Field::City, 90, 32),
@@ -501,6 +509,14 @@ mod tests {
         c.headline = "Fairborn wins".into();
         c.caption = "Jordan Dončić (10) scores".into();
         c.keywords = vec!["Fairborn".into(), "Football".into()];
+        c.title = "FBO-Fairborn-Tecumseh".into();
+        c.byline_title = "Staff Photographer".into();
+        c.source = "Deadlyne Sports".into();
+        c.instructions = "Embargoed until 9 p.m.".into();
+        c.job_id = "A-2026-0822".into();
+        c.caption_writer = "AM".into();
+        c.country_code = "USA".into();
+        c.usage_terms = "Editorial use only".into();
         embed(&path, &c, &Field::ALL, JpegMode::XmpAndIim, Some(("20260822".into(), "094527-0400".into()))).unwrap();
 
         let b = std::fs::read(&path).unwrap();
@@ -510,6 +526,9 @@ mod tests {
         let iim = iim_captions(&iim_datasets(&b, &segs));
         assert_eq!(iim.caption, c.caption);
         assert_eq!(iim.keywords, c.keywords);
+        assert_eq!((iim.title.as_str(), iim.job_id.as_str(), iim.instructions.as_str()), ("FBO-Fairborn-Tecumseh", "A-2026-0822", "Embargoed until 9 p.m."));
+        assert_eq!((iim.byline_title.as_str(), iim.source.as_str(), iim.caption_writer.as_str(), iim.country_code.as_str()), ("Staff Photographer", "Deadlyne Sports", "AM", "USA"));
+        assert!(iim.usage_terms.is_empty(), "Usage Terms has no IIM dataset");
 
         // XMP only: the legacy caption is removed, the XMP one stays.
         embed(&path, &c, &Field::ALL, JpegMode::Xmp, None).unwrap();

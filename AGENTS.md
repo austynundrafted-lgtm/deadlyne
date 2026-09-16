@@ -7,6 +7,9 @@ Read this before changing anything. It covers what the app is, who it's for, how
 > - **The Swift/AppKit app at the repo root** (sections 3–6 below) is the reference implementation. Port features from it into `desktop/` in the order the photographer uses them: captions + code replacements, then ingest, copy/move, search, badges. Keep sidecar and file formats identical, so both apps (and Lightroom) read each other's work.
 > - Rules in section 2 apply to both apps.
 > - Desktop specifics:
+>   - Sign-in: `src/lib/auth.ts` + `components/AuthGate.tsx`; backend SQL and setup in `desktop/supabase/`. Config comes from `VITE_SUPABASE_URL` / `VITE_SUPABASE_PUBLISHABLE_KEY` (`.env.local` locally, repository variables in CI). Keep offline use working: a confirmed sign-in lasts `OFFLINE_GRACE_DAYS` without network.
+>   - FTP: `src-tauri/src/ftp.rs` + `lib/ftp.ts`. Passwords go only to the keychain (`keyring`). FTPS uses rustls so data connections resume the TLS session; don't switch back to native-tls. Never make "Replace" the default when a remote file exists.
+>   - New IPTC fields: add them to `iptc.rs` (`Field`, `Captions`), `IIM_MAP` in `jpeg_meta.rs` if IIM has a dataset, and `CAPTION_FIELDS` / `FIELD_LABELS` / `emptyCaptions` in `lib/api.ts`, then place the input in `CaptionPanel.tsx`.
 >   - Never pass image bytes through JavaScript; use the `thumb://` / `preview://` schemes in `images.rs`.
 >   - Keep heavy work in Rust on rayon or `spawn_blocking`.
 >   - Add UI only from shadcn (`npx shadcn@latest add …`).
@@ -45,7 +48,10 @@ Deadlyne **never decodes RAW sensor data**. Every RAW file contains JPEGs the ca
 4. **The user's real shoots are read-only for testing.** Their shoot folders are real client work. Test on **copies** in a scratch folder.
 5. **Don't pollute the user's stats.** Opening a folder in Deadlyne adds it to Home's recent shoots and to the badge counts. After testing with a scratch folder, remove it from UserDefaults: the `recentShoots` entry, plus `achievements` → `folders`, `photos`, `shoots` and `months`. Also reset `lastFolder`. Back up first with `defaults export app.deadlyne.Deadlyne backup.plist`.
 6. **The user runs the app themselves.** Don't quit or relaunch a running Deadlyne without saying so.
-7. **Wording.** Say "ingested", never "uploaded". There are **no accounts**: the profile is optional and stays on this Mac. Don't add sign-in or cloud features unless asked.
+7. **Wording and accounts.** Say "ingested" for cards and "sent" for FTP, never "uploaded".
+   - The **Swift app** has no accounts: the profile is optional and stays on the Mac.
+   - **Desktop** is gated behind a Supabase sign-in (asked for by the user on 2026-09-15). Supabase stores only the account status and the photographer profile (name, credit, copyright). Photos, captions, rosters and FTP passwords never leave the computer. Don't add other cloud features unless asked.
+   - Never put a Supabase service_role/secret key in the app or the repo. Only the publishable key ships, and row level security enforces access.
 8. **Home should feel like a pro tool, not a SaaS dashboard.** The path from launch to images stays dominant.
 9. **Badge ids are permanent** (`photos-100`, `shoots-1`…). Earned badges are stored by id, and the user draws the art as `Resources/Badges/<id>.png`. Never replace their art or rename ids.
 
@@ -233,6 +239,6 @@ Store it in UserDefaults with a clear camelCase key, and add the key to the list
   - an autocomplete popup while typing a code
   - `=code#0=` for the code itself
   - export a merged Photo Mechanic file
-- **Delivery:** FTP/wire upload of tagged JPGs with captions. This would be "sending", so confirm the design with the user first.
+- **Delivery:** FTP/FTPS sending shipped in desktop. Still open: SFTP, resizing JPGs before sending (long edge for wire), a "sent" badge on photos, a setting to accept a self-signed FTPS certificate, and porting the new IPTC wire fields to the Swift app.
 
 When you finish a feature: build with `./scripts/build.sh`, verify it in the running app on scratch copies, clean up any test entries in stats, update `README.md` (user-facing) and this file (engineering), and tell the user plainly what you verified and what you didn't.

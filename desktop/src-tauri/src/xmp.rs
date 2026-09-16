@@ -396,7 +396,16 @@ mod tests {
         c.keywords = vec!["Fairborn".into(), "football".into()];
         c.creator = "Austyn McFadden; Second Shooter".into();
         c.city = "Tipp City".into();
+        c.title = "FBO-Fairborn-Tecumseh".into();
+        c.byline_title = "Staff Photographer".into();
+        c.source = "Deadlyne Sports".into();
+        c.instructions = "Refiled with corrected name".into();
+        c.job_id = "A-2026-0822".into();
+        c.caption_writer = "AM".into();
+        c.country_code = "USA".into();
+        c.usage_terms = "Editorial use only".into();
         let text = apply_captions(&c, &Field::ALL, &template("CR3"));
+        assert!(text.contains("xmlns:xmpRights=") && text.contains("photoshop:TransmissionReference=\"A-2026-0822\""), "{text}");
         assert_eq!(read_captions(&text), c);
         // Editing one field again replaces it rather than duplicating.
         let mut c2 = c.clone();
