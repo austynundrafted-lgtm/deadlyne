@@ -68,13 +68,23 @@ export function CaptionPanel() {
               <CaptionInput field="city" targets={targets} disabled={disabled} />
               <CaptionInput field="state" targets={targets} disabled={disabled} />
             </div>
-            <CaptionInput field="country" targets={targets} disabled={disabled} />
+            <div className="grid grid-cols-[1fr_6rem] gap-3">
+              <CaptionInput field="country" targets={targets} disabled={disabled} />
+              <CaptionInput field="countryCode" targets={targets} disabled={disabled} maxLength={3} />
+            </div>
           </Section>
 
           <Section id="credits" title="Credits">
-            <CaptionInput field="creator" targets={targets} disabled={disabled} />
-            <CaptionInput field="credit" targets={targets} disabled={disabled} />
+            <div className="grid grid-cols-2 gap-3">
+              <CaptionInput field="creator" targets={targets} disabled={disabled} />
+              <CaptionInput field="bylineTitle" targets={targets} disabled={disabled} />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <CaptionInput field="credit" targets={targets} disabled={disabled} />
+              <CaptionInput field="source" targets={targets} disabled={disabled} />
+            </div>
             <CaptionInput field="copyright" targets={targets} disabled={disabled} />
+            <CaptionInput field="usageTerms" targets={targets} disabled={disabled} />
             <Button
               variant="outline"
               size="sm"
@@ -84,6 +94,15 @@ export function CaptionPanel() {
               <UserRound data-icon="inline-start" />
               {profile?.name ? "Fill from profile" : "Set up profile to fill credits"}
             </Button>
+          </Section>
+
+          <Section id="wire" title="Wire & desk">
+            <CaptionInput field="title" targets={targets} disabled={disabled} hint="A short slug, e.g. FBO-Fairborn-Tecumseh." />
+            <div className="grid grid-cols-2 gap-3">
+              <CaptionInput field="jobId" targets={targets} disabled={disabled} />
+              <CaptionInput field="captionWriter" targets={targets} disabled={disabled} />
+            </div>
+            <CaptionInput field="instructions" targets={targets} disabled={disabled} multiline rows={2} />
           </Section>
         </div>
       </ScrollArea>
@@ -118,10 +137,12 @@ interface InputProps {
   targets: ReturnType<typeof targetPhotos>
   disabled: boolean
   multiline?: boolean
+  rows?: number
+  maxLength?: number
   hint?: string
 }
 
-function CaptionInput({ field, targets, disabled, multiline, hint }: InputProps) {
+function CaptionInput({ field, targets, disabled, multiline, rows = 5, maxLength, hint }: InputProps) {
   const commitCaption = useStore((s) => s.commitCaption)
   const focusRequest = useStore((s) => s.captionFocusRequest)
   const shared = useMemo(() => commonCaption(targets, field), [targets, field])
@@ -164,7 +185,8 @@ function CaptionInput({ field, targets, disabled, multiline, hint }: InputProps)
     disabled,
     value: draft ?? shared.value,
     placeholder: shared.mixed ? (field === "keywords" ? "Some photos have other keywords" : "Multiple values") : "",
-    spellCheck: field === "caption" || field === "headline",
+    maxLength,
+    spellCheck: field === "caption" || field === "headline" || field === "instructions",
     onFocus: () => {
       session.current = { ids: targets.map((t) => t.id), original: shared.value }
       setDraft(shared.value)
@@ -193,7 +215,7 @@ function CaptionInput({ field, targets, disabled, multiline, hint }: InputProps)
       <FieldLabel htmlFor={props.id} className="text-xs text-muted-foreground">
         {FIELD_LABELS[field]}
       </FieldLabel>
-      {multiline ? <Textarea {...props} rows={5} className="min-h-28 resize-y" /> : <Input {...props} />}
+      {multiline ? <Textarea {...props} rows={rows} className={cn("resize-y", rows > 2 ? "min-h-28" : "min-h-14")} /> : <Input {...props} />}
       {hint && <FieldDescription className="text-xs">{hint}</FieldDescription>}
     </Field>
   )

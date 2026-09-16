@@ -25,6 +25,7 @@ import {
   type Label,
   type Photo,
 } from "@/lib/api"
+import { fetchRemoteProfile, pushRemoteProfile } from "@/lib/auth"
 import { expandCodes } from "@/lib/codes"
 import { noteRecentShoot } from "@/lib/recents"
 import { DEFAULT_COPYRIGHT, getSetting, pref, setPref, setSetting, type Profile } from "@/lib/settings"
@@ -305,6 +306,7 @@ export const useStore = create<State>((set, get) => ({
   setProfile: (profile) => {
     set({ profile })
     setSetting("profile", profile)
+    pushRemoteProfile(profile).catch(() => {}) // offline: it syncs the next time it's saved
   },
 
   commitCaption: (field, value, removedKeywords, ids) => {
@@ -318,7 +320,7 @@ export const useStore = create<State>((set, get) => ({
         const add = splitKeywords(expanded).filter((k) => !keep.some((x) => x.toLowerCase() === k.toLowerCase()))
         captions.keywords = [...keep, ...add]
       } else {
-        captions[field] = expanded.trim()
+        captions[field] = field === "countryCode" ? expanded.trim().toUpperCase() : expanded.trim()
       }
       return { ...p, captions }
     })
@@ -426,6 +428,17 @@ export async function loadSettings() {
     getSetting<Profile | null>("profile", null),
   ])
   useStore.setState({ jpegMode, profile })
+  // The account keeps the profile too, so a new computer starts with it filled in.
+  fetchRemoteProfile()
+    .then((remote) => {
+      if (remote && !useStore.getState().profile) {
+        useStore.setState({ profile: remote })
+        setSetting("profile", remote)
+      } else if (!remote && profile) {
+        pushRemoteProfile(profile)
+      }
+    })
+    .catch(() => {})
 }
 
 /** The value every photo shares for `field`; when they differ the field is "mixed". */

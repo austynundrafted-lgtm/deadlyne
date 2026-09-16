@@ -9,6 +9,7 @@ mod codes;
 mod exif;
 mod fileops;
 mod folder;
+mod ftp;
 mod images;
 mod ingest;
 mod iptc;
@@ -39,6 +40,7 @@ pub fn run() {
             codes::rename_code_list, codes::trash_code_list, codes::code_lists_folder,
             fileops::transfer_photos, fileops::trash_photos, fileops::reveal,
             ingest::memory_cards, ingest::inspect_source, ingest::free_space, ingest::start_ingest, ingest::cancel_ingest,
+            ftp::ftp_set_password, ftp::ftp_has_password, ftp::ftp_test, ftp::ftp_send, ftp::ftp_cancel,
             achievements::achievements, achievements::record_folder_opened])
         .run(tauri::generate_context!())
         .expect("error while running Deadlyne");

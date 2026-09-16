@@ -12,6 +12,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.116.0",
     "@tailwindcss/vite": "^4.3.3",
     "@tanstack/react-virtual": "^3.14.13",
     "@tauri-apps/api": "^2",
@@ -21,6 +22,7 @@
     "@tauri-apps/plugin-updater": "^2.11.0",
     "class-variance-authority": "^0.7.1",
     "cn": "^0.3.0",
+    "input-otp": "^1.5.0",
     "lucide-react": "^1.46.0",
     "radix-ui": "^1.6.7",
     "react": "^19.1.0",

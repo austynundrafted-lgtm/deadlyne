@@ -5,6 +5,7 @@ import { ChevronRight, FolderOpen, HardDriveDownload, Images, X } from "lucide-r
 import { useShallow } from "zustand/react/shallow"
 import logo from "@/assets/logo.png"
 import { openFolderDialog } from "@/lib/actions"
+import { OFFLINE_GRACE_DAYS, useAuth } from "@/lib/auth"
 import { mod, plural, relativeTime } from "@/lib/format"
 import { forgetRecentShoot, onRecentShoots, recentShoots, type RecentShoot } from "@/lib/recents"
 import { shootName, shootSubtitle } from "@/lib/shootName"
@@ -24,6 +25,14 @@ import {
   ItemTitle,
 } from "@/components/ui/item"
 import { Kbd } from "@/components/ui/kbd"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 
 export function HomeView() {
   const openFolder = useStore((s) => s.openFolder)
@@ -157,6 +166,8 @@ export function HomeView() {
             {profile?.name || "Set up profile"}
           </Button>
           <span>·</span>
+          <AccountMenu />
+          <span>·</span>
           <span>Version {version}</span>
           <span>·</span>
           <Button variant="link" size="xs" className="h-auto p-0 text-xs text-muted-foreground" onClick={() => checkForUpdates({ quiet: false })}>
@@ -165,5 +176,32 @@ export function HomeView() {
         </footer>
       </div>
     </div>
+  )
+}
+
+function AccountMenu() {
+  const { account, offline } = useAuth(useShallow((s) => ({ account: s.account, offline: s.offline })))
+  if (!account) return null
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="link" size="xs" className="h-auto p-0 text-xs text-muted-foreground">
+          {offline && <span className="size-1.5 rounded-full bg-(--workspace-photos)" />}
+          {account.email}
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="center" className="w-64">
+        <DropdownMenuLabel className="font-normal">
+          <span className="block text-foreground">Signed in as {account.email}</span>
+          {offline && (
+            <span className="mt-1 block text-xs text-muted-foreground">
+              Offline. Deadlyne keeps working on this computer for up to {OFFLINE_GRACE_DAYS} days between check-ins.
+            </span>
+          )}
+        </DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onSelect={() => useAuth.getState().signOut()}>Sign out</DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   )
 }
