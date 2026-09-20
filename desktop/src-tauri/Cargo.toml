@@ -1,6 +1,6 @@
 [package]
 name = "deadlyne"
-version = "0.2.0"
+version = "0.3.0"
 description = "Deadlyne — instant RAW culling and captioning for sports photographers"
 authors = ["Austyn McFadden"]
 edition = "2021"
