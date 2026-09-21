@@ -84,7 +84,11 @@ export const useIngest = create<IngestState>((set, get) => ({
 }))
 
 /** Wires ingest events once at launch. */
+let ingestWired = false
+
 export async function initIngest() {
+  if (ingestWired) return
+  ingestWired = true
   useIngest.setState({ prefs: { ...DEFAULT_PREFS, ...(await getSetting<Partial<IngestPrefs>>("ingest", {})) } })
   await listen<IngestProgress>("ingest-progress", (e) => useIngest.setState({ progress: e.payload, started: useIngest.getState().started ?? Date.now() }))
   await listen<IngestSummary>("ingest-done", (e) => {

@@ -10,6 +10,7 @@ import { captureTime, exposureLine, labelColor, mod, plural } from "@/lib/format
 import { LABELS, reveal } from "@/lib/api"
 import { cn } from "@/lib/utils"
 import { THUMB_MAX, THUMB_MIN, useStore, useVisiblePhotos } from "@/store"
+import { useUI } from "@/ui"
 import { CaptionPanel } from "@/components/CaptionPanel"
 import {
   ContextMenu,
@@ -257,6 +258,7 @@ function PhotoMenu({ photo, selected, children }: { photo: Photo; selected: bool
         <ContextMenuSeparator />
         <ContextMenuItem onSelect={() => copyOrMove("selected", false)}>Copy {them} to…</ContextMenuItem>
         <ContextMenuItem onSelect={() => copyOrMove("selected", true)}>Move {them} to…</ContextMenuItem>
+        <ContextMenuItem onSelect={() => useUI.getState().openSend("selected")}>Send {them} via FTP…</ContextMenuItem>
         <ContextMenuItem onSelect={() => reveal(photo.id)}>Show in {navigator.userAgent.includes("Mac") ? "Finder" : "Explorer"}</ContextMenuItem>
         <ContextMenuSeparator />
         <ContextMenuItem variant="destructive" onSelect={askTrash}>

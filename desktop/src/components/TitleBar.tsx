@@ -28,6 +28,7 @@ import { askTrash, copyOrMove, openFolderDialog } from "@/lib/actions"
 import { Input } from "@/components/ui/input"
 import { useUI } from "@/ui"
 import { shootName } from "@/lib/shootName"
+import { SendQueue } from "@/components/SendDialog"
 
 const WORKSPACES: { value: Workspace; label: string; icon: typeof House; key: string }[] = [
   { value: "home", label: "Home", icon: House, key: "1" },
@@ -90,6 +91,8 @@ export function TitleBar() {
           <CaptionToggle />
         </>
       )}
+
+      <SendQueue />
 
       <Tooltip>
         <TooltipTrigger asChild>
@@ -225,7 +228,7 @@ function PhotoActions() {
             </Button>
           </DropdownMenuTrigger>
         </TooltipTrigger>
-        <TooltipContent>Copy, move, captions…</TooltipContent>
+        <TooltipContent>Copy, move, send, captions…</TooltipContent>
       </Tooltip>
       <DropdownMenuContent align="end" className="w-64">
         <DropdownMenuItem onSelect={() => s().selectTagged()}>
@@ -240,6 +243,12 @@ function PhotoActions() {
         </DropdownMenuItem>
         <DropdownMenuItem onSelect={() => copyOrMove("selected", false)}>Copy selected to…</DropdownMenuItem>
         <DropdownMenuItem onSelect={() => copyOrMove("selected", true)}>Move selected to…</DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onSelect={() => useUI.getState().openSend("tagged")}>
+          Send tagged via FTP… <DropdownMenuShortcut>⇧{mod}U</DropdownMenuShortcut>
+        </DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => useUI.getState().openSend("selected")}>Send selected via FTP…</DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => useUI.getState().open("ftpServers")}>FTP servers…</DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem onSelect={() => s().copyCaptions()}>
           Copy caption info <DropdownMenuShortcut>⌥{mod}C</DropdownMenuShortcut>
