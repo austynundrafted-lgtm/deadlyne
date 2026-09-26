@@ -4,7 +4,7 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import { ChevronDown, CircleHelp, Settings2, UserRound, X } from "lucide-react"
 import { useShallow } from "zustand/react/shallow"
-import { FIELD_LABELS, JPEG_MODES, type CaptionField, type JpegMode } from "@/lib/api"
+import { FIELD_LABELS, IIM_LIMITS, JPEG_MODES, type CaptionField, type JpegMode } from "@/lib/api"
 import { expandLive, useCodes } from "@/lib/codes"
 import { mod, plural } from "@/lib/format"
 import { pref, setPref } from "@/lib/settings"
@@ -121,11 +121,11 @@ function Section({ id, title, children }: { id: string; title: string; children:
         setOpen(o)
         setPref(`captionSection.${id}`, o)
       }}
-      className="flex flex-col gap-3 border-t pt-3"
+      className="flex flex-col gap-3"
     >
-      <CollapsibleTrigger className="flex items-center justify-between text-xs font-medium tracking-wide text-muted-foreground uppercase hover:text-foreground">
+      <CollapsibleTrigger className="-mx-2 flex items-center justify-between rounded-md px-2 py-1.5 text-xs font-medium tracking-wide text-muted-foreground uppercase transition-[background-color,color] duration-100 outline-none hover:bg-accent/50 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50">
         {title}
-        <ChevronDown className={cn("size-4 transition-transform", open && "rotate-180")} />
+        <ChevronDown className={cn("size-4 transition-[rotate] duration-200", open && "rotate-180")} />
       </CollapsibleTrigger>
       <CollapsibleContent className="flex flex-col gap-3">{children}</CollapsibleContent>
     </Collapsible>
@@ -145,6 +145,7 @@ interface InputProps {
 function CaptionInput({ field, targets, disabled, multiline, rows = 5, maxLength, hint }: InputProps) {
   const commitCaption = useStore((s) => s.commitCaption)
   const focusRequest = useStore((s) => s.captionFocusRequest)
+  const iimLimit = useStore((s) => (s.jpegMode === "xmpAndIim" ? IIM_LIMITS[field] : undefined))
   const shared = useMemo(() => commonCaption(targets, field), [targets, field])
   const [draft, setDraft] = useState<string | null>(null)
   const session = useRef<{ ids: string[]; original: string } | null>(null)
@@ -210,13 +211,22 @@ function CaptionInput({ field, targets, disabled, multiline, rows = 5, maxLength
     },
   }
 
+  const bytes = iimLimit ? new TextEncoder().encode(props.value).length : 0
+  const tooLong = !!iimLimit && bytes > iimLimit && targets.some((t) => t.jpeg)
+
   return (
     <Field className="gap-1.5">
       <FieldLabel htmlFor={props.id} className="text-xs text-muted-foreground">
         {FIELD_LABELS[field]}
       </FieldLabel>
       {multiline ? <Textarea {...props} rows={rows} className={cn("resize-y", rows > 2 ? "min-h-28" : "min-h-14")} /> : <Input {...props} />}
-      {hint && <FieldDescription className="text-xs">{hint}</FieldDescription>}
+      {tooLong ? (
+        <FieldDescription className="text-xs text-(--workspace-photos)">
+          Legacy IPTC keeps the first {iimLimit} characters, so older wire systems will see it cut off. XMP keeps it all.
+        </FieldDescription>
+      ) : (
+        hint && <FieldDescription className="text-xs">{hint}</FieldDescription>
+      )}
     </Field>
   )
 }
@@ -226,7 +236,7 @@ function CodeStatus() {
   const active = lists.filter((l) => !disabled.includes(l.fileName))
   return (
     <button
-      className="flex h-9 shrink-0 items-center gap-2 border-t px-4 text-left text-xs text-muted-foreground hover:bg-accent/40 hover:text-foreground"
+      className="m-2 mt-0 flex h-8 shrink-0 items-center gap-2 rounded-md px-2 text-left text-xs text-muted-foreground transition-[background-color,color] duration-100 outline-none hover:bg-accent/50 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50"
       onClick={() => useStore.getState().setWorkspace("codes")}
       title="Manage lookup files in Codes"
     >

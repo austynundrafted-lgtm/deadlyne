@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import { invoke } from "@tauri-apps/api/core"
 import { open as openDialog } from "@tauri-apps/plugin-dialog"
-import { FileText, FolderOpen, Import, MoreHorizontal, Plus, Search, Trash2, TextCursorInput } from "lucide-react"
+import { FileText, FolderOpen, Import, MoreHorizontal, Plus, Search, Table2, Trash2, TextCursorInput } from "lucide-react"
 import { toast } from "sonner"
 import { useShallow } from "zustand/react/shallow"
 import { reveal } from "@/lib/api"
@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
+import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuSeparator, ContextMenuTrigger } from "@/components/ui/context-menu"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import {
   DropdownMenu,
@@ -37,6 +38,10 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
+
+/** The chosen editing mode is lit in the Codes workspace color. */
+const MODE = "text-muted-foreground data-[state=on]:bg-(--workspace-codes)/15 data-[state=on]:text-(--workspace-codes)"
 
 export function CodesView() {
   const { lists, disabled, loaded } = useCodes(useShallow((s) => ({ lists: s.lists, disabled: s.disabled, loaded: s.loaded })))
@@ -75,7 +80,7 @@ export function CodesView() {
             ))}
           </div>
         </ScrollArea>
-        <div className="flex gap-1 border-t p-2">
+        <div className="flex gap-1 p-2">
           <Button variant="ghost" size="sm" onClick={newList}>
             <Plus data-icon="inline-start" /> New
           </Button>
@@ -121,33 +126,48 @@ export function CodesView() {
 }
 
 function ListRow({ list, active, onSelect }: { list: CodeList; active: boolean; onSelect: () => void }) {
-  const { enabled, setEnabled } = useCodes(useShallow((s) => ({ enabled: !s.disabled.includes(list.fileName), setEnabled: s.setEnabled })))
+  const { enabled, setEnabled, others } = useCodes(
+    useShallow((s) => ({ enabled: !s.disabled.includes(list.fileName), setEnabled: s.setEnabled, others: s.lists.length > 1 })),
+  )
   const codes = list.rows.filter((r) => r[0]?.trim()).length
   return (
-    <div
-      role="button"
-      tabIndex={0}
-      onClick={onSelect}
-      onKeyDown={(e) => e.key === "Enter" && onSelect()}
-      className={cn(
-        "flex cursor-default items-center gap-2.5 rounded-md border-l-2 border-transparent px-2 py-2 hover:bg-accent/50",
-        active && "border-(--workspace-codes) bg-accent",
-      )}
-    >
-      <Checkbox
-        checked={enabled}
-        onClick={(e) => e.stopPropagation()}
-        onCheckedChange={(v) => setEnabled(list.fileName, v === true)}
-        aria-label={`Use ${list.name} while captioning`}
-      />
-      <div className="min-w-0">
-        <div className={cn("truncate text-sm font-medium", !enabled && "text-muted-foreground")}>{list.name}</div>
-        <div className="text-xs text-muted-foreground">
-          {plural(codes, "code")}
-          {!enabled && " · off"}
+    <ContextMenu>
+      <ContextMenuTrigger asChild>
+        <div
+          role="button"
+          tabIndex={0}
+          onClick={onSelect}
+          onKeyDown={(e) => e.key === "Enter" && onSelect()}
+          aria-current={active || undefined}
+          className={cn(
+            "flex cursor-default items-center gap-2.5 rounded-md px-2 py-2 transition-[background-color] duration-100 outline-none hover:bg-accent/50 focus-visible:ring-2 focus-visible:ring-ring/50 data-[state=open]:bg-accent/50",
+            active && "bg-accent hover:bg-accent data-[state=open]:bg-accent",
+          )}
+        >
+          <Checkbox
+            checked={enabled}
+            onClick={(e) => e.stopPropagation()}
+            onCheckedChange={(v) => setEnabled(list.fileName, v === true)}
+            aria-label={`Use ${list.name} while captioning`}
+          />
+          <div className="min-w-0">
+            <div className={cn("truncate text-sm font-medium", !enabled && "text-muted-foreground")}>{list.name}</div>
+            <div className="text-xs text-muted-foreground">
+              {plural(codes, "code")}
+              {!enabled && " · off"}
+            </div>
+          </div>
         </div>
-      </div>
-    </div>
+      </ContextMenuTrigger>
+      <ContextMenuContent className="w-56">
+        <ContextMenuItem onSelect={() => setEnabled(list.fileName, !enabled)}>{enabled ? "Turn off" : "Turn on"}</ContextMenuItem>
+        {others && <ContextMenuItem onSelect={() => useCodes.getState().useOnly([list.fileName])}>Use only this file</ContextMenuItem>}
+        <ContextMenuSeparator />
+        <ContextMenuItem onSelect={async () => reveal(joinPath(await invoke<string>("code_lists_folder"), list.fileName))}>
+          <FolderOpen /> Show file
+        </ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
   )
 }
 
@@ -232,9 +252,14 @@ function Editor({ list, onRenamed }: { list: CodeList; onRenamed: (fileName: str
             <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search codes" className="h-8 w-44 pl-7" />
           </div>
         )}
-        <Button variant="ghost" size="sm" onClick={() => setAsText(!asText)}>
-          <TextCursorInput data-icon="inline-start" /> {asText ? "Table" : "Text"}
-        </Button>
+        <ToggleGroup type="single" size="sm" value={asText ? "text" : "table"} onValueChange={(v) => v && setAsText(v === "text")} aria-label="Edit as">
+          <ToggleGroupItem value="table" className={MODE} title="Edit as a table">
+            <Table2 /> Table
+          </ToggleGroupItem>
+          <ToggleGroupItem value="text" className={MODE} title="Edit as text: one code per line, columns separated by tabs">
+            <TextCursorInput /> Text
+          </ToggleGroupItem>
+        </ToggleGroup>
         {!asText && (
           <Button size="sm" onClick={addRow}>
             <Plus data-icon="inline-start" /> Code

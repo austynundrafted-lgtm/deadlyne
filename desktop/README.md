@@ -14,19 +14,24 @@ The original native Mac app (Swift/AppKit) still lives at the repo root and keep
   - An instant contact sheet for thousands of RAW+JPEG files, with pairing and capture-time order.
   - Search (⌘F) across file names, captions and keywords.
   - A slim filter bar (All / Tagged / Untagged, plus one Filter menu for rating, label and file type) and one actions menu.
-  - Right-click menus on photos.
-- **Culling:** `T` tags, `0–5` rates, `6–9` sets red/yellow/green/blue labels. Arrows move, Space opens the loupe, Esc closes it. Everything saves to Adobe-compatible XMP sidecars.
+  - Right-click menus on photos: show in Finder/Explorer (⇧⌘R) or open in the default app (⌘E).
+  - When a filter hides photos, the status bar says "X of Y" with a Show all button.
+- **Culling:** `T` tags, `0–5` rates, `6–9` sets red/yellow/green/blue labels. Arrows move, Space opens the loupe, Esc closes it. ⌘D deselects. Everything saves to Adobe-compatible XMP sidecars.
+  - **Loupe:** `Z` or a click zooms to 100% at that point to check focus; drag or scroll pans, and a click or Esc fits it again.
+  - **Auto-advance (⇧⌘A):** in the loupe, the next photo comes up after tagging, rating or labeling. Tagging a photo while showing Untagged also moves on instead of leaving the loupe empty.
+- **Keyboard shortcuts:** press `?` (or Home → Shortcuts) for the full list.
 - **Captions (⌘I):**
   - Headline, Caption and Keywords are always visible. Event & location, Credits and Wire & desk fold open.
   - Wire fields: Object Name, Photographer title (By-line Title), Source, Usage terms, Job ID (Transmission Reference), Caption writer, Special instructions and Country code. All but Usage terms are also written as legacy IPTC for wire systems.
   - Edits apply to every selected photo and save when you leave a field. Keywords merge across photos.
   - RAW photos keep captions in the sidecar. JPGs get XMP + legacy IPTC embedded without touching the image data; the camera's EXIF Artist/Copyright are filled too.
   - Variables like `{date}` and `{camera}` fill in per photo.
+  - A field longer than legacy IPTC allows (Credit and Venue are only 32 characters) gets a warning, since older wire systems will see it cut off. XMP keeps the full text.
   - Copy/paste caption info with ⌥⌘C / ⌥⌘V.
   - Fill credits from your profile with ⌥⌘P.
 - **Codes (⌘3):**
   - Photo Mechanic–style code replacements: `=f10=` becomes "Jordan Sample (10)", and `=f10#2=` gives column 2. Codes expand as you type or paste.
-  - Several lookup files can be on at once. Import `.txt`/`.csv` rosters (or drop them on the window), then edit them as a table or as text.
+  - Several lookup files can be on at once. Right-click a file for "Use only this file", e.g. just tonight's two rosters. Import `.txt`/`.csv` rosters (or drop them on the window), then edit them as a table or as text.
   - Name columns, add a prefix to every code, and try codes out in the Try It box.
   - On macOS the rosters are shared with the original Swift app.
 - **Ingest:**

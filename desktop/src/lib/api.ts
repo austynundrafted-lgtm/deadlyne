@@ -39,6 +39,13 @@ export const CAPTION_FIELDS = [
 ] as const
 export type CaptionField = (typeof CAPTION_FIELDS)[number]
 
+/** Legacy IPTC-IIM's maximum length in bytes per field; longer text is cut off there (XMP keeps
+ *  all of it). Mirrors `IIM_MAP` in src-tauri/src/jpeg_meta.rs. Keywords are limited per keyword. */
+export const IIM_LIMITS: Partial<Record<CaptionField, number>> = {
+  title: 64, instructions: 256, bylineTitle: 32, countryCode: 3, jobId: 32, source: 32, captionWriter: 32,
+  creator: 32, city: 32, location: 32, state: 32, country: 64, headline: 256, credit: 32, copyright: 128, caption: 2000,
+}
+
 export const FIELD_LABELS: Record<CaptionField, string> = {
   headline: "Headline", caption: "Caption", keywords: "Keywords", event: "Event", location: "Venue",
   city: "City", state: "State", country: "Country", creator: "Photographer", credit: "Credit", copyright: "Copyright",
@@ -153,6 +160,14 @@ export function trashPhotos(photos: PhotoEntry[], scope: FileScope) {
 }
 
 export const reveal = (path: string) => invoke("reveal", { path })
+export const openFiles = (paths: string[]) => invoke("open_files", { paths })
+
+/** The one file that stands for `p` under the Files filter: the RAW, unless only JPGs are shown. */
+export function primaryFile(p: PhotoEntry, scope: FileScope): string {
+  if (scope === "jpeg") return p.jpeg ?? p.id
+  if (scope === "raw") return p.raw ?? p.id
+  return p.id
+}
 
 // MARK: - Ingest
 

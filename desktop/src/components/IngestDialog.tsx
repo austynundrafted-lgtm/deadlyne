@@ -257,8 +257,8 @@ export function IngestDialog() {
             </Field>
 
             <Collapsible className="flex flex-col gap-3">
-              <CollapsibleTrigger className="flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground">
-                Naming and options <ChevronDown className="size-3.5" />
+              <CollapsibleTrigger className="group flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground">
+                Naming and options <ChevronDown className="size-3.5 transition-transform group-data-[state=open]:rotate-180" />
               </CollapsibleTrigger>
               <CollapsibleContent className="flex flex-col gap-3">
                 <Field>

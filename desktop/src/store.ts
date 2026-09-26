@@ -51,6 +51,10 @@ interface State {
   anchor: string | null
   focus: string | null
   loupe: boolean
+  /** The loupe at 100%: the point of the photo at the center of the view (0–1 each way), or null to fit. */
+  zoom: { x: number; y: number } | null
+  /** In the loupe, go to the next photo after tagging, rating or labeling (⇧⌘A, like the Mac app). */
+  autoAdvance: boolean
   /** True until the user picks or moves to a photo after opening a shoot. */
   pristine: boolean
   thumbSize: number
@@ -72,9 +76,12 @@ interface State {
   clearFilters: () => void
   click: (id: string, opts: { shift?: boolean; toggle?: boolean }) => void
   selectAll: () => void
+  deselectAll: () => void
   selectTagged: () => void
   move: (delta: number, extend?: boolean) => void
   setLoupe: (open: boolean) => void
+  setZoom: (zoom: { x: number; y: number } | null) => void
+  setAutoAdvance: (on: boolean) => void
   setThumbSize: (n: number) => void
   setColumns: (n: number) => void
   /** Applies culling to the targets (the loupe photo, else the selection) and saves sidecars. */
@@ -172,6 +179,8 @@ export const useStore = create<State>((set, get) => ({
   anchor: null,
   focus: null,
   loupe: false,
+  zoom: null,
+  autoAdvance: pref("autoAdvance", false),
   pristine: true,
   thumbSize: pref("thumbSize", 220),
   columns: 1,
@@ -257,6 +266,7 @@ export const useStore = create<State>((set, get) => ({
   },
 
   selectAll: () => set((s) => ({ selected: new Set(visiblePhotos(s).map((p) => p.id)), pristine: false })),
+  deselectAll: () => set({ selected: new Set(), pristine: false }),
   selectTagged: () =>
     set((s) => ({ selected: new Set(visiblePhotos(s).filter((p) => p.tagged).map((p) => p.id)), pristine: false })),
 
@@ -270,11 +280,16 @@ export const useStore = create<State>((set, get) => ({
     if (extend && s.anchor) {
       get().click(next, { shift: true })
     } else {
-      set({ selected: new Set([next]), anchor: next, focus: next })
+      set({ selected: new Set([next]), anchor: next, focus: next, zoom: next === s.focus ? s.zoom : null })
     }
   },
 
-  setLoupe: (loupe) => set((s) => ({ loupe: loupe && !!s.focus })),
+  setLoupe: (loupe) => set((s) => ({ loupe: loupe && !!s.focus, zoom: null })),
+  setZoom: (zoom) => set((s) => ({ zoom: s.loupe ? zoom : null })),
+  setAutoAdvance: (autoAdvance) => {
+    setPref("autoAdvance", autoAdvance)
+    set({ autoAdvance })
+  },
 
   setThumbSize: (n) => {
     const thumbSize = Math.round(Math.min(THUMB_MAX, Math.max(THUMB_MIN, n)))
@@ -285,11 +300,24 @@ export const useStore = create<State>((set, get) => ({
   setColumns: (columns) => set({ columns }),
 
   cull: (change) => {
-    const targets = targetPhotos(get())
+    const before = get()
+    const targets = targetPhotos(before)
     if (!targets.length) return
     const patch = change(targets)
     const changed = updatePhotos(get, set, new Set(targets.map((t) => t.id)), (p) => ({ ...p, ...patch }))
     saveCulling(changed).then((failed) => reportFailures(failed, "ratings"))
+
+    // In the loupe, step on when auto-advance is on, or when the photo just left the filter
+    // (tagging while showing Untagged) so the loupe never goes blank.
+    if (!before.loupe || !before.focus) return
+    const list = visiblePhotos(before)
+    const i = list.findIndex((p) => p.id === before.focus)
+    const shown = new Set(visiblePhotos(get()).map((p) => p.id))
+    const gone = !shown.has(before.focus)
+    if (i < 0 || (!gone && !get().autoAdvance)) return
+    const next = list.slice(i + 1).find((p) => shown.has(p.id)) ?? (gone ? list.slice(0, i).reverse().find((p) => shown.has(p.id)) : undefined)
+    if (next) set({ selected: new Set([next.id]), anchor: next.id, focus: next.id, zoom: null })
+    else if (gone) set({ loupe: false, zoom: null })
   },
 
   // MARK: Captions

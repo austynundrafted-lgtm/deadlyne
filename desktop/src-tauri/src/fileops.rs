@@ -132,6 +132,26 @@ pub async fn trash_photos(items: Vec<Item>) -> Outcome {
     .await
 }
 
+/// Opens files in the app the system uses for them (Preview, Photoshop, Photos…), like
+/// double-clicking them in Finder or Explorer.
+#[tauri::command]
+pub fn open_files(paths: Vec<String>) -> Result<(), String> {
+    if paths.is_empty() {
+        return Ok(());
+    }
+    #[cfg(target_os = "macos")]
+    let result = std::process::Command::new("open").args(&paths).status().map(|_| ());
+    #[cfg(target_os = "windows")]
+    let result = paths
+        .iter()
+        .try_for_each(|p| std::process::Command::new("explorer").arg(p).status().map(|_| ()));
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    let result = paths
+        .iter()
+        .try_for_each(|p| std::process::Command::new("xdg-open").arg(p).status().map(|_| ()));
+    result.map_err(|e| e.to_string())
+}
+
 /// Opens the system file manager with `path` selected.
 #[tauri::command]
 pub fn reveal(path: String) -> Result<(), String> {

@@ -9,7 +9,7 @@ Read this before changing anything. It covers what the app is, who it's for, how
 > - Desktop specifics:
 >   - Sign-in: `src/lib/auth.ts` + `components/AuthGate.tsx`; backend SQL and setup in `desktop/supabase/`. Config comes from `VITE_SUPABASE_URL` / `VITE_SUPABASE_PUBLISHABLE_KEY` (`.env.local` locally, repository variables in CI). Keep offline use working: a confirmed sign-in lasts `OFFLINE_GRACE_DAYS` without network.
 >   - FTP: `src-tauri/src/ftp.rs` + `lib/ftp.ts`. Passwords go only to the keychain (`keyring`). FTPS uses rustls so data connections resume the TLS session; don't switch back to native-tls. Never make "Replace" the default when a remote file exists.
->   - New IPTC fields: add them to `iptc.rs` (`Field`, `Captions`), `IIM_MAP` in `jpeg_meta.rs` if IIM has a dataset, and `CAPTION_FIELDS` / `FIELD_LABELS` / `emptyCaptions` in `lib/api.ts`, then place the input in `CaptionPanel.tsx`.
+>   - New IPTC fields: add them to `iptc.rs` (`Field`, `Captions`), `IIM_MAP` in `jpeg_meta.rs` if IIM has a dataset (plus its length in `IIM_LIMITS` in `lib/api.ts`), and `CAPTION_FIELDS` / `FIELD_LABELS` / `emptyCaptions` in `lib/api.ts`, then place the input in `CaptionPanel.tsx`.
 >   - Never pass image bytes through JavaScript; use the `thumb://` / `preview://` schemes in `images.rs`.
 >   - Keep heavy work in Rust on rayon or `spawn_blocking`.
 >   - Add UI only from shadcn (`npx shadcn@latest add …`).
@@ -20,6 +20,8 @@ Read this before changing anything. It covers what the app is, who it's for, how
 >     - Nested corners are concentric (outer radius = inner radius + padding).
 >     - Swap state icons with `IconSwap`.
 >     - Keep culling feedback instant.
+    - Show the selected item with a fill (`bg-accent`, or the workspace color at /15), never a stroke on one side.
+    - Tailwind's base style caps `<img>` at `max-width: 100%`; set `maxWidth: "none"` on anything drawn larger than its box (the loupe at 100%).
 >   - Keep keyboard shortcuts the same as the Mac app.
 >   - Never commit `~/.tauri/deadlyne-updater.key`.
 
