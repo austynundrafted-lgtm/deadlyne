@@ -276,7 +276,7 @@ const PhotoCard = memo(function PhotoCard({ photo: p, width, selected, focused, 
       {...rest}
       ref={ref}
       className={cn(
-        "group/card relative flex shrink-0 flex-col overflow-hidden rounded-md bg-card ring-1 ring-white/5 transition-shadow",
+        "group/card relative flex shrink-0 flex-col overflow-hidden rounded-md bg-card ring-1 ring-white/8",
         selected && "bg-accent ring-2 ring-(--workspace-photos)",
         focused && selected && "ring-3",
         className,
@@ -310,6 +310,7 @@ const PhotoCard = memo(function PhotoCard({ photo: p, width, selected, focused, 
         <Button
           variant="ghost"
           size="icon-xs"
+          static
           aria-label={p.tagged ? "Untag" : "Tag"}
           aria-pressed={p.tagged}
           className={cn("rounded-sm", p.tagged ? "bg-(--workspace-photos) text-black hover:bg-(--workspace-photos)/80 hover:text-black" : "text-muted-foreground")}
@@ -340,6 +341,7 @@ function Stars({ rating, onRate }: { rating: number; onRate: (n: number) => void
           key={n}
           variant="ghost"
           size="icon-xs"
+          static
           className="size-4 rounded-none p-0 hover:bg-transparent"
           aria-label={`${n} star${n > 1 ? "s" : ""}`}
           onClick={() => onRate(n)}

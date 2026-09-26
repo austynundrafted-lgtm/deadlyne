@@ -48,6 +48,9 @@
     --radius-2xl: calc(var(--radius) * 1.8);
     --radius-3xl: calc(var(--radius) * 2.2);
     --radius-4xl: calc(var(--radius) * 2.6);
+    /* Depth without a hard border: one faint white ring, since layered shadows vanish on dark. */
+    --shadow-edge: 0 0 0 1px oklch(1 0 0 / 0.08);
+    --shadow-edge-hover: 0 0 0 1px oklch(1 0 0 / 0.13);
 }
 
 :root {
@@ -109,6 +112,12 @@
   html {
     @apply font-sans;
     }
+}
+
+/* Progress with no value (still working, amount unknown): a short bar sweeping across. */
+@keyframes progress-indeterminate {
+  from { translate: -100%; }
+  to { translate: 250%; }
 }
 
 /* A desktop app, not a web page: no text selection or rubber-banding outside inputs. */

@@ -9,6 +9,7 @@ import { describeServer, SEND_FILES, sendableFiles, useFtp, type SendFiles, type
 import { cn } from "@/lib/utils"
 import { targetPhotos, useStore } from "@/store"
 import { useUI } from "@/ui"
+import { IconSwap } from "@/components/IconSwap"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field"
@@ -161,7 +162,7 @@ export function SendQueue() {
         <TooltipTrigger asChild>
           <PopoverTrigger asChild>
             <Button variant="ghost" size="sm" className={cn("tabular-nums", failed && !active && "text-destructive")} aria-label="Sends">
-              {active ? <Loader2 data-icon="inline-start" className="animate-spin" /> : <Send data-icon="inline-start" />}
+              <IconSwap data-icon="inline-start" current={active ? "sending" : "idle"} icons={{ idle: <Send />, sending: <Loader2 className="animate-spin" /> }} />
               {active ? `${percent ?? 0}%${queued ? ` +${queued}` : ""}` : failed ? "Send failed" : "Sent"}
             </Button>
           </PopoverTrigger>

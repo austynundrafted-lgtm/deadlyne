@@ -57,7 +57,7 @@ export function TitleBar() {
               <TooltipTrigger asChild>
                 <TabsTrigger
                   value={value}
-                  className="h-7 gap-1.5 px-3 aria-selected:border-transparent aria-selected:bg-(--tab) aria-selected:text-(--tab-fg) aria-selected:shadow-sm aria-selected:hover:text-(--tab-fg)"
+                  className="h-7 gap-1.5 rounded-sm px-3 aria-selected:border-transparent aria-selected:bg-(--tab) aria-selected:text-(--tab-fg) aria-selected:shadow-sm aria-selected:hover:text-(--tab-fg)"
                   style={{
                     ["--tab" as string]: `var(--workspace-${value})`,
                     ["--tab-fg" as string]: value === "home" ? "#fff" : "#111",

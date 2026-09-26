@@ -22,7 +22,14 @@ export function Loupe() {
   useLayoutEffect(() => {
     const el = boxRef.current
     if (!el) return
-    const ro = new ResizeObserver(() => setBox({ w: el.clientWidth, h: el.clientHeight }))
+    // Fit inside the padding, like the thumbnail shown first, so the photo doesn't jump when the preview lands.
+    const ro = new ResizeObserver(() => {
+      const cs = getComputedStyle(el)
+      setBox({
+        w: el.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight),
+        h: el.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom),
+      })
+    })
     ro.observe(el)
     return () => ro.disconnect()
   }, [])
@@ -76,7 +83,7 @@ export function Loupe() {
           alt={photo.name}
           draggable={false}
           style={style}
-          className={cn(!showingFull && "size-full")}
+          className={cn(showingFull ? "outline -outline-offset-1 outline-white/10" : "size-full")}
         />
         <Button
           variant="secondary"

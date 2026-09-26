@@ -5,6 +5,7 @@ import { isMac } from "@/lib/format"
 import { describeServer, hasPassword, IF_EXISTS, newServer, PROTOCOLS, testServer, useFtp, type FtpServer } from "@/lib/ftp"
 import { cn } from "@/lib/utils"
 import { useUI } from "@/ui"
+import { IconSwap } from "@/components/IconSwap"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty"
@@ -47,7 +48,7 @@ export function FtpServersDialog() {
             {servers.length ? (
               <ItemGroup className="gap-1">
                 {servers.map((s) => (
-                  <Item key={s.id} variant="outline" size="sm" className="cursor-pointer bg-card/40 hover:bg-card" onClick={() => setEditing(s)}>
+                  <Item key={s.id} variant="outline" size="sm" className="cursor-pointer bg-card/40 hover:bg-card hover:shadow-edge-hover" onClick={() => setEditing(s)}>
                     <ItemMedia variant="icon">
                       <Server />
                     </ItemMedia>
@@ -236,13 +237,15 @@ function ServerForm({ server, isNew, onDone }: { server: FtpServer; isNew: boole
 
       {test.state !== "idle" && (
         <p className={cn("mt-4 flex items-start gap-2 text-sm", test.state === "failed" ? "text-destructive" : "text-muted-foreground")}>
-          {test.state === "testing" ? (
-            <Loader2 className="mt-0.5 size-4 shrink-0 animate-spin" />
-          ) : test.state === "ok" ? (
-            <CircleCheck className="mt-0.5 size-4 shrink-0 text-(--workspace-codes)" />
-          ) : (
-            <CircleX className="mt-0.5 size-4 shrink-0" />
-          )}
+          <IconSwap
+            className="mt-0.5 size-4"
+            current={test.state}
+            icons={{
+              testing: <Loader2 className="size-4 animate-spin" />,
+              ok: <CircleCheck className="size-4 text-(--workspace-codes)" />,
+              failed: <CircleX className="size-4" />,
+            }}
+          />
           <span className="min-w-0 break-words">{test.state === "testing" ? "Connecting…" : test.message}</span>
         </p>
       )}
