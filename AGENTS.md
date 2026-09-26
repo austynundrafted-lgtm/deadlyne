@@ -13,6 +13,13 @@ Read this before changing anything. It covers what the app is, who it's for, how
 >   - Never pass image bytes through JavaScript; use the `thumb://` / `preview://` schemes in `images.rs`.
 >   - Keep heavy work in Rust on rayon or `spawn_blocking`.
 >   - Add UI only from shadcn (`npx shadcn@latest add …`).
+>   - UI polish rules:
+>     - For depth, use `shadow-edge` / `shadow-edge-hover` (defined in `index.css`), not borders.
+>     - Name the exact transition properties; never use `transition-all`.
+>     - `Button` shrinks to 0.96 when pressed. Pass `static` for controls hit over and over, like the grid's tag and stars.
+>     - Nested corners are concentric (outer radius = inner radius + padding).
+>     - Swap state icons with `IconSwap`.
+>     - Keep culling feedback instant.
 >   - Keep keyboard shortcuts the same as the Mac app.
 >   - Never commit `~/.tauri/deadlyne-updater.key`.
 

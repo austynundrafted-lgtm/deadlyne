@@ -107,7 +107,7 @@ export function HomeView() {
                   key={s.path}
                   variant="outline"
                   size="sm"
-                  className="group cursor-pointer bg-card/40 hover:bg-card"
+                  className="group cursor-pointer bg-card/40 hover:bg-card hover:shadow-edge-hover"
                   onClick={() => openFolder(s.path)}
                   title={s.path}
                 >
@@ -124,7 +124,8 @@ export function HomeView() {
                     <Button
                       variant="ghost"
                       size="icon-xs"
-                      className="opacity-0 group-hover:opacity-100"
+                      static
+                      className="scale-[0.25] opacity-0 blur-[4px] transition-[opacity,filter,scale] duration-300 ease-[cubic-bezier(0.2,0,0,1)] group-hover:scale-100 group-hover:opacity-100 group-hover:blur-[0px] focus-visible:scale-100 focus-visible:opacity-100 focus-visible:blur-[0px] motion-reduce:transition-none"
                       aria-label={`Remove ${name.title} from recent shoots`}
                       onClick={(e) => {
                         e.stopPropagation()
@@ -144,7 +145,7 @@ export function HomeView() {
 
         {summary && (
           <button
-            className="mt-8 flex items-center gap-3 rounded-lg border bg-card/40 px-3 py-2.5 text-left text-sm hover:bg-card"
+            className="mt-8 flex items-center gap-3 rounded-lg bg-card/40 px-3 py-2.5 text-left text-sm shadow-edge transition-[background-color,box-shadow] duration-100 hover:bg-card hover:shadow-edge-hover"
             onClick={() => useUI.getState().open("badges")}
           >
             {next && <BadgeMedal badge={next.badge} earned={false} size={32} />}

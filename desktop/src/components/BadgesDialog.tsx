@@ -87,7 +87,7 @@ export function BadgesDialog() {
                     {list.map((b) => {
                       const earnedAt = summary.earned[b.id]
                       return (
-                        <div key={b.id} className="flex flex-col items-center gap-2 rounded-lg border bg-card/50 p-3 text-center">
+                        <div key={b.id} className="flex flex-col items-center gap-2 rounded-lg bg-card/50 p-3 text-center shadow-edge">
                           <BadgeMedal badge={b} earned={!!earnedAt} />
                           <div className={cn("text-sm font-medium", !earnedAt && "text-muted-foreground")}>{b.name}</div>
                           <div className="text-xs text-muted-foreground">
