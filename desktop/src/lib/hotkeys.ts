@@ -2,7 +2,8 @@
 // ⌘ on macOS is Ctrl on Windows. Shortcuts with ⌥ use `e.code`, since ⌥ changes the typed character.
 import { useEffect } from "react"
 import { LABELS, type Label } from "@/lib/api"
-import { askTrash, copyOrMove, openFolderDialog } from "@/lib/actions"
+import { toast } from "sonner"
+import { askTrash, copyOrMove, openFolderDialog, openTargets, revealTarget } from "@/lib/actions"
 import { targetPhotos, useStore, visiblePhotos } from "@/store"
 import { useUI } from "@/ui"
 
@@ -45,6 +46,7 @@ export function useHotkeys() {
       if (typing) return
 
       if (cmd && e.key === "Enter" && photos) return run(e, s.focusCaption)
+      if (e.key === "?" && !cmd) return run(e, () => ui.open("shortcuts"))
       if (!photos) return
 
       if (cmd && e.altKey) {
@@ -63,9 +65,20 @@ export function useHotkeys() {
         if (e.code === "KeyM") return run(e, () => copyOrMove("tagged", true))
         if (e.code === "KeyT") return run(e, s.selectTagged)
         if (e.code === "KeyU") return run(e, () => ui.openSend("tagged"))
+        if (e.code === "KeyR") return run(e, revealTarget)
+        if (e.code === "KeyA") {
+          return run(e, () => {
+            s.setAutoAdvance(!s.autoAdvance)
+            toast(s.autoAdvance ? "Auto-advance off" : "Auto-advance on", {
+              description: s.autoAdvance ? undefined : "In the loupe, the next photo comes up after you tag, rate or label.",
+            })
+          })
+        }
       }
       if (cmd && (e.key === "Backspace" || e.key === "Delete")) return run(e, askTrash)
       if (cmd && key === "a") return run(e, s.selectAll)
+      if (cmd && key === "d") return run(e, s.deselectAll)
+      if (cmd && key === "e") return run(e, openTargets)
       if (cmd && (e.key === "=" || e.key === "+")) return run(e, () => s.setThumbSize(s.thumbSize * 1.15))
       if (cmd && e.key === "-") return run(e, () => s.setThumbSize(s.thumbSize / 1.15))
       if (cmd || e.altKey) return
@@ -82,6 +95,15 @@ export function useHotkeys() {
         return run(e, () => s.cull(() => ({ label: targets.every((p) => p.label === label) ? null : label })))
       }
 
+      // Z: 100% to check focus (opens the loupe if needed). Esc fits it again first.
+      if (key === "z") {
+        return run(e, () => {
+          if (!s.loupe) s.setLoupe(true)
+          const now = useStore.getState()
+          now.setZoom(now.zoom ? null : { x: 0.5, y: 0.5 })
+        })
+      }
+
       // Moving around
       const step = s.loupe ? 1 : s.columns
       switch (e.key) {
@@ -95,6 +117,7 @@ export function useHotkeys() {
         case "Enter": return run(e, () => s.setLoupe(!s.loupe))
         case "Escape":
           escapeHandled = true
+          if (s.zoom) return run(e, () => s.setZoom(null))
           if (s.loupe) return run(e, () => s.setLoupe(false))
       }
     }
@@ -106,7 +129,8 @@ export function useHotkeys() {
       escapeHandled = false
       if (handled || (e.target as HTMLElement).closest("input, textarea, [role=menu], [role=dialog]")) return
       const s = useStore.getState()
-      if (s.workspace === "photos" && s.loupe) run(e, () => s.setLoupe(false))
+      if (s.workspace === "photos" && s.zoom) run(e, () => s.setZoom(null))
+      else if (s.workspace === "photos" && s.loupe) run(e, () => s.setLoupe(false))
     }
 
     window.addEventListener("keydown", onKey)

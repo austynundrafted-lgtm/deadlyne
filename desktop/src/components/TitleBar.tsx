@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
@@ -24,7 +25,7 @@ import { Kbd } from "@/components/ui/kbd"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
-import { askTrash, copyOrMove, openFolderDialog } from "@/lib/actions"
+import { askTrash, copyOrMove, openFolderDialog, openTargets, revealTarget } from "@/lib/actions"
 import { Input } from "@/components/ui/input"
 import { useUI } from "@/ui"
 import { shootName } from "@/lib/shootName"
@@ -218,6 +219,7 @@ function PhotoSearch() {
 /** Everything you do to a batch of photos, in one menu. */
 function PhotoActions() {
   const s = useStore.getState
+  const autoAdvance = useStore((st) => st.autoAdvance)
   return (
     <DropdownMenu>
       <Tooltip>
@@ -234,6 +236,12 @@ function PhotoActions() {
         <DropdownMenuItem onSelect={() => s().selectTagged()}>
           Select tagged <DropdownMenuShortcut>⇧{mod}T</DropdownMenuShortcut>
         </DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => s().deselectAll()}>
+          Deselect all <DropdownMenuShortcut>{mod}D</DropdownMenuShortcut>
+        </DropdownMenuItem>
+        <DropdownMenuCheckboxItem checked={autoAdvance} onCheckedChange={(v) => s().setAutoAdvance(v === true)}>
+          Auto-advance in loupe <DropdownMenuShortcut>⇧{mod}A</DropdownMenuShortcut>
+        </DropdownMenuCheckboxItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem onSelect={() => copyOrMove("tagged", false)}>
           Copy tagged to… <DropdownMenuShortcut>⇧{mod}C</DropdownMenuShortcut>
@@ -258,6 +266,16 @@ function PhotoActions() {
         </DropdownMenuItem>
         <DropdownMenuItem onSelect={() => s().fillCredits() || useUI.getState().open("profile")}>
           Fill credits from profile <DropdownMenuShortcut>⌥{mod}P</DropdownMenuShortcut>
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onSelect={revealTarget}>
+          Show in {isMac ? "Finder" : "Explorer"} <DropdownMenuShortcut>⇧{mod}R</DropdownMenuShortcut>
+        </DropdownMenuItem>
+        <DropdownMenuItem onSelect={openTargets}>
+          Open in default app <DropdownMenuShortcut>{mod}E</DropdownMenuShortcut>
+        </DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => useUI.getState().open("shortcuts")}>
+          Keyboard shortcuts <DropdownMenuShortcut>?</DropdownMenuShortcut>
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem variant="destructive" onSelect={askTrash}>

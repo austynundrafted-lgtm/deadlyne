@@ -1,7 +1,7 @@
 // Which dialogs are open. Kept apart from the photo store so opening one never re-renders the grid.
 import { create } from "zustand"
 
-type Dialog = "profile" | "ingest" | "badges" | "confirmTrash" | "send" | "ftpServers"
+type Dialog = "profile" | "ingest" | "badges" | "confirmTrash" | "send" | "ftpServers" | "shortcuts"
 
 interface UIState {
   profile: boolean
@@ -11,6 +11,8 @@ interface UIState {
   confirmTrash: boolean
   send: boolean
   ftpServers: boolean
+  /** The keyboard shortcuts sheet (?). */
+  shortcuts: boolean
   /** What the send dialog starts with. */
   sendWhich: "tagged" | "selected"
   open: (d: Dialog, on?: boolean) => void
@@ -24,6 +26,7 @@ export const useUI = create<UIState>((set) => ({
   confirmTrash: false,
   send: false,
   ftpServers: false,
+  shortcuts: false,
   sendWhich: "tagged",
   open: (d, on = true) => set({ [d]: on } as Partial<UIState>),
   openSend: (sendWhich) => {

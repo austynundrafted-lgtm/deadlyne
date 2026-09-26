@@ -4,6 +4,9 @@ export const isMac = navigator.userAgent.includes("Mac")
 
 /** "⌘" on Mac, "Ctrl+" on Windows. */
 export const mod = isMac ? "⌘" : "Ctrl+"
+/** "⌥" / "Alt+" and "⇧" / "Shift+", for shortcuts written out in full. */
+export const alt = isMac ? "⌥" : "Alt+"
+export const shift = isMac ? "⇧" : "Shift+"
 
 export const plural = (n: number, word: string) => `${n.toLocaleString()} ${word}${n === 1 ? "" : "s"}`
 

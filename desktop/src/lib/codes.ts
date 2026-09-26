@@ -52,6 +52,8 @@ interface CodesState {
   setDelimiter: (d: string) => void
   setLive: (on: boolean) => void
   setEnabled: (fileName: string, on: boolean) => void
+  /** Turns every other lookup file off, e.g. just this game's two rosters. */
+  useOnly: (fileNames: string[]) => void
   setColumnName: (fileName: string, column: number, name: string) => void
   saveList: (list: CodeList) => void
   replaceLists: (lists: CodeList[]) => void
@@ -112,6 +114,11 @@ export const useCodes = create<CodesState>((set, get) => {
     },
     setEnabled: (fileName, on) => {
       const disabled = on ? get().disabled.filter((f) => f !== fileName) : [...new Set([...get().disabled, fileName])]
+      rebuild({ disabled })
+      setSetting("codeListsDisabled", disabled)
+    },
+    useOnly: (fileNames) => {
+      const disabled = get().lists.map((l) => l.fileName).filter((f) => !fileNames.includes(f))
       rebuild({ disabled })
       setSetting("codeListsDisabled", disabled)
     },

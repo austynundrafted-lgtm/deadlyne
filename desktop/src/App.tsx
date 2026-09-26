@@ -20,6 +20,7 @@ import { IngestDialog, initIngest } from "@/components/IngestDialog"
 import { PhotosView } from "@/components/PhotosView"
 import { ProfileDialog } from "@/components/ProfileDialog"
 import { SendDialog } from "@/components/SendDialog"
+import { ShortcutsDialog } from "@/components/ShortcutsDialog"
 import { TitleBar } from "@/components/TitleBar"
 import {
   AlertDialog,
@@ -100,6 +101,7 @@ export default function App() {
       <BadgesDialog />
       <SendDialog />
       <FtpServersDialog />
+      <ShortcutsDialog />
       <ConfirmTrash />
       <Toaster position="bottom-center" />
     </TooltipProvider>

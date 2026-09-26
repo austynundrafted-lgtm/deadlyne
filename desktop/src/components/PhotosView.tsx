@@ -5,9 +5,9 @@ import { useVirtualizer } from "@tanstack/react-virtual"
 import { Check, FolderOpen, Images, MessageSquareText, Star } from "lucide-react"
 import { useShallow } from "zustand/react/shallow"
 import { thumbUrl, type Photo } from "@/lib/api"
-import { askTrash, copyOrMove, openFolderDialog } from "@/lib/actions"
-import { captureTime, exposureLine, labelColor, mod, plural } from "@/lib/format"
-import { LABELS, reveal } from "@/lib/api"
+import { askTrash, copyOrMove, openFolderDialog, openTargets, revealTarget } from "@/lib/actions"
+import { captureTime, exposureLine, isMac, labelColor, mod, plural } from "@/lib/format"
+import { LABELS } from "@/lib/api"
 import { cn } from "@/lib/utils"
 import { THUMB_MAX, THUMB_MIN, useStore, useVisiblePhotos } from "@/store"
 import { useUI } from "@/ui"
@@ -135,7 +135,7 @@ function Grid() {
   const cull = useStore((s) => s.cull)
 
   return (
-    <div ref={scrollRef} className="absolute inset-0 overflow-y-auto" tabIndex={-1}>
+    <div ref={scrollRef} className="absolute inset-0 overflow-y-auto outline-none" tabIndex={-1}>
       {!detailsReady && <Progress className="absolute inset-x-0 top-0 z-10 h-0.5 rounded-none" value={null} />}
       {list.length === 0 ? (
         <Empty className="h-full">
@@ -259,7 +259,12 @@ function PhotoMenu({ photo, selected, children }: { photo: Photo; selected: bool
         <ContextMenuItem onSelect={() => copyOrMove("selected", false)}>Copy {them} to…</ContextMenuItem>
         <ContextMenuItem onSelect={() => copyOrMove("selected", true)}>Move {them} to…</ContextMenuItem>
         <ContextMenuItem onSelect={() => useUI.getState().openSend("selected")}>Send {them} via FTP…</ContextMenuItem>
-        <ContextMenuItem onSelect={() => reveal(photo.id)}>Show in {navigator.userAgent.includes("Mac") ? "Finder" : "Explorer"}</ContextMenuItem>
+        <ContextMenuItem onSelect={revealTarget}>
+          Show in {isMac ? "Finder" : "Explorer"} <ContextMenuShortcut>⇧{mod}R</ContextMenuShortcut>
+        </ContextMenuItem>
+        <ContextMenuItem onSelect={openTargets}>
+          Open in default app <ContextMenuShortcut>{mod}E</ContextMenuShortcut>
+        </ContextMenuItem>
         <ContextMenuSeparator />
         <ContextMenuItem variant="destructive" onSelect={askTrash}>
           Move to Trash <ContextMenuShortcut>{mod}⌫</ContextMenuShortcut>
@@ -276,7 +281,7 @@ const PhotoCard = memo(function PhotoCard({ photo: p, width, selected, focused, 
       {...rest}
       ref={ref}
       className={cn(
-        "group/card relative flex shrink-0 flex-col overflow-hidden rounded-md bg-card ring-1 ring-white/8",
+        "group/card relative flex shrink-0 flex-col overflow-hidden rounded-md bg-card shadow-edge",
         selected && "bg-accent ring-2 ring-(--workspace-photos)",
         focused && selected && "ring-3",
         className,
@@ -304,7 +309,6 @@ const PhotoCard = memo(function PhotoCard({ photo: p, width, selected, focused, 
             onError={() => setFailed(true)}
           />
         )}
-        {p.label && <span className="absolute inset-x-0 top-0 h-1" style={{ background: labelColor(p.label) }} />}
       </div>
       <div className="flex h-[30px] shrink-0 items-center gap-1 px-1.5 text-xs">
         <Button
@@ -319,6 +323,7 @@ const PhotoCard = memo(function PhotoCard({ photo: p, width, selected, focused, 
         >
           <Check className={cn(!p.tagged && "opacity-40")} />
         </Button>
+        {p.label && <span className="size-2.5 shrink-0 rounded-full" style={{ background: labelColor(p.label) }} aria-label={`${p.label} label`} />}
         <span className="min-w-0 flex-1 truncate font-medium text-foreground/90">{p.name}</span>
         {(p.captions.caption || p.captions.headline) && (
           <MessageSquareText className="size-3.5 shrink-0 text-muted-foreground" aria-label="Has a caption" />
@@ -369,6 +374,7 @@ function StatusBar() {
   )
   const focused = useMemo(() => photos.find((p) => p.id === focus), [photos, focus])
   const tagged = useMemo(() => photos.reduce((n, p) => n + (p.tagged ? 1 : 0), 0), [photos])
+  const shown = useVisiblePhotos().length
 
   const left = busy
     ? busy
@@ -391,8 +397,21 @@ function StatusBar() {
         onValueChange={([v]) => setThumbSize(v)}
         className="w-24"
       />
-      <span className="shrink-0 tabular-nums">
-        {plural(photos.length, "photo")} · {tagged.toLocaleString()} tagged
+      <span className="flex shrink-0 items-center gap-1 tabular-nums">
+        {shown < photos.length ? (
+          <>
+            {shown.toLocaleString()} of {plural(photos.length, "photo")}
+            <Button variant="ghost" size="xs" className="-my-1 h-5 px-1.5 text-xs text-(--workspace-photos) hover:text-(--workspace-photos)" onClick={() => {
+              useStore.getState().clearFilters()
+              useStore.getState().setFilter({ fileScope: "both" })
+            }}>
+              Show all
+            </Button>
+          </>
+        ) : (
+          plural(photos.length, "photo")
+        )}
+        {" "}· {tagged.toLocaleString()} tagged
         {!detailsReady && " · reading…"}
       </span>
     </footer>

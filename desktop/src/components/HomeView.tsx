@@ -169,6 +169,10 @@ export function HomeView() {
           <span>·</span>
           <AccountMenu />
           <span>·</span>
+          <Button variant="link" size="xs" className="h-auto p-0 text-xs text-muted-foreground" onClick={() => useUI.getState().open("shortcuts")}>
+            Shortcuts
+          </Button>
+          <span>·</span>
           <span>Version {version}</span>
           <span>·</span>
           <Button variant="link" size="xs" className="h-auto p-0 text-xs text-muted-foreground" onClick={() => checkForUpdates({ quiet: false })}>
