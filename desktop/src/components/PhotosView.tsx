@@ -5,7 +5,7 @@ import { useVirtualizer } from "@tanstack/react-virtual"
 import { Check, FolderOpen, Images, MessageSquareText, Star } from "lucide-react"
 import { useShallow } from "zustand/react/shallow"
 import { thumbUrl, type Photo } from "@/lib/api"
-import { askTrash, copyOrMove, openFolderDialog, openTargets, revealTarget } from "@/lib/actions"
+import { askTrash, copyOrMove, openExport, openFolderDialog, openTargets, revealTarget } from "@/lib/actions"
 import { captureTime, exposureLine, isMac, labelColor, mod, plural } from "@/lib/format"
 import { LABELS } from "@/lib/api"
 import { cn } from "@/lib/utils"
@@ -256,6 +256,9 @@ function PhotoMenu({ photo, selected, children }: { photo: Photo; selected: bool
           Paste caption info <ContextMenuShortcut>⌥{mod}V</ContextMenuShortcut>
         </ContextMenuItem>
         <ContextMenuSeparator />
+        <ContextMenuItem onSelect={() => openExport("selected")}>
+          Export {them}… <ContextMenuShortcut>⇧{mod}E</ContextMenuShortcut>
+        </ContextMenuItem>
         <ContextMenuItem onSelect={() => copyOrMove("selected", false)}>Copy {them} to…</ContextMenuItem>
         <ContextMenuItem onSelect={() => copyOrMove("selected", true)}>Move {them} to…</ContextMenuItem>
         <ContextMenuItem onSelect={() => useUI.getState().openSend("selected")}>Send {them} via FTP…</ContextMenuItem>

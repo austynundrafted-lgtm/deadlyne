@@ -10,7 +10,7 @@ use crate::xmp;
 use md5::{Digest, Md5};
 use std::path::Path;
 
-const XMP_HEADER: &[u8] = b"http://ns.adobe.com/xap/1.0/\0";
+pub(crate) const XMP_HEADER: &[u8] = b"http://ns.adobe.com/xap/1.0/\0";
 const PHOTOSHOP_HEADER: &[u8] = b"Photoshop 3.0\0";
 const UTF8_MARKER: &[u8] = &[0x1B, 0x25, 0x47]; // ESC % G
 
@@ -24,14 +24,14 @@ pub enum JpegMode {
     XmpAndIim,
 }
 
-struct Segment {
-    marker: u8,
-    start: usize,
-    end: usize,
+pub(crate) struct Segment {
+    pub marker: u8,
+    pub start: usize,
+    pub end: usize,
 }
 
 /// The marker segments before the image data, and where the scan (SOS) starts.
-fn layout(b: &[u8]) -> Result<(Vec<Segment>, usize), String> {
+pub(crate) fn layout(b: &[u8]) -> Result<(Vec<Segment>, usize), String> {
     if b.len() < 4 || b[0] != 0xFF || b[1] != 0xD8 {
         return Err("not a JPEG".into());
     }
@@ -63,11 +63,11 @@ fn layout(b: &[u8]) -> Result<(Vec<Segment>, usize), String> {
     Err("JPEG has no image data".into())
 }
 
-fn body<'a>(b: &'a [u8], s: &Segment) -> &'a [u8] {
+pub(crate) fn body<'a>(b: &'a [u8], s: &Segment) -> &'a [u8] {
     &b[s.start + 4..s.end]
 }
 
-fn is_xmp(b: &[u8], s: &Segment) -> bool {
+pub(crate) fn is_xmp(b: &[u8], s: &Segment) -> bool {
     s.marker == 0xE1 && body(b, s).starts_with(XMP_HEADER)
 }
 

@@ -7,6 +7,7 @@ mod achievements;
 mod captions;
 mod codes;
 mod exif;
+mod export;
 mod fileops;
 mod folder;
 mod ftp;
@@ -39,6 +40,7 @@ pub fn run() {
             codes::code_lists, codes::save_code_list, codes::create_code_list, codes::import_code_lists,
             codes::rename_code_list, codes::trash_code_list, codes::code_lists_folder,
             fileops::transfer_photos, fileops::trash_photos, fileops::reveal, fileops::open_files,
+            export::export_photos, export::export_cancel,
             ingest::memory_cards, ingest::inspect_source, ingest::free_space, ingest::start_ingest, ingest::cancel_ingest,
             ftp::ftp_set_password, ftp::ftp_has_password, ftp::ftp_test, ftp::ftp_send, ftp::ftp_cancel,
             achievements::achievements, achievements::record_folder_opened])

@@ -6,7 +6,7 @@ import { useShallow } from "zustand/react/shallow"
 import { formatBytes } from "@/lib/api"
 import { mod, plural } from "@/lib/format"
 import { describeServer, SEND_FILES, sendableFiles, useFtp, type SendFiles, type SendJob } from "@/lib/ftp"
-import { cn } from "@/lib/utils"
+import { CHOICE, cn } from "@/lib/utils"
 import { targetPhotos, useStore } from "@/store"
 import { useUI } from "@/ui"
 import { IconSwap } from "@/components/IconSwap"
@@ -71,10 +71,10 @@ export function SendDialog() {
             <Field>
               <FieldLabel>Photos</FieldLabel>
               <ToggleGroup type="single" variant="outline" value={which} onValueChange={(v) => v && setWhich(v as typeof which)} className="w-full">
-                <ToggleGroupItem value="tagged" className="flex-1">
+                <ToggleGroupItem value="tagged" className={cn("flex-1", CHOICE)}>
                   Tagged ({tagged.length.toLocaleString()})
                 </ToggleGroupItem>
-                <ToggleGroupItem value="selected" className="flex-1">
+                <ToggleGroupItem value="selected" className={cn("flex-1", CHOICE)}>
                   Selected ({selection.length.toLocaleString()})
                 </ToggleGroupItem>
               </ToggleGroup>
@@ -84,7 +84,7 @@ export function SendDialog() {
               <FieldLabel>Files</FieldLabel>
               <ToggleGroup type="single" variant="outline" value={sendFiles} onValueChange={(v) => v && setSendFiles(v as SendFiles)} className="w-full">
                 {SEND_FILES.map((f) => (
-                  <ToggleGroupItem key={f.value} value={f.value} className="flex-1">
+                  <ToggleGroupItem key={f.value} value={f.value} className={cn("flex-1", CHOICE)}>
                     {f.label}
                   </ToggleGroupItem>
                 ))}

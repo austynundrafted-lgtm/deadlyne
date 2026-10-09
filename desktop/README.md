@@ -39,6 +39,7 @@ The original native Mac app (Swift/AppKit) still lives at the repo root and keep
   - `{date}_{job}` folders with optional renaming (`{job}_{seq}`). RAW+JPG pairs share a number.
   - Skips photos already ingested, verifies sizes, warns when the destination is short on space, and can eject the card.
   - Opens the new folder when it's done.
+- **Export (⇧⌘E):** copies of the tagged photos or the selection for the client or the desk, from the title-bar button, the actions menu or a right-click. JPGs by default (RAW + JPG or RAW too), into a new folder named after the shoot inside the place you exported to last time. Resize JPGs to a long edge (1200 / 2048 / 3000 / 4000 px) with a quality choice: they come out upright and keep their EXIF, XMP captions, legacy IPTC and color profile. Rename with `{shoot}_{seq}` and the other tokens; pairs share a name. Nothing is overwritten (a name already there gets a number added), the originals stay put, and the folder opens when it's done.
 - **Copy / move / Trash:** copy or move the tagged photos (⇧⌘C / ⇧⌘M) or the selection. The Files filter sets whether RAW, JPG or both travel. Files are never overwritten, and "delete" always means the Trash or Recycle Bin.
 - **FTP delivery (⇧⌘U):**
   - Send the tagged photos, or the selection, to a saved server: JPGs by default, or RAW + JPG, or RAW (with sidecars).
@@ -50,7 +51,7 @@ The original native Mac app (Swift/AppKit) still lives at the repo root and keep
 - **Profile:** name, credit line and copyright (`{year}` becomes each photo's capture year), kept on this computer.
 - **Updates:** checked at launch and from Home → Check for updates.
 
-Tests: `npm test` covers the code replacement engine and shoot names. `cd src-tauri && cargo test` covers sidecars, Lightroom-sidecar safety, JPG embedding, roster parsing and ingest naming. Ignored tests exercise real files (see the comments in `jpeg_meta.rs`, `xmp.rs` and `ingest.rs`) and real servers: `ftp_sends_renames_and_skips` against a local test server, `ftps_connects` against any FTPS server (see the comments in `ftp.rs`).
+Tests: `npm test` covers the code replacement engine and shoot names. `cd src-tauri && cargo test` covers sidecars, Lightroom-sidecar safety, JPG embedding, roster parsing, ingest naming and export resizing. Ignored tests exercise real files (see the comments in `jpeg_meta.rs`, `xmp.rs`, `ingest.rs` and `export.rs`) and real servers: `ftp_sends_renames_and_skips` against a local test server, `ftps_connects` against any FTPS server (see the comments in `ftp.rs`).
 
 ## Develop
 
@@ -86,10 +87,12 @@ desktop/
     lib/codes.ts            code replacement engine + lookup file state
     lib/variables.ts        {date} {camera}… caption variables
     lib/actions.ts          copy/move/trash and open actions shared by menus and keys
+    lib/export.ts           export options, naming tokens and the export call
     lib/auth.ts             Supabase sign-in, offline grace, account status, profile sync
     lib/ftp.ts              FTP servers, the send queue and its events
     components/AuthGate.tsx sign in, create account, email codes, waiting for approval
     components/SendDialog.tsx, FtpServersDialog.tsx   FTP send dialog + title-bar queue, server editor
+    components/ExportDialog.tsx   export to a folder (files, size, rename)
     components/CaptionPanel.tsx, CodesView.tsx, IngestDialog.tsx, BadgesDialog.tsx, ProfileDialog.tsx
     components/TitleBar.tsx workspace tabs + filters (sits in the macOS title bar)
     components/HomeView.tsx, PhotosView.tsx, Loupe.tsx
@@ -105,6 +108,7 @@ desktop/
     src/codes.rs            lookup files (rosters): list, import, save, rename, trash
     src/ingest.rs           memory cards, naming templates, copy + verify, eject
     src/fileops.rs          copy / move / trash / reveal
+    src/export.rs           export: copy, rename, resize JPGs keeping their metadata
     src/ftp.rs              FTP/FTPS sending with retries; passwords in the system keychain
     src/achievements.rs     badges and photo/shoot counting
     src/jobs.rs             background threads; one lock for all file writes
