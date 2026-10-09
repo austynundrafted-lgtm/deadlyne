@@ -3,7 +3,7 @@
 import { useEffect } from "react"
 import { LABELS, type Label } from "@/lib/api"
 import { toast } from "sonner"
-import { askTrash, copyOrMove, openFolderDialog, openTargets, revealTarget } from "@/lib/actions"
+import { askTrash, copyOrMove, openExport, openFolderDialog, openTargets, revealTarget } from "@/lib/actions"
 import { targetPhotos, useStore, visiblePhotos } from "@/store"
 import { useUI } from "@/ui"
 
@@ -65,6 +65,7 @@ export function useHotkeys() {
         if (e.code === "KeyM") return run(e, () => copyOrMove("tagged", true))
         if (e.code === "KeyT") return run(e, s.selectTagged)
         if (e.code === "KeyU") return run(e, () => ui.openSend("tagged"))
+        if (e.code === "KeyE") return run(e, () => openExport())
         if (e.code === "KeyR") return run(e, revealTarget)
         if (e.code === "KeyA") {
           return run(e, () => {

@@ -162,7 +162,7 @@ export function HomeView() {
           </button>
         )}
 
-        <footer className="mt-auto flex items-center justify-center gap-2 pt-12 text-xs text-muted-foreground">
+        <footer className="mt-auto flex flex-wrap items-center justify-center gap-x-2 gap-y-1 pt-12 text-xs text-muted-foreground">
           <Button variant="link" size="xs" className="h-auto p-0 text-xs text-muted-foreground" onClick={() => useUI.getState().open("profile")}>
             {profile?.name || "Set up profile"}
           </Button>
@@ -173,7 +173,7 @@ export function HomeView() {
             Shortcuts
           </Button>
           <span>·</span>
-          <span>Version {version}</span>
+          <span className="whitespace-nowrap">Version {version}</span>
           <span>·</span>
           <Button variant="link" size="xs" className="h-auto p-0 text-xs text-muted-foreground" onClick={() => checkForUpdates({ quiet: false })}>
             Check for updates

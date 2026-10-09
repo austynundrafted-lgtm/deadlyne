@@ -46,6 +46,7 @@ const GROUPS: { title: string; keys: [string[], string][] }[] = [
   {
     title: "Files",
     keys: [
+      [[`${shift}${mod}E`], "Export"],
       [[`${shift}${mod}C`, `${shift}${mod}M`], "Copy, move tagged"],
       [[`${shift}${mod}U`], "Send via FTP"],
       [[`${shift}${mod}R`], `Show in ${navigator.userAgent.includes("Mac") ? "Finder" : "Explorer"}`],

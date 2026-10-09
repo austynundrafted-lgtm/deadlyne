@@ -26,6 +26,17 @@ export async function copyOrMove(which: "tagged" | "selected", moveFiles: boolea
   if (typeof destination === "string") await s.transfer(photos, destination, moveFiles)
 }
 
+/**
+ * Opens Export for the photos the photographer most likely means: the selection when more than one
+ * photo is selected, otherwise the tagged photos (the usual delivery), otherwise the selection.
+ */
+export function openExport(which?: "tagged" | "selected") {
+  const s = useStore.getState()
+  if (!s.folder) return
+  const guess = s.selected.size > 1 || !s.photos.some((p) => p.tagged) ? "selected" : "tagged"
+  useUI.getState().openExport(which ?? guess)
+}
+
 export function askTrash() {
   if (targetPhotos(useStore.getState()).length) useUI.getState().open("confirmTrash")
 }

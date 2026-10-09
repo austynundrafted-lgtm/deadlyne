@@ -6,6 +6,7 @@ import { FolderInput } from "lucide-react"
 import { useShallow } from "zustand/react/shallow"
 import { FILE_SCOPES } from "@/lib/api"
 import { useCodes } from "@/lib/codes"
+import { initExport } from "@/lib/export"
 import { initFtp } from "@/lib/ftp"
 import { plural } from "@/lib/format"
 import { useHotkeys } from "@/lib/hotkeys"
@@ -14,6 +15,7 @@ import { loadSettings, targetPhotos, useStore } from "@/store"
 import { useUI } from "@/ui"
 import { BadgesDialog } from "@/components/BadgesDialog"
 import { CodesView } from "@/components/CodesView"
+import { ExportDialog } from "@/components/ExportDialog"
 import { FtpServersDialog } from "@/components/FtpServersDialog"
 import { HomeView } from "@/components/HomeView"
 import { IngestDialog, initIngest } from "@/components/IngestDialog"
@@ -45,6 +47,7 @@ export default function App() {
     useCodes.getState().load()
     initIngest()
     initFtp()
+    initExport()
     checkForUpdates({ quiet: true })
     invoke<string | null>("launch_folder").then((path) => {
       if (path) useStore.getState().openFolder(path)
@@ -100,6 +103,7 @@ export default function App() {
       <ProfileDialog />
       <BadgesDialog />
       <SendDialog />
+      <ExportDialog />
       <FtpServersDialog />
       <ShortcutsDialog />
       <ConfirmTrash />

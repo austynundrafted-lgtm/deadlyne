@@ -71,7 +71,16 @@ fn render(jpeg: &[u8], orientation: u32) -> Option<Vec<u8>> {
     let fit = |edge: u16| ((edge as u32 * THUMB_EDGE.min(long)) / long).max(1) as u16;
     let (w, h) = decoder.scale(fit(info.width), fit(info.height)).ok()?;
     let pixels = decoder.decode().ok()?;
-    let rgb: Vec<u8> = match decoder.info()?.pixel_format {
+    let rgb = to_rgb(decoder.info()?.pixel_format, pixels);
+    let img = upright(image::RgbImage::from_raw(w as u32, h as u32, rgb)?, orientation);
+    let mut out = Vec::with_capacity(96 << 10);
+    image::codecs::jpeg::JpegEncoder::new_with_quality(&mut out, 82).encode_image(&img).ok()?;
+    Some(out)
+}
+
+/// Decoded JPEG samples as packed RGB, whatever the file's color model.
+pub(crate) fn to_rgb(format: jpeg_decoder::PixelFormat, pixels: Vec<u8>) -> Vec<u8> {
+    match format {
         jpeg_decoder::PixelFormat::RGB24 => pixels,
         jpeg_decoder::PixelFormat::L8 => pixels.iter().flat_map(|&v| [v, v, v]).collect(),
         jpeg_decoder::PixelFormat::L16 => pixels.chunks_exact(2).flat_map(|c| [c[0], c[0], c[0]]).collect(),
@@ -82,9 +91,12 @@ fn render(jpeg: &[u8], orientation: u32) -> Option<Vec<u8>> {
                 [c[0], c[1], c[2]].map(|v| ((255 - v as u32) * k / 255) as u8)
             })
             .collect(),
-    };
-    let img = image::RgbImage::from_raw(w as u32, h as u32, rgb)?;
-    let img = match orientation {
+    }
+}
+
+/// Turns sensor-oriented pixels upright for EXIF orientation 1–8.
+pub(crate) fn upright(img: image::RgbImage, orientation: u32) -> image::RgbImage {
+    match orientation {
         2 => image::imageops::flip_horizontal(&img),
         3 => image::imageops::rotate180(&img),
         4 => image::imageops::flip_vertical(&img),
@@ -93,10 +105,7 @@ fn render(jpeg: &[u8], orientation: u32) -> Option<Vec<u8>> {
         7 => image::imageops::flip_horizontal(&image::imageops::rotate270(&img)),
         8 => image::imageops::rotate270(&img),
         _ => img,
-    };
-    let mut out = Vec::with_capacity(96 << 10);
-    image::codecs::jpeg::JpegEncoder::new_with_quality(&mut out, 82).encode_image(&img).ok()?;
-    Some(out)
+    }
 }
 
 // MARK: - Cache

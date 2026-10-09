@@ -1,6 +1,6 @@
 // The one bar at the top: workspace tabs on the left, the current shoot's controls on the right.
 // On macOS it sits in the title bar beside the window buttons (titleBarStyle "Overlay").
-import { Filter, FolderOpen, House, Images, MessageSquareText, MoreHorizontal, Search, TextCursorInput } from "lucide-react"
+import { Filter, FolderOpen, FolderOutput, House, Images, MessageSquareText, MoreHorizontal, Search, TextCursorInput } from "lucide-react"
 import { useShallow } from "zustand/react/shallow"
 import logo from "@/assets/logo.png"
 import { FILE_SCOPES, LABELS, type FileScope } from "@/lib/api"
@@ -25,7 +25,7 @@ import { Kbd } from "@/components/ui/kbd"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
-import { askTrash, copyOrMove, openFolderDialog, openTargets, revealTarget } from "@/lib/actions"
+import { askTrash, copyOrMove, openExport, openFolderDialog, openTargets, revealTarget } from "@/lib/actions"
 import { Input } from "@/components/ui/input"
 import { useUI } from "@/ui"
 import { shootName } from "@/lib/shootName"
@@ -88,6 +88,7 @@ export function TitleBar() {
         <>
           <PhotoSearch />
           <PhotoFilters />
+          <ExportButton />
           <PhotoActions />
           <CaptionToggle />
         </>
@@ -230,7 +231,7 @@ function PhotoActions() {
             </Button>
           </DropdownMenuTrigger>
         </TooltipTrigger>
-        <TooltipContent>Copy, move, send, captions…</TooltipContent>
+        <TooltipContent>Export, copy, move, send, captions…</TooltipContent>
       </Tooltip>
       <DropdownMenuContent align="end" className="w-64">
         <DropdownMenuItem onSelect={() => s().selectTagged()}>
@@ -243,6 +244,9 @@ function PhotoActions() {
           Auto-advance in loupe <DropdownMenuShortcut>⇧{mod}A</DropdownMenuShortcut>
         </DropdownMenuCheckboxItem>
         <DropdownMenuSeparator />
+        <DropdownMenuItem onSelect={() => openExport()}>
+          Export… <DropdownMenuShortcut>⇧{mod}E</DropdownMenuShortcut>
+        </DropdownMenuItem>
         <DropdownMenuItem onSelect={() => copyOrMove("tagged", false)}>
           Copy tagged to… <DropdownMenuShortcut>⇧{mod}C</DropdownMenuShortcut>
         </DropdownMenuItem>
@@ -283,6 +287,22 @@ function PhotoActions() {
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
+  )
+}
+
+/** Delivery is one of the four jobs, so it gets its own button, not just a menu line. */
+function ExportButton() {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button variant="ghost" size="icon-sm" aria-label="Export" onClick={() => openExport()}>
+          <FolderOutput />
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent>
+        Export the tagged photos or the selection <Kbd>⇧{mod}E</Kbd>
+      </TooltipContent>
+    </Tooltip>
   )
 }
 

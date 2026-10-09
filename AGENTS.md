@@ -8,6 +8,7 @@ Read this before changing anything. It covers what the app is, who it's for, how
 > - Rules in section 2 apply to both apps.
 > - Desktop specifics:
 >   - Sign-in: `src/lib/auth.ts` + `components/AuthGate.tsx`; backend SQL and setup in `desktop/supabase/`. Config comes from `VITE_SUPABASE_URL` / `VITE_SUPABASE_PUBLISHABLE_KEY` (`.env.local` locally, repository variables in CI). Keep offline use working: a confirmed sign-in lasts `OFFLINE_GRACE_DAYS` without network.
+>   - Export: `src-tauri/src/export.rs` + `lib/export.ts` + `components/ExportDialog.tsx`. The interface decides names (`exportName`, tokens `{shoot} {seq} {original} {date} {time} {camera}`) and Rust copies or resizes. A resized JPG is re-encoded upright from the full-size decode, then the original's EXIF (orientation set to 1, pixel size patched), XMP, ICC and Photoshop/IIM segments are carried over, so captions never need re-embedding. Files go out in parallel on rayon; name collisions get `-1`, `-2`… under one lock. Never add an overwrite option.
 >   - FTP: `src-tauri/src/ftp.rs` + `lib/ftp.ts`. Passwords go only to the keychain (`keyring`). FTPS uses rustls so data connections resume the TLS session; don't switch back to native-tls. Never make "Replace" the default when a remote file exists.
 >   - New IPTC fields: add them to `iptc.rs` (`Field`, `Captions`), `IIM_MAP` in `jpeg_meta.rs` if IIM has a dataset (plus its length in `IIM_LIMITS` in `lib/api.ts`), and `CAPTION_FIELDS` / `FIELD_LABELS` / `emptyCaptions` in `lib/api.ts`, then place the input in `CaptionPanel.tsx`.
 >   - Never pass image bytes through JavaScript; use the `thumb://` / `preview://` schemes in `images.rs`.
@@ -248,6 +249,6 @@ Store it in UserDefaults with a clear camelCase key, and add the key to the list
   - an autocomplete popup while typing a code
   - `=code#0=` for the code itself
   - export a merged Photo Mechanic file
-- **Delivery:** FTP/FTPS sending shipped in desktop. Still open: SFTP, resizing JPGs before sending (long edge for wire), a "sent" badge on photos, a setting to accept a self-signed FTPS certificate, and porting the new IPTC wire fields to the Swift app.
+- **Delivery:** FTP/FTPS sending and Export (resize, rename, to a folder) shipped in desktop. Still open: SFTP, resizing JPGs on the way to FTP (reuse `export::resize_jpeg`), exporting JPGs from RAW-only shoots using the embedded preview plus the sidecar's captions, a "sent" badge on photos, a setting to accept a self-signed FTPS certificate, and porting the new IPTC wire fields to the Swift app.
 
 When you finish a feature: build with `./scripts/build.sh`, verify it in the running app on scratch copies, clean up any test entries in stats, update `README.md` (user-facing) and this file (engineering), and tell the user plainly what you verified and what you didn't.
