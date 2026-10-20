@@ -25,7 +25,7 @@ Deadlyne is a native macOS app for **sports photographers on deadline**, a faste
 
 ## 3. Hard constraints (don't design against these)
 
-- **It's a native macOS app (Swift/AppKit), not a website.** Use shadcn/ui as the **design language**: its component set, spacing, radii, states and patterns. The final design will be rebuilt natively, so keep to components that have clear desktop equivalents. Prefer Mac-native behavior: a title-bar toolbar, a menu bar, ⌘-shortcuts, right-click menus, drag and drop.
+- **It's a desktop app for macOS and Windows (Tauri + React), not a website.** It's built from shadcn/ui components, so design with its component set, spacing, radii, states and patterns. Prefer Mac-native behavior: a title-bar toolbar, a menu bar, ⌘-shortcuts, right-click menus, drag and drop.
 - **Speed is the product.** Never add a step, modal or confirmation to the culling loop. Photos must always get most of the screen.
 - **Keyboard-first.** Every frequent action needs a shortcut, and shortcuts should be *discoverable* (shadcn `Kbd`, tooltips, `Command` palette).
 - **Dark mode only.** Pro photo tools stay dark so photos read accurately.

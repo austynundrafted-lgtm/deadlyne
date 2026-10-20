@@ -2,7 +2,7 @@
 
 The cross-platform version of Deadlyne, built with [Tauri 2](https://tauri.app). **Rust** does everything that touches files and must be fast. The interface is **React + Tailwind + shadcn/ui**. It installs from GitHub Releases and **updates itself**.
 
-The original native Mac app (Swift/AppKit) still lives at the repo root and keeps working while features move over.
+On a Mac it picks up where the original Swift/AppKit Deadlyne left off: the same lookup files and badge progress.
 
 ## What works today
 
@@ -33,7 +33,7 @@ The original native Mac app (Swift/AppKit) still lives at the repo root and keep
   - Photo Mechanic–style code replacements: `=f10=` becomes "Jordan Sample (10)", and `=f10#2=` gives column 2. Codes expand as you type or paste.
   - Several lookup files can be on at once. Right-click a file for "Use only this file", e.g. just tonight's two rosters. Import `.txt`/`.csv` rosters (or drop them on the window), then edit them as a table or as text.
   - Name columns, add a prefix to every code, and try codes out in the Try It box.
-  - On macOS the rosters are shared with the original Swift app.
+  - On macOS the rosters live in the same folder the original Swift app used.
 - **Ingest:**
   - Picks the card automatically and remembers your destination and naming.
   - `{date}_{job}` folders with optional renaming (`{job}_{seq}`). RAW+JPG pairs share a number.
@@ -47,7 +47,7 @@ The original native Mac app (Swift/AppKit) still lives at the repo root and keep
   - Passwords live in the macOS Keychain or Windows Credential Manager, never in the settings file. Test connection before saving.
   - Sends queue and run one at a time, with progress and Stop in the title bar. Dropped connections reconnect and retry each file up to three times.
   - When the server already has a file with that name, Deadlyne sends it with a number added by default, because camera counters repeat from game to game. Replace (to refile a corrected caption) or Skip can be set per server.
-- **Badges:** photos and shoots milestones with the same ids as the Mac app. On a Mac, progress is imported from the Swift app the first time.
+- **Badges:** photos and shoots milestones with the same ids as the original Mac app. On a Mac, progress is imported from it the first time.
 - **Profile:** name, credit line and copyright (`{year}` becomes each photo's capture year), kept on this computer.
 - **Updates:** checked at launch and from Home → Check for updates.
 
@@ -81,7 +81,7 @@ desktop/
     App.tsx                 window shell, drag-and-drop, launch folder, update check
     store.ts                all app state + actions (zustand)
     lib/api.ts              typed calls into Rust + thumb/preview image URLs
-    lib/hotkeys.ts          keyboard shortcuts (same keys as the Mac app)
+    lib/hotkeys.ts          keyboard shortcuts
     lib/recents.ts          recent shoots (Tauri store plugin)
     lib/updates.ts          self-update flow
     lib/codes.ts            code replacement engine + lookup file state
@@ -101,7 +101,7 @@ desktop/
     src/raw.rs              embedded-JPEG extraction: CR3, RAF, TIFF-based RAWs (CR2/NEF/ARW/DNG…)
     src/exif.rs             minimal TIFF/EXIF reader (orientation, time, camera, lens, exposure)
     src/folder.rs           scan + pair folders, parallel metadata/sidecar load
-    src/xmp.rs              XMP sidecars: culling + IPTC captions (port of XMPSidecar.swift)
+    src/xmp.rs              XMP sidecars: culling + IPTC captions
     src/iptc.rs             caption fields and their XMP properties
     src/jpeg_meta.rs        captions inside JPGs: XMP, legacy IPTC-IIM, EXIF Artist/Copyright
     src/captions.rs         save_captions command (sidecar vs. JPG)
@@ -131,5 +131,5 @@ One-time setup:
 - **Signing key.** Add the updater signing key as a repository secret named `TAURI_SIGNING_PRIVATE_KEY`, containing the file `~/.tauri/deadlyne-updater.key`. The key has no password, so leave `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` unset. **Never commit that key or lose it.** Without it, existing installs can't verify future updates.
 - **Public update feed.** The updater downloads `latest.json` from this repo's releases, so **the repo must be public**. The alternative is to point `plugins.updater.endpoints` in `tauri.conf.json` at a separate public releases repo.
 - **Code signing, for installs without warnings.**
-  - macOS: a Developer ID certificate and notarization (Apple Developer Program). Add the `APPLE_*` secrets that tauri-action documents. Until then, builds are ad-hoc signed, and the first launch needs right-click → Open.
+  - macOS: a Developer ID certificate and notarization (Apple Developer Program). Add the `APPLE_*` secrets that tauri-action documents. Until then, builds are ad-hoc signed, and the first launch needs System Settings → Privacy & Security → Open Anyway.
   - Windows: Azure Trusted Signing or an OV/EV certificate. Until then, SmartScreen shows "More info → Run anyway".
