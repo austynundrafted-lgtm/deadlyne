@@ -20,7 +20,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - platform: macos-latest
+          # Intel Mac: the Apple silicon pool (macos-latest) often has no free machine. It still
+          # cross-builds the universal app for both Apple silicon and Intel.
+          - platform: macos-15-intel
             args: --target universal-apple-darwin
           - platform: windows-latest
             args: ""
@@ -36,7 +38,7 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
         with:
-          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+          targets: ${{ startsWith(matrix.platform, 'macos') && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
 
       - uses: swatinem/rust-cache@v2
         with:
