@@ -30,7 +30,7 @@ Read this before changing anything. It covers what the app is, who it's for, how
 
 ## 1. What Deadlyne is
 
-Deadlyne is a native macOS photo browser and culler for **sports photographers on deadline**, built to replace Photo Mechanic. The folder is still named `LensDesk`, the app's old name.
+Deadlyne is a native macOS photo browser and culler for **sports photographers on deadline**, built to replace Photo Mechanic.
 
 The owner shoots high-school sports on a **Canon EOS R3** in RAW+JPEG (`MCD_0001.CR3` + `MCD_0001.JPG`, around 2,000 frames and 78 GB per game). They edit in Lightroom and know Photo Mechanic's workflow well. After a game they:
 
