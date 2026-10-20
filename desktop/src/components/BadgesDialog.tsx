@@ -6,13 +6,22 @@ import { create } from "zustand"
 import { achievements, type AchievementSummary, type Badge } from "@/lib/api"
 import { cn } from "@/lib/utils"
 import { useUI } from "@/ui"
+import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Progress } from "@/components/ui/progress"
 import { ScrollArea } from "@/components/ui/scroll-area"
 
-export const useAchievements = create<{ summary: AchievementSummary | null; refresh: () => Promise<void> }>((set) => ({
+export const useAchievements = create<{ summary: AchievementSummary | null; error: string | null; refresh: () => Promise<void> }>((set) => ({
   summary: null,
-  refresh: async () => set({ summary: await achievements() }),
+  error: null,
+  // A failed read shows up in the dialog with a Retry button instead of "Loading…" forever.
+  refresh: async () => {
+    try {
+      set({ summary: await achievements(), error: null })
+    } catch (e) {
+      set({ error: String(e) })
+    }
+  },
 }))
 
 const TIERS = [
@@ -59,7 +68,7 @@ export function BadgeMedal({ badge, earned, size = 64 }: { badge: Badge; earned:
 
 export function BadgesDialog() {
   const open = useUI((s) => s.badges)
-  const { summary, refresh } = useAchievements()
+  const { summary, error, refresh } = useAchievements()
   useEffect(() => {
     if (open) refresh()
   }, [open, refresh])
@@ -70,11 +79,21 @@ export function BadgesDialog() {
         <DialogHeader>
           <DialogTitle>Badges</DialogTitle>
           <DialogDescription>
-            {summary ? `${summary.photos.toLocaleString()} photos and ${summary.shoots.toLocaleString()} shoots so far.` : "Loading…"} A RAW+JPG pair counts once, and reopening a shoot never counts twice.
+            {summary ? `${summary.photos.toLocaleString()} photos and ${summary.shoots.toLocaleString()} shoots so far.` : error ? "" : "Loading…"} A RAW+JPG pair counts once, and reopening a shoot never counts twice.
           </DialogDescription>
         </DialogHeader>
+        {!summary && error && (
+          <div className="flex items-center gap-3 text-sm text-muted-foreground">
+            Couldn’t load your badges.
+            <Button variant="outline" size="sm" onClick={refresh}>
+              Retry
+            </Button>
+          </div>
+        )}
         {summary && (
-          <ScrollArea className="max-h-[60vh]">
+          // A real height, not max-height: the scroll viewport fills its box, so a box with
+          // only a maximum clipped the Shoots section instead of scrolling to it.
+          <ScrollArea className="-mr-3 h-[min(60vh,640px)] pr-3">
             {(["photos", "shoots"] as const).map((track) => {
               const value = track === "photos" ? summary.photos : summary.shoots
               const list = summary.badges.filter((b) => b.track === track)
