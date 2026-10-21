@@ -295,7 +295,7 @@ function Group({
             {title}
             <ChevronRight className={cn("size-3 opacity-0 transition-[rotate,opacity] duration-150 group-hover/header:opacity-100", open && "rotate-90")} />
           </button>
-          {action && <span className="opacity-0 transition-opacity duration-100 group-hover/header:opacity-100 focus-within:opacity-100">{action}</span>}
+          {action && <span className="opacity-0 transition-opacity duration-100 group-hover/header:opacity-100 focus-within:opacity-100 pointer-coarse:opacity-100">{action}</span>}
         </div>
       )}
       {open && children}

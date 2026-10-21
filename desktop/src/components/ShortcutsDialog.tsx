@@ -1,5 +1,5 @@
 // Every keyboard shortcut on one sheet (press ?). The keys match the Mac app.
-import { alt, mod, shift } from "@/lib/format"
+import { alt, mod, revealLabel, shift, trashAction } from "@/lib/format"
 import { useUI } from "@/ui"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Kbd } from "@/components/ui/kbd"
@@ -49,9 +49,9 @@ const GROUPS: { title: string; keys: [string[], string][] }[] = [
       [[`${shift}${mod}E`], "Export"],
       [[`${shift}${mod}C`, `${shift}${mod}M`], "Copy, move tagged"],
       [[`${shift}${mod}U`], "Send via FTP"],
-      [[`${shift}${mod}R`], `Show in ${navigator.userAgent.includes("Mac") ? "Finder" : "Explorer"}`],
+      [[`${shift}${mod}R`], revealLabel],
       [[`${mod}E`], "Open in default app"],
-      [[`${mod}⌫`], "Move to Trash"],
+      [[`${mod}⌫`], trashAction],
     ],
   },
   {

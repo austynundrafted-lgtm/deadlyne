@@ -47,7 +47,7 @@ function targetAt(x: number, y: number, item: DragItem): string | null {
 /** Pointer-down handler that starts a drag after the pointer moves a few pixels. */
 export function dragSource(getItem: () => DragItem) {
   return (e: React.PointerEvent) => {
-    if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey) return
+    if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.pointerType === "touch") return
     const start = { x: e.clientX, y: e.clientY }
     let item: DragItem | null = null
 

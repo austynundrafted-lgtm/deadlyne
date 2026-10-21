@@ -7,7 +7,7 @@ import logo from "@/assets/logo.png"
 import { openFolderDialog } from "@/lib/actions"
 import { OFFLINE_GRACE_DAYS, useAuth } from "@/lib/auth"
 import { resumeShoot } from "@/lib/folders"
-import { mod, plural, relativeTime } from "@/lib/format"
+import { isIPad, mod, plural, relativeTime } from "@/lib/format"
 import { statsFor, useLibrary } from "@/lib/library"
 import { forgetRecentShoot, onRecentShoots, recentShoots, type RecentShoot } from "@/lib/recents"
 import { shootName, shootSubtitle } from "@/lib/shootName"
@@ -87,7 +87,7 @@ export function HomeView() {
               <FolderOpen className="size-5" /> Open a shoot
               <Kbd className="ml-auto">{mod}O</Kbd>
             </span>
-            <span className="text-xs font-normal text-muted-foreground">or drop a folder on this window</span>
+            <span className="text-xs font-normal text-muted-foreground">{isIPad ? "from Files, iCloud or a card reader" : "or drop a folder on this window"}</span>
           </Button>
         </div>
 
@@ -145,7 +145,7 @@ export function HomeView() {
                       <Button
                         variant="secondary"
                         size="xs"
-                        className="opacity-0 transition-opacity duration-150 group-hover:opacity-100 focus-visible:opacity-100"
+                        className="opacity-0 transition-opacity duration-150 group-hover:opacity-100 focus-visible:opacity-100 pointer-coarse:opacity-100"
                         onClick={(e) => {
                           e.stopPropagation()
                           resumeShoot(s.path, { kind: "recent" })
@@ -159,7 +159,7 @@ export function HomeView() {
                       variant="ghost"
                       size="icon-xs"
                       static
-                      className="scale-[0.25] opacity-0 blur-[4px] transition-[opacity,filter,scale] duration-300 ease-[cubic-bezier(0.2,0,0,1)] group-hover:scale-100 group-hover:opacity-100 group-hover:blur-[0px] focus-visible:scale-100 focus-visible:opacity-100 focus-visible:blur-[0px] motion-reduce:transition-none"
+                      className="scale-[0.25] opacity-0 blur-[4px] transition-[opacity,filter,scale] duration-300 ease-[cubic-bezier(0.2,0,0,1)] group-hover:scale-100 group-hover:opacity-100 group-hover:blur-[0px] focus-visible:scale-100 focus-visible:opacity-100 focus-visible:blur-[0px] pointer-coarse:scale-100 pointer-coarse:opacity-100 pointer-coarse:blur-[0px] motion-reduce:transition-none"
                       aria-label={`Remove ${name.title} from recent shoots`}
                       onClick={(e) => {
                         e.stopPropagation()
@@ -208,10 +208,15 @@ export function HomeView() {
           </Button>
           <span>·</span>
           <span className="whitespace-nowrap">Version {version}</span>
-          <span>·</span>
-          <Button variant="link" size="xs" className="h-auto p-0 text-xs text-muted-foreground" onClick={() => checkForUpdates({ quiet: false })}>
-            Check for updates
-          </Button>
+          {/* The iPad app updates through the App Store / TestFlight, not GitHub. */}
+          {!isIPad && (
+            <>
+              <span>·</span>
+              <Button variant="link" size="xs" className="h-auto p-0 text-xs text-muted-foreground" onClick={() => checkForUpdates({ quiet: false })}>
+                Check for updates
+              </Button>
+            </>
+          )}
         </footer>
       </div>
     </div>

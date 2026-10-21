@@ -1,0 +1,14 @@
+{
+  "$schema": "../gen/schemas/mobile-schema.json",
+  "identifier": "ipad",
+  "description": "Files access, Quick Look and sharing on iPad",
+  "windows": [
+    "main"
+  ],
+  "platforms": [
+    "iOS"
+  ],
+  "permissions": [
+    "ipad-files:default"
+  ]
+}

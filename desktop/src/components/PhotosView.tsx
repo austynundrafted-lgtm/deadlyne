@@ -7,7 +7,7 @@ import { Check, Eye, MessageSquareText, Play, Star, X } from "lucide-react"
 import { useShallow } from "zustand/react/shallow"
 import { thumbUrl, type Photo } from "@/lib/api"
 import { askTrash, copyOrMove, openExport, openTargets, revealTarget } from "@/lib/actions"
-import { captureTime, exposureLine, isMac, labelColor, mod, plural } from "@/lib/format"
+import { captureTime, exposureLine, labelColor, mod, openLabel, plural, revealLabel, trashAction } from "@/lib/format"
 import { LABELS } from "@/lib/api"
 import { cn } from "@/lib/utils"
 import { photoKey, useViewTracker } from "@/lib/viewing"
@@ -98,6 +98,7 @@ function Grid() {
     useShallow((s) => ({ thumbSize: s.thumbSize, selected: s.selected, focus: s.focus, detailsReady: s.detailsReady, resumeMarker: s.resumeMarker })),
   )
   const list = useVisiblePhotos()
+  const hasPhotos = useStore((s) => s.photos.length > 0)
   const scrollRef = useRef<HTMLDivElement>(null)
   const [width, setWidth] = useState(0)
 
@@ -161,7 +162,14 @@ function Grid() {
   return (
     <div ref={scrollRef} className="absolute inset-0 overflow-y-auto outline-none" tabIndex={-1}>
       {!detailsReady && <Progress className="absolute inset-x-0 top-0 z-10 h-0.5 rounded-none" value={null} />}
-      {list.length === 0 ? (
+      {list.length === 0 && !hasPhotos ? (
+        <Empty className="h-full">
+          <EmptyHeader>
+            <EmptyTitle>No photos in this folder</EmptyTitle>
+            <EmptyDescription>Its subfolders and documents are under Folders and Documents above.</EmptyDescription>
+          </EmptyHeader>
+        </Empty>
+      ) : list.length === 0 ? (
         <Empty className="h-full">
           <EmptyHeader>
             <EmptyTitle>No photos match</EmptyTitle>
@@ -229,6 +237,8 @@ interface CardProps extends Omit<React.HTMLAttributes<HTMLDivElement>, "onPointe
 
 /** The photos under the last two pointer presses, oldest first. */
 let pointerHistory: [string | null, string | null] = [null, null]
+/** A finger came down on the photo that was already selected: lifting it soon opens the loupe. */
+let tapOpens: { id: string; at: number } | null = null
 
 /** Right-click a photo: culling, captions and file actions for it (or the whole selection). */
 function PhotoMenu({ photo, selected, children }: { photo: Photo; selected: boolean; children: React.ReactNode }) {
@@ -290,14 +300,14 @@ function PhotoMenu({ photo, selected, children }: { photo: Photo; selected: bool
         <ContextMenuItem onSelect={() => copyOrMove("selected", true)}>Move {them} to…</ContextMenuItem>
         <ContextMenuItem onSelect={() => useUI.getState().openSend("selected")}>Send {them} via FTP…</ContextMenuItem>
         <ContextMenuItem onSelect={revealTarget}>
-          Show in {isMac ? "Finder" : "Explorer"} <ContextMenuShortcut>⇧{mod}R</ContextMenuShortcut>
+          {revealLabel} <ContextMenuShortcut>⇧{mod}R</ContextMenuShortcut>
         </ContextMenuItem>
         <ContextMenuItem onSelect={openTargets}>
-          Open in default app <ContextMenuShortcut>{mod}E</ContextMenuShortcut>
+          {openLabel} <ContextMenuShortcut>{mod}E</ContextMenuShortcut>
         </ContextMenuItem>
         <ContextMenuSeparator />
         <ContextMenuItem variant="destructive" onSelect={askTrash}>
-          Move to Trash <ContextMenuShortcut>{mod}⌫</ContextMenuShortcut>
+          {trashAction} <ContextMenuShortcut>{mod}⌫</ContextMenuShortcut>
         </ContextMenuItem>
       </ContextMenuContent>
     </ContextMenu>
@@ -320,7 +330,14 @@ const PhotoCard = memo(function PhotoCard({ photo: p, width, selected, focused, 
       style={{ ...style, width }}
       onPointerDown={(e) => {
         pointerHistory = [pointerHistory[1], p.id]
+        tapOpens = e.pointerType === "touch" && focused && selected ? { id: p.id, at: e.timeStamp } : null
         onPointerDown(e)
+      }}
+      onPointerUp={(e) => {
+        rest.onPointerUp?.(e) // the context menu's long-press timer
+        // iPad: tap a photo to select it, tap it again to open it.
+        if (tapOpens?.id === p.id && e.timeStamp - tapOpens.at < 500 && !(e.target as HTMLElement).closest("button")) onOpen()
+        tapOpens = null
       }}
       onDoubleClick={(e) => {
         // Only two clicks on this same photo open it: not a click then a quick shift/⌘-click on
@@ -362,7 +379,7 @@ const PhotoCard = memo(function PhotoCard({ photo: p, width, selected, focused, 
         )}
         {width > 260 && <span className="text-[10px] text-muted-foreground">{p.kind}</span>}
         {/* Less is more: stars show once rated, or while pointing at the photo. */}
-        <div className={cn(p.rating === 0 && !selected && "opacity-0 group-hover/card:opacity-100")}>
+        <div className={cn(p.rating === 0 && !selected && "opacity-0 group-hover/card:opacity-100 pointer-coarse:opacity-100")}>
           <Stars rating={p.rating} onRate={onRate} />
         </div>
       </div>

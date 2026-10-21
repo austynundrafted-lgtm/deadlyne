@@ -1,0 +1,3 @@
+[default]
+description = "Folder and file pickers, restoring access, Quick Look and sharing"
+permissions = ["allow-pick-folder", "allow-pick-files", "allow-restore-access", "allow-preview", "allow-share"]

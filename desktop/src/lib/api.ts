@@ -1,5 +1,7 @@
 // Typed bridge to the Rust side (src-tauri). Everything that touches files lives there.
 import { convertFileSrc, invoke } from "@tauri-apps/api/core"
+import { isIPad } from "@/lib/format"
+import { share } from "@/lib/platform"
 
 export const LABELS = ["Red", "Yellow", "Green", "Blue", "Purple"] as const
 export type Label = (typeof LABELS)[number]
@@ -159,8 +161,10 @@ export function trashPhotos(photos: PhotoEntry[], scope: FileScope) {
   return invoke<FileOutcome>("trash_photos", { items })
 }
 
-export const reveal = (path: string) => invoke("reveal", { path })
-export const openFiles = (paths: string[]) => invoke("open_files", { paths })
+/** Finder / Explorer with the file selected; the share sheet on iPad. */
+export const reveal = (path: string) => (isIPad ? share([path]) : invoke("reveal", { path }))
+/** The default app for each file; the share sheet on iPad. */
+export const openFiles = (paths: string[]) => (isIPad ? share(paths) : invoke("open_files", { paths }))
 
 /** The one file that stands for `p` under the Files filter: the RAW, unless only JPGs are shown. */
 export function primaryFile(p: PhotoEntry, scope: FileScope): string {

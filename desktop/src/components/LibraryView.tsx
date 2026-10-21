@@ -389,11 +389,22 @@ function GridCard({ item, stats, selected, current, onSelect, onOpen, collection
       aria-selected={selected}
       title={item.kind === "folder" ? (stats?.error ?? item.path) : item.title}
       onPointerDown={(e) => {
+        rest.onPointerDown?.(e) // the context menu's long press
         if (e.button === 0) onSelect()
+        tapAt = e.pointerType === "touch" ? e.timeStamp : 0
         dnd.onPointerDown(e)
       }}
+      onPointerUp={(e) => {
+        rest.onPointerUp?.(e)
+        // iPad: a tap opens (a long press shows the menu instead).
+        if (tapAt && e.timeStamp - tapAt < 500) onOpen()
+        tapAt = 0
+      }}
       // WebKit doesn't focus a clicked button; Return and the arrows act on the focused card.
-      onClick={(e) => e.currentTarget.focus({ preventScroll: true })}
+      onClick={(e) => {
+        rest.onClick?.(e)
+        e.currentTarget.focus({ preventScroll: true })
+      }}
       onFocus={onSelect}
       onDoubleClick={onOpen}
       className={cn(
@@ -430,6 +441,9 @@ function GridCard({ item, stats, selected, current, onSelect, onOpen, collection
   )
 }
 
+/** When a finger came down on a card (0 for mouse). */
+let tapAt = 0
+
 const LIST_COLUMNS = "24px minmax(0,1fr) 72px 48px 96px 168px"
 
 function ListRow({ item, stats, selected, current, onSelect, onOpen, collectionId, ref, className, ...rest }: ItemProps) {
@@ -447,11 +461,22 @@ function ListRow({ item, stats, selected, current, onSelect, onOpen, collectionI
       aria-selected={selected}
       title={item.kind === "folder" ? (stats?.error ?? item.path) : item.title}
       onPointerDown={(e) => {
+        rest.onPointerDown?.(e) // the context menu's long press
         if (e.button === 0) onSelect()
+        tapAt = e.pointerType === "touch" ? e.timeStamp : 0
         dnd.onPointerDown(e)
       }}
+      onPointerUp={(e) => {
+        rest.onPointerUp?.(e)
+        // iPad: a tap opens (a long press shows the menu instead).
+        if (tapAt && e.timeStamp - tapAt < 500) onOpen()
+        tapAt = 0
+      }}
       // WebKit doesn't focus a clicked button; Return and the arrows act on the focused card.
-      onClick={(e) => e.currentTarget.focus({ preventScroll: true })}
+      onClick={(e) => {
+        rest.onClick?.(e)
+        e.currentTarget.focus({ preventScroll: true })
+      }}
       onFocus={onSelect}
       onDoubleClick={onOpen}
       className={cn(

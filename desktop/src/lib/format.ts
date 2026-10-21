@@ -1,12 +1,25 @@
 import type { Meta } from "./api"
 
-export const isMac = navigator.userAgent.includes("Mac")
+const ua = navigator.userAgent
+/** Deadlyne for iPad. iPadOS's web view says it's a Mac, so touch is what gives it away. */
+export const isIPad = /iPad/.test(ua) || (ua.includes("Mac") && navigator.maxTouchPoints > 1)
+/** Desktop macOS (not iPad). */
+export const isMac = ua.includes("Mac") && !isIPad
+const appleKeys = isMac || isIPad
 
-/** "⌘" on Mac, "Ctrl+" on Windows. */
-export const mod = isMac ? "⌘" : "Ctrl+"
+/** "⌘" on Mac and iPad keyboards, "Ctrl+" on Windows. */
+export const mod = appleKeys ? "⌘" : "Ctrl+"
 /** "⌥" / "Alt+" and "⇧" / "Shift+", for shortcuts written out in full. */
-export const alt = isMac ? "⌥" : "Alt+"
-export const shift = isMac ? "⇧" : "Shift+"
+export const alt = appleKeys ? "⌥" : "Alt+"
+export const shift = appleKeys ? "⇧" : "Shift+"
+
+/** Where deleted things go, by name. */
+export const trashName = isIPad ? "Recently Deleted" : isMac ? "the Trash" : "the Recycle Bin"
+/** The delete command's name: everything deleted can be put back. */
+export const trashAction = isIPad ? "Move to Recently Deleted" : "Move to Trash"
+/** "Show in Finder" and "Open in default app" become the share sheet on iPad. */
+export const revealLabel = isIPad ? "Share…" : `Show in ${isMac ? "Finder" : "Explorer"}`
+export const openLabel = isIPad ? "Open in…" : "Open in default app"
 
 export const plural = (n: number, word: string) => `${n.toLocaleString()} ${word}${n === 1 ? "" : "s"}`
 

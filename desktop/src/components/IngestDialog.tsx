@@ -2,7 +2,6 @@
 // clicks: the card is picked automatically and the last destination and naming are remembered.
 import { useEffect, useMemo, useState } from "react"
 import { listen } from "@tauri-apps/api/event"
-import { open as openDialog } from "@tauri-apps/plugin-dialog"
 import { ChevronDown, FolderOpen, HardDrive } from "lucide-react"
 import { toast } from "sonner"
 import { create } from "zustand"
@@ -19,7 +18,8 @@ import {
   type IngestSummary,
   type SourceInfo,
 } from "@/lib/api"
-import { plural } from "@/lib/format"
+import { isIPad, plural } from "@/lib/format"
+import { pickFolder } from "@/lib/platform"
 import { getSetting, setSetting } from "@/lib/settings"
 import { cn } from "@/lib/utils"
 import { notifyBadges, useStore } from "@/store"
@@ -172,7 +172,7 @@ export function IngestDialog() {
       renamePattern: prefs.renameOn ? prefs.renamePattern : null,
       firstSeq,
       skipExisting: prefs.skipExisting,
-      eject: prefs.eject,
+      eject: prefs.eject && !isIPad,
     }
     // Mark it running first: a small card can finish before the start call even returns.
     useIngest.setState({ running: true, source, started: null, progress: null })
@@ -202,8 +202,8 @@ export function IngestDialog() {
                 value={source ?? ""}
                 onValueChange={async (v) => {
                   if (v !== "__choose") return setSource(v)
-                  const picked = await openDialog({ directory: true, title: "Choose a card or folder to ingest from" })
-                  if (typeof picked === "string") {
+                  const picked = await pickFolder("Choose a card or folder to ingest from")
+                  if (picked) {
                     setCustomSources((c) => [...new Set([...c, picked])])
                     setSource(picked)
                   }
@@ -233,8 +233,8 @@ export function IngestDialog() {
                 variant="outline"
                 className="justify-start font-normal"
                 onClick={async () => {
-                  const picked = await openDialog({ directory: true, title: "Where should ingested photos go?" })
-                  if (typeof picked === "string") setPrefs({ destination: picked })
+                  const picked = await pickFolder("Where should ingested photos go?")
+                  if (picked) setPrefs({ destination: picked })
                 }}
               >
                 <FolderOpen data-icon="inline-start" />
@@ -286,10 +286,13 @@ export function IngestDialog() {
                   <Switch id="ingest-skip" checked={prefs.skipExisting} onCheckedChange={(v) => setPrefs({ skipExisting: v })} />
                   <FieldLabel htmlFor="ingest-skip">Skip photos already ingested</FieldLabel>
                 </Field>
-                <Field orientation="horizontal">
-                  <Switch id="ingest-eject" checked={prefs.eject} onCheckedChange={(v) => setPrefs({ eject: v })} />
-                  <FieldLabel htmlFor="ingest-eject">Eject the card when done</FieldLabel>
-                </Field>
+                {/* iPadOS ejects cards from Files, not from apps. */}
+                {!isIPad && (
+                  <Field orientation="horizontal">
+                    <Switch id="ingest-eject" checked={prefs.eject} onCheckedChange={(v) => setPrefs({ eject: v })} />
+                    <FieldLabel htmlFor="ingest-eject">Eject the card when done</FieldLabel>
+                  </Field>
+                )}
               </CollapsibleContent>
             </Collapsible>
           </FieldGroup>

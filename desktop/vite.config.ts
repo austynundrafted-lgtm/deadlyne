@@ -17,7 +17,8 @@ export default defineConfig(() => ({
   server: {
     port: 1420,
     strictPort: true,
-    host: host || false,
+    // IPv4 loopback: the iPad Simulator's web view reaches 127.0.0.1, not ::1.
+    host: host || "127.0.0.1",
     hmr: host ? { protocol: "ws", host, port: 1421 } : undefined,
     watch: { ignored: ["**/src-tauri/**"] },
   },

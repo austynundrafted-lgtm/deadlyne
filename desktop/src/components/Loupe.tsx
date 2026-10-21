@@ -30,7 +30,8 @@ export function Loupe() {
   const imgRef = useRef<HTMLImageElement>(null)
   /** The zoomed photo's on-screen size, for turning a drag in pixels into a new center. */
   const zoomed = useRef<{ w: number; h: number } | null>(null)
-  const drag = useRef<{ x: number; y: number; center: Point | null; wasZoomed: boolean } | null>(null)
+  /** `swipe`: a finger on the fitted photo, which flips photos or, if it doesn't move, zooms there. */
+  const drag = useRef<{ x: number; y: number; center: Point | null; wasZoomed: boolean; swipe?: boolean } | null>(null)
   useLayoutEffect(() => {
     const el = boxRef.current
     if (!el) return
@@ -111,13 +112,22 @@ export function Loupe() {
     return { x: clamp(c.x, hx, 1 - hx), y: clamp(c.y, hy, 1 - hy) }
   }
 
+  const pointAt = (x: number, y: number): Point => {
+    const r = imgRef.current?.getBoundingClientRect()
+    return r && r.width > 0 ? { x: clamp((x - r.left) / r.width, 0, 1), y: clamp((y - r.top) / r.height, 0, 1) } : { x: 0.5, y: 0.5 }
+  }
+
   const onPointerDown = (e: React.PointerEvent) => {
     if (e.button !== 0 || (e.target as HTMLElement).closest("button")) return
+    if (e.pointerType === "touch" && !zoom) {
+      drag.current = { x: e.clientX, y: e.clientY, center: null, wasZoomed: false, swipe: true }
+      e.currentTarget.setPointerCapture(e.pointerId)
+      return
+    }
     let center = zoom
     if (!center) {
       // Zoom in on the point that was clicked.
-      const r = imgRef.current?.getBoundingClientRect()
-      center = r && r.width > 0 ? { x: clamp((e.clientX - r.left) / r.width, 0, 1), y: clamp((e.clientY - r.top) / r.height, 0, 1) } : { x: 0.5, y: 0.5 }
+      center = pointAt(e.clientX, e.clientY)
       setZoom(center)
     }
     drag.current = { x: e.clientX, y: e.clientY, center, wasZoomed: !!zoom }
@@ -134,6 +144,13 @@ export function Loupe() {
   const onPointerUp = (e: React.PointerEvent) => {
     const d = drag.current
     drag.current = null
+    if (d?.swipe) {
+      const dx = e.clientX - d.x
+      const dy = e.clientY - d.y
+      if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5) useStore.getState().move(dx < 0 ? 1 : -1)
+      else if (Math.hypot(dx, dy) < 8) setZoom(pointAt(e.clientX, e.clientY))
+      return
+    }
     // A click (not a drag) on a zoomed photo fits it again.
     if (d?.wasZoomed && Math.hypot(e.clientX - d.x, e.clientY - d.y) < 3) setZoom(null)
   }
