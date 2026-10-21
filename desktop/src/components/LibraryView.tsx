@@ -7,7 +7,7 @@ import { useShallow } from "zustand/react/shallow"
 import { openFolderDialog } from "@/lib/actions"
 import { dragSource, useDnd, useDropTarget, type DragItem } from "@/lib/dnd"
 import { newCollection, openShoot } from "@/lib/folders"
-import { mod, plural, relativeTime } from "@/lib/format"
+import { isIPad, mod, plural, relativeTime } from "@/lib/format"
 import {
   baseName,
   descendantIds,
@@ -391,7 +391,7 @@ function GridCard({ item, stats, selected, current, onSelect, onOpen, collection
       onPointerDown={(e) => {
         rest.onPointerDown?.(e) // the context menu's long press
         if (e.button === 0) onSelect()
-        tapAt = e.pointerType === "touch" ? e.timeStamp : 0
+        tapAt = e.pointerType === "touch" || isIPad ? e.timeStamp : 0
         dnd.onPointerDown(e)
       }}
       onPointerUp={(e) => {
@@ -463,7 +463,7 @@ function ListRow({ item, stats, selected, current, onSelect, onOpen, collectionI
       onPointerDown={(e) => {
         rest.onPointerDown?.(e) // the context menu's long press
         if (e.button === 0) onSelect()
-        tapAt = e.pointerType === "touch" ? e.timeStamp : 0
+        tapAt = e.pointerType === "touch" || isIPad ? e.timeStamp : 0
         dnd.onPointerDown(e)
       }}
       onPointerUp={(e) => {

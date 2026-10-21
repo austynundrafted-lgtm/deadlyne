@@ -150,7 +150,7 @@ export function Loupe() {
   const isDoubleTap = (e: React.PointerEvent) => {
     const prev = lastTap.current
     const now = { t: e.timeStamp, x: e.clientX, y: e.clientY }
-    const double = !!prev && now.t - prev.t < 350 && Math.hypot(now.x - prev.x, now.y - prev.y) < 40
+    const double = !!prev && now.t - prev.t < 450 && Math.hypot(now.x - prev.x, now.y - prev.y) < 40
     lastTap.current = double ? null : now
     return double
   }

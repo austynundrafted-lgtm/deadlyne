@@ -7,7 +7,7 @@ import { Check, Eye, MessageSquareText, Play, Star, X } from "lucide-react"
 import { useShallow } from "zustand/react/shallow"
 import { thumbUrl, type Photo } from "@/lib/api"
 import { askTrash, copyOrMove, openExport, openTargets, revealTarget } from "@/lib/actions"
-import { captureTime, exposureLine, labelColor, mod, openLabel, plural, revealLabel, trashAction } from "@/lib/format"
+import { captureTime, exposureLine, isIPad, labelColor, mod, openLabel, plural, revealLabel, trashAction } from "@/lib/format"
 import { LABELS } from "@/lib/api"
 import { cn } from "@/lib/utils"
 import { photoKey, useViewTracker } from "@/lib/viewing"
@@ -330,7 +330,7 @@ const PhotoCard = memo(function PhotoCard({ photo: p, width, selected, focused, 
       style={{ ...style, width }}
       onPointerDown={(e) => {
         pointerHistory = [pointerHistory[1], p.id]
-        tapOpens = e.pointerType === "touch" && focused && selected ? { id: p.id, at: e.timeStamp } : null
+        tapOpens = (e.pointerType === "touch" || isIPad) && focused && selected ? { id: p.id, at: e.timeStamp } : null
         onPointerDown(e)
       }}
       onPointerUp={(e) => {
