@@ -5,7 +5,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react"
 import { Check, FastForward, Star, X, ZoomIn } from "lucide-react"
 import { useShallow } from "zustand/react/shallow"
 import { previewUrl, thumbUrl } from "@/lib/api"
-import { labelColor, mod, orientationTransform } from "@/lib/format"
+import { isIPad, labelColor, mod, orientationTransform } from "@/lib/format"
 import { cn } from "@/lib/utils"
 import { useStore, useVisiblePhotos } from "@/store"
 import { Badge } from "@/components/ui/badge"
@@ -119,9 +119,10 @@ export function Loupe() {
 
   const onPointerDown = (e: React.PointerEvent) => {
     if (e.button !== 0 || (e.target as HTMLElement).closest("button")) return
-    if (e.pointerType === "touch" && !zoom) {
+    // On iPad every pointer (finger, pencil, trackpad, the Simulator's mouse) taps rather than
+    // zooming on press, and nothing is captured, so the next tap always reaches what it's on.
+    if ((e.pointerType !== "mouse" || isIPad) && !zoom) {
       drag.current = { x: e.clientX, y: e.clientY, center: null, wasZoomed: false, swipe: true }
-      e.currentTarget.setPointerCapture(e.pointerId)
       return
     }
     let center = zoom
@@ -144,6 +145,7 @@ export function Loupe() {
   const onPointerUp = (e: React.PointerEvent) => {
     const d = drag.current
     drag.current = null
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId)
     if (d?.swipe) {
       const dx = e.clientX - d.x
       const dy = e.clientY - d.y
@@ -173,6 +175,7 @@ export function Loupe() {
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         onPointerCancel={() => (drag.current = null)}
+        onLostPointerCapture={() => (drag.current = null)}
         onWheel={onWheel}
       >
         <img
@@ -186,8 +189,8 @@ export function Loupe() {
         />
         <Button
           variant="secondary"
-          size="icon-sm"
-          className="absolute top-3 right-3 opacity-70 hover:opacity-100"
+          size={isIPad ? "icon-lg" : "icon-sm"}
+          className={cn("absolute top-3 right-3 z-10", isIPad ? "shadow-edge" : "opacity-70 hover:opacity-100")}
           aria-label="Back to the grid"
           onClick={() => setLoupe(false)}
         >
