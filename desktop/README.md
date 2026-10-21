@@ -73,6 +73,8 @@ npm run tauri dev
 
 Without `.env.local`, development builds offer "Continue without signing in". Release builds never do, and the release workflow refuses to build without the `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY` repository variables.
 
+To see your edits live, run `npm run app`. It opens **Deadlyne Dev**, a separate app (its own settings, recents and library, so it never disturbs the installed Deadlyne) that reloads the interface as soon as you save a file in `src/` and rebuilds when Rust in `src-tauri/` changes. The installed Deadlyne only changes when a new release is published and it updates itself.
+
 Other useful commands:
 - `npm run tauri build`: a release build and installers for the current OS.
 - `npx tauri build --debug --bundles app`: a quick Mac .app for testing.
