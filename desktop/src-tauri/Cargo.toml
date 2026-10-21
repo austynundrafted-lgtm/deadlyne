@@ -27,7 +27,6 @@ image = { version = "0.25", default-features = false, features = ["jpeg"] }
 percent-encoding = "2"
 md-5 = "0.10"
 dirs = "6"
-trash = "5"
 fs2 = "0.4"
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
 suppaftp = { version = "12", features = ["rustls-ring", "deprecated"] }
@@ -40,6 +39,13 @@ plist = "1"
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-updater = "2"
+trash = "5"
+
+# iPad: Move to Trash goes through Foundation (Files' Recently Deleted); Files access, Quick Look and
+# sharing come from the local ipad-files plugin.
+[target.'cfg(target_os = "ios")'.dependencies]
+objc2-foundation = { version = "0.3", features = ["NSFileManager", "NSURL", "NSString", "NSError"] }
+tauri-plugin-ipad-files = { path = "plugins/ipad-files" }
 
 [profile.release]
 codegen-units = 1

@@ -29,6 +29,8 @@ pub fn run() {
 
     #[cfg(desktop)]
     let builder = builder.plugin(tauri_plugin_updater::Builder::new().build());
+    #[cfg(target_os = "ios")]
+    let builder = builder.plugin(tauri_plugin_ipad_files::init());
 
     builder
         .register_asynchronous_uri_scheme_protocol("thumb", |_ctx, request, responder| {

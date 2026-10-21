@@ -1,6 +1,6 @@
 // The right-click (and ⋯) menus for shoots, folders and collections. Each menu is described once
 // as a list of entries and drawn as either a context menu or a dropdown.
-import { isMac } from "@/lib/format"
+import { revealLabel, trashAction } from "@/lib/format"
 import {
   deleteCollection,
   locateFolder,
@@ -122,7 +122,7 @@ export function folderMenu(path: string, ctx: { origin?: LibrarySection; collect
   return tidy([
     !ctx.open && { label: "Open", onSelect: () => openShoot(path, ctx.origin) },
     partial && { label: "Continue reviewing", onSelect: () => resumeShoot(path, ctx.origin) },
-    { label: `Show in ${isMac ? "Finder" : "Explorer"}`, onSelect: () => reveal(path) },
+    { label: revealLabel, onSelect: () => reveal(path) },
     "separator",
     { label: shoot?.pinned ? "Unpin" : "Pin to sidebar", onSelect: () => lib.updateShoot(path, { pinned: !shoot?.pinned }) },
     { label: shoot?.favorite ? "Remove from Favorites" : "Add to Favorites", onSelect: () => lib.updateShoot(path, { favorite: !shoot?.favorite }) },
@@ -148,7 +148,7 @@ export function folderMenu(path: string, ctx: { origin?: LibrarySection; collect
     { label: "Reset viewing progress…", disabled: !stats?.totalViewed, onSelect: () => resetProgress(path) },
     "separator",
     shoot && { label: "Remove from Deadlyne", onSelect: () => removeFromLibrary(path) },
-    { label: "Move to Trash…", destructive: true, onSelect: () => trashFolder(path) },
+    { label: `${trashAction}…`, destructive: true, onSelect: () => trashFolder(path) },
   ])
 }
 

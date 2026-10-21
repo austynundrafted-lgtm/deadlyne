@@ -49,6 +49,8 @@ pub struct Card {
 /// Mounted volumes that look like camera cards (they contain a DCIM folder).
 #[tauri::command]
 pub fn memory_cards() -> Vec<Card> {
+    // iPad has no mounted volumes to scan: cards come in through the Files folder picker.
+    #[cfg_attr(target_os = "ios", allow(unused_mut))]
     let mut roots: Vec<PathBuf> = vec![];
     #[cfg(target_os = "macos")]
     if let Ok(entries) = std::fs::read_dir("/Volumes") {

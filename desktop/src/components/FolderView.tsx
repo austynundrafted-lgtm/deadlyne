@@ -28,7 +28,7 @@ import {
   resetProgress,
   revealDoc,
 } from "@/lib/folders"
-import { alt, isMac, mod, relativeTime, shift } from "@/lib/format"
+import { alt, isIPad, mod, openLabel, relativeTime, revealLabel, shift, trashAction } from "@/lib/format"
 import { baseName, folderTitle, isWithin, parentPath, rootShootOf, SECTION_TITLES, useLibrary, type LibrarySection } from "@/lib/library"
 import { cn } from "@/lib/utils"
 import { continueReviewing, useOpenFolderProgress, useViewing } from "@/lib/viewing"
@@ -362,8 +362,9 @@ function docMenu(doc: FolderDoc): MenuEntry[] {
   }
   const entries: MenuEntry[] = [
     { label: "Quick Look", shortcut: "Space", onSelect: () => quickLook(doc) },
-    { label: "Open in default app", shortcut: "↩", onSelect: () => openDoc(doc) },
-    { label: `Show in ${isMac ? "Finder" : "Explorer"}`, onSelect: () => revealDoc(doc) },
+    { label: openLabel, shortcut: "↩", onSelect: () => openDoc(doc) },
+    // On iPad both are the share sheet, so one is enough.
+    ...(isIPad ? [] : [{ label: revealLabel, onSelect: () => revealDoc(doc) }]),
     "separator",
   ]
   if (!doc.linkId) entries.push({ label: "Rename…", onSelect: () => renameDoc(doc) })
@@ -372,7 +373,7 @@ function docMenu(doc: FolderDoc): MenuEntry[] {
   entries.push(
     doc.linkId
       ? { label: "Remove link", onSelect: () => removeDoc(doc) }
-      : { label: "Move to Trash…", destructive: true, shortcut: `${mod}⌫`, onSelect: () => removeDoc(doc) },
+      : { label: `${trashAction}…`, destructive: true, shortcut: `${mod}⌫`, onSelect: () => removeDoc(doc) },
   )
   return entries
 }
@@ -615,7 +616,7 @@ export function DocumentInspector() {
           {doc.exists && (
             <div className="flex flex-col gap-1">
               {docMenu(doc)
-                .filter((e): e is Extract<MenuEntry, { onSelect: () => void }> => e !== "separator" && "onSelect" in e && !["Quick Look", "Open in default app"].includes(e.label))
+                .filter((e): e is Extract<MenuEntry, { onSelect: () => void }> => e !== "separator" && "onSelect" in e && !["Quick Look", openLabel].includes(e.label))
                 .map((e) => (
                   <Button
                     key={e.label}

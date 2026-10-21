@@ -4,6 +4,7 @@
 // every drop is a change to the virtual library.
 import { useEffect } from "react"
 import { create } from "zustand"
+import { isIPad } from "@/lib/format"
 
 export type DragItem =
   | { kind: "shoot"; path: string; label: string; from?: string }
@@ -47,13 +48,14 @@ function targetAt(x: number, y: number, item: DragItem): string | null {
 /** Pointer-down handler that starts a drag after the pointer moves a few pixels. */
 export function dragSource(getItem: () => DragItem) {
   return (e: React.PointerEvent) => {
-    if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey) return
+    if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.pointerType === "touch") return
     const start = { x: e.clientX, y: e.clientY }
     let item: DragItem | null = null
 
     const move = (ev: PointerEvent) => {
       if (!item) {
-        if (Math.hypot(ev.clientX - start.x, ev.clientY - start.y) < 5) return
+        // A trackpad click on iPad drifts a few pixels; a drag has to be deliberate there.
+        if (Math.hypot(ev.clientX - start.x, ev.clientY - start.y) < (isIPad ? 16 : 5)) return
         item = getItem()
         document.body.style.cursor = "grabbing"
       }

@@ -2,9 +2,9 @@
 // captions inside, into a folder named after the shoot in the place you exported to last time.
 // Resizing and renaming are there for the desk that wants 3000 px or "Fairborn_0001.JPG".
 import { useEffect, useMemo, useState } from "react"
-import { open as openDialog } from "@tauri-apps/plugin-dialog"
 import { ChevronDown, FolderOpen, FolderOutput } from "lucide-react"
 import { toast } from "sonner"
+import { pickFolder } from "@/lib/platform"
 import { useShallow } from "zustand/react/shallow"
 import { formatBytes, openFiles } from "@/lib/api"
 import { cancelExport, EXPORT_FILES, exportItems, exportName, QUALITIES, RENAME_TOKENS, runExport, SIZES, useExport, type ExportFiles } from "@/lib/export"
@@ -55,8 +55,8 @@ export function ExportDialog() {
   const close = () => !running && useUI.getState().open("export", false)
 
   const pickDestination = async () => {
-    const picked = await openDialog({ directory: true, title: "Export to…" })
-    if (typeof picked === "string") setPrefs({ destination: picked })
+    const picked = await pickFolder("Export to…")
+    if (picked) setPrefs({ destination: picked })
   }
 
   const start = async () => {

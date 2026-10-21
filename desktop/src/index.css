@@ -138,3 +138,14 @@ input, textarea, [contenteditable] {
   user-select: text;
   -webkit-user-select: text;
 }
+
+/* iPad: stay clear of the status bar and home indicator (all zero on desktop), no grey tap flash,
+   no long-press callout over thumbnails, and no double-tap page zoom. */
+#root {
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+html {
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+  touch-action: manipulation;
+}

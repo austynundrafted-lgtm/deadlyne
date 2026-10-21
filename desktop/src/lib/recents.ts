@@ -30,6 +30,15 @@ export async function noteRecentShoot(path: string, photos: number) {
   await save(list.slice(0, LIMIT))
 }
 
+/** A folder moved or was renamed: recents under it point at the new place. */
+export async function relocateRecentShoots(from: string, to: string) {
+  const base = from.replace(/[\\/]+$/, "")
+  const list = (await recentShoots()).map((s) =>
+    s.path === base || s.path.startsWith(base + "/") || s.path.startsWith(base + "\\") ? { ...s, path: to + s.path.slice(base.length) } : s,
+  )
+  await save(list)
+}
+
 export async function forgetRecentShoot(path: string) {
   await save((await recentShoots()).filter((s) => s.path !== path))
 }

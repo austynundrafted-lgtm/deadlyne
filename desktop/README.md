@@ -75,6 +75,21 @@ Without `.env.local`, development builds offer "Continue without signing in". Re
 
 To see your edits live, run `npm run app`. It opens **Deadlyne Dev**, a separate app (its own settings, recents and library, so it never disturbs the installed Deadlyne) that reloads the interface as soon as you save a file in `src/` and rebuilds when Rust in `src-tauri/` changes. The installed Deadlyne only changes when a new release is published and it updates itself.
 
+### iPad
+
+The same app runs on iPad (iPadOS 16+). `npm run ipad` starts the live dev server and opens the iPad project in Xcode: pick an iPad simulator (or your iPad) next to the Run button and press ⌘R. From then on, saving a file in `src/` reloads the app in the Simulator; after changing Rust or Swift, press ⌘R again. One-time setup:
+- Xcode with an iPadOS simulator, `rustup target add aarch64-apple-ios aarch64-apple-ios-sim`, and CocoaPods.
+- [XcodeGen](https://github.com/yonaskolb/XcodeGen): the script looks in `~/.local/xcodegen-dl/xcodegen/bin`, or anywhere on your PATH. The project lives in `src-tauri/gen/apple`; after editing `project.yml`, run `xcodegen generate` there.
+- Running on a real iPad needs a signing team: choose yours in Xcode under Signing & Capabilities.
+
+`tauri ios dev` can't launch the simulators by itself yet, because it expects a simulator runtime matching Xcode's SDK (iOS 27.1); that's why the script opens Xcode. Installing the iOS 27.1 simulator in Xcode → Settings → Components would let `npx tauri ios dev "iPad Air 13-inch (M4)"` launch it directly. Pick a simulator name that no connected iPad shares, or Tauri chooses the real device.
+
+What's different on iPad:
+- Shoots, cards and documents are picked in the Files browser (the local `src-tauri/plugins/ipad-files` plugin). Deadlyne keeps a security-scoped bookmark for each, so they're still readable after a relaunch; a shoot that moved is followed. Shoots copied into **Files › On My iPad › Deadlyne** work too.
+- Show in Finder and Open in default app become the share sheet; Quick Look is the system preview. Move to Trash goes to Files' Recently Deleted.
+- Touch: tap a photo to select it and tap it again to open it; in the loupe swipe to flip, tap to zoom to 100%, drag to pan. Long-press anything for its menu. Folder cards open with one tap. A hardware keyboard gets every shortcut.
+- No memory card list (cards are picked in Files), no Eject (do it in Files), and no self-updating (the App Store or TestFlight handles that). Dropping files from Files onto the window isn't supported yet.
+
 Other useful commands:
 - `npm run tauri build`: a release build and installers for the current OS.
 - `npx tauri build --debug --bundles app`: a quick Mac .app for testing.

@@ -15,10 +15,13 @@ function TooltipProvider({
   )
 }
 
+/** Touch screens (iPad) have no hover: a tapped control would keep its tooltip up. */
+const touchOnly = typeof matchMedia === "function" && matchMedia("(hover: none) and (pointer: coarse)").matches
+
 function Tooltip({
   ...props
 }: React.ComponentProps<typeof TooltipPrimitive.Root>) {
-  return <TooltipPrimitive.Root data-slot="tooltip" {...props} />
+  return <TooltipPrimitive.Root data-slot="tooltip" {...(touchOnly ? { open: false } : {})} {...props} />
 }
 
 function TooltipTrigger({
