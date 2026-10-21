@@ -55,6 +55,16 @@ const GROUPS: { title: string; keys: [string[], string][] }[] = [
     ],
   },
   {
+    title: "Review & folders",
+    keys: [
+      [[`${alt}${mod}R`], "Continue reviewing"],
+      [[`${alt}${mod}U`], "Show unviewed only"],
+      [[`${alt}${mod}S`], "Collapse or expand the sidebar"],
+      [[`${shift}${mod}N`], "New folder"],
+      [["Space"], "Quick Look a document"],
+    ],
+  },
+  {
     title: "Everywhere",
     keys: [
       [[`${mod}1`, "2", "3"], "Home, Photos, Codes"],
@@ -69,7 +79,7 @@ export function ShortcutsDialog() {
   const open = useUI((s) => s.shortcuts)
   return (
     <Dialog open={open} onOpenChange={(o) => useUI.getState().open("shortcuts", o)}>
-      <DialogContent className="sm:max-w-2xl">
+      <DialogContent className="max-h-[calc(100vh-4rem)] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>Keyboard shortcuts</DialogTitle>
           <DialogDescription>The same keys as Deadlyne for Mac. Press ? anywhere to see this again.</DialogDescription>

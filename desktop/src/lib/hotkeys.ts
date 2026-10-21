@@ -4,6 +4,9 @@ import { useEffect } from "react"
 import { LABELS, type Label } from "@/lib/api"
 import { toast } from "sonner"
 import { askTrash, copyOrMove, openExport, openFolderDialog, openTargets, revealTarget } from "@/lib/actions"
+import { newFolder } from "@/lib/folders"
+import { continueReviewing } from "@/lib/viewing"
+import { toggleSidebar } from "@/components/Sidebar"
 import { targetPhotos, useStore, visiblePhotos } from "@/store"
 import { useUI } from "@/ui"
 
@@ -31,7 +34,9 @@ export function useHotkeys() {
       const ui = useUI.getState()
       const cmd = e.metaKey || e.ctrlKey
       const key = e.key.toLowerCase()
-      const photos = s.workspace === "photos" && !!s.folder
+      const inFolder = s.workspace === "photos" && !!s.folder && !s.librarySection
+      // Culling keys only act on the contact sheet, never on a library list or the documents.
+      const photos = inFolder && s.folderTab === "photos"
 
       // These work everywhere, even while typing in a field.
       if (cmd && !e.altKey && !e.shiftKey) {
@@ -43,7 +48,10 @@ export function useHotkeys() {
         if (key === "i" && s.folder) return run(e, () => s.setCaptionPanel(!s.captionPanel))
       }
       if (cmd && e.shiftKey && e.code === "KeyI") return run(e, () => ui.open("ingest"))
-      if (typing) return
+      if (cmd && e.altKey && e.code === "KeyS" && s.workspace === "photos") return run(e, toggleSidebar)
+      if (cmd && e.shiftKey && e.code === "KeyN" && inFolder) return run(e, () => newFolder(s.folder!))
+      // The sidebar tree and folder lists move with the arrows themselves.
+      if (typing || target.closest("[role=tree], [data-card], [data-doc]")) return
 
       if (cmd && e.key === "Enter" && photos) return run(e, s.focusCaption)
       if (e.key === "?" && !cmd) return run(e, () => ui.open("shortcuts"))
@@ -59,6 +67,8 @@ export function useHotkeys() {
         if (e.code === "KeyC") return run(e, s.copyCaptions)
         if (e.code === "KeyV") return run(e, s.pasteCaptions)
         if (e.code === "KeyP") return run(e, () => s.fillCredits() || ui.open("profile"))
+        if (e.code === "KeyR") return run(e, continueReviewing)
+        if (e.code === "KeyU") return run(e, () => s.setUnviewedOnly(!s.unviewedOnly))
       }
       if (cmd && e.shiftKey) {
         if (e.code === "KeyC") return run(e, () => copyOrMove("tagged", false))

@@ -16,6 +16,7 @@ mod ingest;
 mod iptc;
 mod jobs;
 mod jpeg_meta;
+mod library;
 mod raw;
 mod xmp;
 
@@ -43,7 +44,10 @@ pub fn run() {
             export::export_photos, export::export_cancel,
             ingest::memory_cards, ingest::inspect_source, ingest::free_space, ingest::start_ingest, ingest::cancel_ingest,
             ftp::ftp_set_password, ftp::ftp_has_password, ftp::ftp_test, ftp::ftp_send, ftp::ftp_cancel,
-            achievements::achievements, achievements::record_folder_opened])
+            achievements::achievements, achievements::record_folder_opened,
+            library::viewing_load, library::viewing_mark, library::viewing_reset, library::viewing_transfer, library::viewing_relocate,
+            library::folder_stats, library::folder_contents, library::docs_info, library::add_documents, library::move_documents,
+            library::create_folder, library::rename_path, library::trash_path, library::quick_look])
         .run(tauri::generate_context!())
         .expect("error while running Deadlyne");
 }

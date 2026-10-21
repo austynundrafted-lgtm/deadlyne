@@ -2,10 +2,13 @@ import { useEffect, useState } from "react"
 import { invoke } from "@tauri-apps/api/core"
 import { getCurrentWebview } from "@tauri-apps/api/webview"
 import { getCurrentWindow } from "@tauri-apps/api/window"
-import { FolderInput } from "lucide-react"
+import { FileInput, FolderInput, Library } from "lucide-react"
 import { useShallow } from "zustand/react/shallow"
 import { FILE_SCOPES } from "@/lib/api"
 import { useCodes } from "@/lib/codes"
+import { useDnd } from "@/lib/dnd"
+import { folderTitle, useLibrary } from "@/lib/library"
+import { initViewing } from "@/lib/viewing"
 import { initExport } from "@/lib/export"
 import { initFtp } from "@/lib/ftp"
 import { plural } from "@/lib/format"
@@ -13,7 +16,9 @@ import { useHotkeys } from "@/lib/hotkeys"
 import { checkForUpdates } from "@/lib/updates"
 import { loadSettings, targetPhotos, useStore } from "@/store"
 import { useUI } from "@/ui"
+import { AddFilesDialog } from "@/components/AddFilesDialog"
 import { BadgesDialog } from "@/components/BadgesDialog"
+import { FolderIcon } from "@/components/FolderIcon"
 import { CodesView } from "@/components/CodesView"
 import { ExportDialog } from "@/components/ExportDialog"
 import { FtpServersDialog } from "@/components/FtpServersDialog"
@@ -21,6 +26,7 @@ import { HomeView } from "@/components/HomeView"
 import { IngestDialog, initIngest } from "@/components/IngestDialog"
 import { PhotosView } from "@/components/PhotosView"
 import { ProfileDialog } from "@/components/ProfileDialog"
+import { Prompts } from "@/components/Prompts"
 import { SendDialog } from "@/components/SendDialog"
 import { ShortcutsDialog } from "@/components/ShortcutsDialog"
 import { TitleBar } from "@/components/TitleBar"
@@ -37,13 +43,26 @@ import {
 import { Toaster } from "@/components/ui/sonner"
 import { TooltipProvider } from "@/components/ui/tooltip"
 
+/** Documents a shoot can keep (mirrors DOC_EXTS in src-tauri/src/library.rs). */
+const DOCUMENT = /\.(pdf|docx?|rtfd?|txt|md|tsv|xlsx?|numbers|pages|key|pptx?|odt|ods|odp)$/i
+
+/** Files dropped on the window: rosters on Codes, documents into the open folder, else a shoot. */
+function dropKind(paths: string[]): "rosters" | "documents" | "shoot" {
+  const s = useStore.getState()
+  if (s.workspace === "codes" && paths.every((p) => /\.(txt|csv|tsv|tab)$/i.test(p))) return "rosters"
+  if (s.workspace !== "codes" && s.folder && paths.every((p) => DOCUMENT.test(p) || /\.csv$/i.test(p))) return "documents"
+  return "shoot"
+}
+
 export default function App() {
   const workspace = useStore((s) => s.workspace)
-  const [dropping, setDropping] = useState(false)
+  const [dropping, setDropping] = useState<null | "rosters" | "documents" | "shoot">(null)
   useHotkeys()
 
   useEffect(() => {
     loadSettings()
+    useLibrary.getState().load()
+    initViewing()
     useCodes.getState().load()
     initIngest()
     initFtp()
@@ -52,18 +71,24 @@ export default function App() {
     invoke<string | null>("launch_folder").then((path) => {
       if (path) useStore.getState().openFolder(path)
     })
-    // Rosters edited in a text editor (or by the Mac app) show up when you come back.
+    // Rosters edited in a text editor (or by the Mac app) show up when you come back, and so do folder changes.
     const unfocus = getCurrentWindow().onFocusChanged(({ payload: focused }) => {
-      if (focused) useCodes.getState().load()
+      if (!focused) return
+      useCodes.getState().load()
+      // Folders renamed, moved or unplugged while away show up as missing (or found again).
+      useLibrary.getState().refreshStats()
     })
     // Drop a folder (or any photo in it) anywhere on the window to open it.
     const unlisten = getCurrentWebview().onDragDropEvent(({ payload }) => {
-      if (payload.type === "enter" || payload.type === "over") setDropping(true)
-      else setDropping(false)
+      if (payload.type === "enter") setDropping(payload.paths.length ? dropKind(payload.paths) : "shoot")
+      else if (payload.type !== "over") setDropping(null)
       if (payload.type !== "drop" || !payload.paths[0]) return
-      // Rosters dropped on Codes are imported; anything else opens as a shoot.
-      if (useStore.getState().workspace === "codes" && payload.paths.every((p) => /\.(txt|csv|tsv|tab)$/i.test(p))) {
+      // Rosters dropped on Codes are imported, documents join the open shoot, anything else opens as a shoot.
+      const kind = dropKind(payload.paths)
+      if (kind === "rosters") {
         invoke("import_code_lists", { paths: payload.paths }).then(() => useCodes.getState().load())
+      } else if (kind === "documents") {
+        useUI.getState().openAddFiles(useStore.getState().folder!, payload.paths)
       } else {
         useStore.getState().openFolder(payload.paths[0])
       }
@@ -94,7 +119,12 @@ export default function App() {
           </div>
           {dropping && (
             <div className="pointer-events-none absolute inset-3 z-50 flex items-center justify-center rounded-xl border-2 border-dashed border-primary bg-primary/10 text-sm font-medium">
-              <FolderInput className="mr-2 size-5" /> {workspace === "codes" ? "Drop to import these rosters" : "Drop to open this shoot"}
+              {dropping === "documents" ? <FileInput className="mr-2 size-5" /> : <FolderInput className="mr-2 size-5" />}
+              {dropping === "rosters"
+                ? "Drop to import these rosters"
+                : dropping === "documents"
+                  ? `Drop to add to ${folderTitle(useStore.getState().folder!)}`
+                  : "Drop to open this shoot"}
             </div>
           )}
         </main>
@@ -107,6 +137,9 @@ export default function App() {
       <FtpServersDialog />
       <ShortcutsDialog />
       <ConfirmTrash />
+      <AddFilesDialog />
+      <Prompts />
+      <DragGhost />
       <Toaster position="bottom-center" />
     </TooltipProvider>
   )
@@ -139,5 +172,20 @@ function ConfirmTrash() {
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
+  )
+}
+
+/** What's being dragged around the library, following the pointer. */
+function DragGhost() {
+  const { item, x, y, over } = useDnd()
+  if (!item) return null
+  return (
+    <div
+      className="pointer-events-none fixed z-[100] flex max-w-60 items-center gap-2 rounded-lg bg-popover px-2.5 py-1.5 text-[13px] shadow-lg shadow-black/40 ring-1 ring-white/10"
+      style={{ left: x + 12, top: y + 10 }}
+    >
+      {item.kind === "shoot" ? <FolderIcon size={20} selected={!!over} /> : <Library className="size-4 text-muted-foreground" />}
+      <span className="truncate">{item.label}</span>
+    </div>
   )
 }

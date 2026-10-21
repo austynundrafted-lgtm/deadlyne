@@ -1,0 +1,23 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Deadlyne Dev",
+  "identifier": "app.deadlyne.dev",
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Deadlyne Dev",
+        "width": 1440,
+        "height": 900,
+        "minWidth": 960,
+        "minHeight": 600,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true,
+        "backgroundColor": "#1b1b1b",
+        "dragDropEnabled": true,
+        "trafficLightPosition": { "x": 18, "y": 24 },
+        "acceptFirstMouse": true
+      }
+    ]
+  }
+}
