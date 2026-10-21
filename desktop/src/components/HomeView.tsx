@@ -1,18 +1,22 @@
 // Home: one job — get to the photos. Ingest a card, open a shoot, or pick up a recent one.
 import { useEffect, useState } from "react"
 import { getVersion } from "@tauri-apps/api/app"
-import { ChevronRight, FolderOpen, HardDriveDownload, Images, X } from "lucide-react"
+import { ChevronRight, FolderOpen, HardDriveDownload, Play, X } from "lucide-react"
 import { useShallow } from "zustand/react/shallow"
 import logo from "@/assets/logo.png"
 import { openFolderDialog } from "@/lib/actions"
 import { OFFLINE_GRACE_DAYS, useAuth } from "@/lib/auth"
+import { resumeShoot } from "@/lib/folders"
 import { mod, plural, relativeTime } from "@/lib/format"
+import { statsFor, useLibrary } from "@/lib/library"
 import { forgetRecentShoot, onRecentShoots, recentShoots, type RecentShoot } from "@/lib/recents"
 import { shootName, shootSubtitle } from "@/lib/shootName"
 import { checkForUpdates } from "@/lib/updates"
 import { useStore } from "@/store"
 import { useUI } from "@/ui"
 import { BadgeMedal, nextBadge, useAchievements } from "@/components/BadgesDialog"
+import { FolderIcon } from "@/components/FolderIcon"
+import { ViewProgress } from "@/components/ViewProgress"
 import { IngestProgressView, useIngest } from "@/components/IngestDialog"
 import { Button } from "@/components/ui/button"
 import {
@@ -47,12 +51,17 @@ export function HomeView() {
   }, [workspace, running, refresh])
   const [recents, setRecents] = useState<RecentShoot[]>([])
   const [version, setVersion] = useState("")
+  const stats = useLibrary((s) => s.stats)
 
   useEffect(() => {
     recentShoots().then(setRecents)
     getVersion().then(setVersion)
     return onRecentShoots(setRecents)
   }, [])
+  // Recents can be subfolders the library doesn't list, so ask for their progress directly.
+  useEffect(() => {
+    if (workspace === "home" && recents.length) useLibrary.getState().refreshStats(recents.map((r) => r.path))
+  }, [workspace, recents])
 
   return (
     <div className="h-full overflow-y-auto">
@@ -98,29 +107,54 @@ export function HomeView() {
 
         {recents.length > 0 && (
           <section className="mt-10">
-            <h2 className="mb-2 px-1 text-xs font-medium tracking-wide text-muted-foreground uppercase">Recent shoots</h2>
+            <div className="mb-2 flex items-baseline justify-between px-1">
+              <h2 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Recent shoots</h2>
+              <Button variant="link" size="xs" className="h-auto p-0 text-xs text-muted-foreground" onClick={() => useStore.getState().showSection({ kind: "all" })}>
+                All shoots
+              </Button>
+            </div>
             <ItemGroup className="gap-1">
               {recents.map((s) => {
                 const name = shootName(s.name)
+                const st = statsFor(stats, s.path)
+                const total = st?.totalPhotos ?? s.photos
+                const viewed = st?.totalViewed ?? 0
+                const partial = viewed > 0 && viewed < total
                 return (
                 <Item
                   key={s.path}
                   variant="outline"
                   size="sm"
                   className="group cursor-pointer bg-card/40 hover:bg-card hover:shadow-edge-hover"
-                  onClick={() => openFolder(s.path)}
+                  onClick={() => openFolder(s.path, { origin: { kind: "recent" } })}
                   title={s.path}
                 >
-                  <ItemMedia variant="icon">
-                    <Images />
+                  <ItemMedia>
+                    <FolderIcon size={30} missing={st && !st.exists} />
                   </ItemMedia>
-                  <ItemContent>
-                    <ItemTitle>{name.title}</ItemTitle>
+                  <ItemContent className="min-w-0">
+                    <ItemTitle className="w-full truncate">{name.title}</ItemTitle>
                     <ItemDescription>
-                      {[shootSubtitle(name), plural(s.photos, "photo"), relativeTime(s.openedAt)].filter(Boolean).join(" · ")}
+                      {[shootSubtitle(name), plural(total, "photo"), relativeTime(s.openedAt)].filter(Boolean).join(" · ")}
                     </ItemDescription>
                   </ItemContent>
                   <ItemActions>
+                    {/* Progress only once a review has started: a fresh shoot needs no 0%. */}
+                    {viewed > 0 && total > 0 && <ViewProgress viewed={viewed} total={total} size="xs" />}
+                    {partial && (
+                      <Button
+                        variant="secondary"
+                        size="xs"
+                        className="opacity-0 transition-opacity duration-150 group-hover:opacity-100 focus-visible:opacity-100"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          resumeShoot(s.path, { kind: "recent" })
+                        }}
+                      >
+                        <Play className="fill-current" data-icon="inline-start" />
+                        Continue
+                      </Button>
+                    )}
                     <Button
                       variant="ghost"
                       size="icon-xs"

@@ -1,17 +1,22 @@
-// Photos: the contact sheet, the loupe, the caption panel and a one-line status bar. Culling is
+// Photos: the library sidebar, then either a library list (All shoots, a collection…) or the open
+// folder: the contact sheet, the loupe, the caption panel and a one-line status bar. Culling is
 // keyboard-first (see lib/hotkeys.ts); the mouse and right-click menus can do everything too.
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 import { useVirtualizer } from "@tanstack/react-virtual"
-import { Check, FolderOpen, Images, MessageSquareText, Star } from "lucide-react"
+import { Check, Eye, MessageSquareText, Play, Star, X } from "lucide-react"
 import { useShallow } from "zustand/react/shallow"
 import { thumbUrl, type Photo } from "@/lib/api"
-import { askTrash, copyOrMove, openExport, openFolderDialog, openTargets, revealTarget } from "@/lib/actions"
+import { askTrash, copyOrMove, openExport, openTargets, revealTarget } from "@/lib/actions"
 import { captureTime, exposureLine, isMac, labelColor, mod, plural } from "@/lib/format"
 import { LABELS } from "@/lib/api"
 import { cn } from "@/lib/utils"
+import { photoKey, useViewTracker } from "@/lib/viewing"
 import { THUMB_MAX, THUMB_MIN, useStore, useVisiblePhotos } from "@/store"
 import { useUI } from "@/ui"
 import { CaptionPanel } from "@/components/CaptionPanel"
+import { DocumentInspector, DocumentsView, FolderBar, SubfoldersView, useRecheckDocs } from "@/components/FolderView"
+import { LibraryView } from "@/components/LibraryView"
+import { Sidebar } from "@/components/Sidebar"
 import {
   ContextMenu,
   ContextMenuContent,
@@ -25,8 +30,7 @@ import {
 } from "@/components/ui/context-menu"
 import { Loupe } from "@/components/Loupe"
 import { Button } from "@/components/ui/button"
-import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty"
-import { Kbd } from "@/components/ui/kbd"
+import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
 import { Progress } from "@/components/ui/progress"
 import { Slider } from "@/components/ui/slider"
 
@@ -35,49 +39,63 @@ const PAD = 12
 const FOOTER = 30
 
 export function PhotosView() {
-  const { folder, loading, loupe, captionPanel } = useStore(
-    useShallow((s) => ({ folder: s.folder, loading: s.loading, loupe: s.loupe, captionPanel: s.captionPanel })),
+  const { folder, loading, librarySection } = useStore(
+    useShallow((s) => ({ folder: s.folder, loading: s.loading, librarySection: s.librarySection })),
   )
-
-  if (!folder) {
-    return (
-      <Empty className="h-full">
-        <EmptyHeader>
-          <EmptyMedia variant="icon">
-            <Images />
-          </EmptyMedia>
-          <EmptyTitle>{loading ? "Opening…" : "No shoot open"}</EmptyTitle>
-          <EmptyDescription>
-            Deadlyne reads the previews already inside your RAW files, so even thousand-frame shoots open instantly.
-          </EmptyDescription>
-        </EmptyHeader>
-        <EmptyContent>
-          <Button onClick={openFolderDialog}>
-            <FolderOpen data-icon="inline-start" />
-            Open a shoot <Kbd className="ml-1 bg-black/20 text-primary-foreground">{mod}O</Kbd>
-          </Button>
-        </EmptyContent>
-      </Empty>
-    )
-  }
+  useRecheckDocs()
 
   return (
     <div className="flex h-full">
-      <div className="flex min-w-0 flex-1 flex-col">
-        <div className="relative min-h-0 flex-1">
-          <Grid />
-          {loupe && <Loupe />}
+      <Sidebar />
+      {librarySection || !folder ? (
+        loading ? (
+          <Empty className="h-full flex-1">
+            <EmptyHeader>
+              <EmptyTitle>Opening…</EmptyTitle>
+              <EmptyDescription>Deadlyne reads the previews already inside your RAW files, so even thousand-frame shoots open instantly.</EmptyDescription>
+            </EmptyHeader>
+          </Empty>
+        ) : (
+          <LibraryView section={librarySection ?? { kind: "all" }} />
+        )
+      ) : (
+        <FolderPane />
+      )}
+    </div>
+  )
+}
+
+/** The open folder: its bar, then photos, subfolders or documents, plus the right inspector. */
+function FolderPane() {
+  const { loupe, captionPanel, folderTab, selectedDoc } = useStore(
+    useShallow((s) => ({ loupe: s.loupe, captionPanel: s.captionPanel, folderTab: s.folderTab, selectedDoc: s.selectedDoc })),
+  )
+  return (
+    <div className="flex min-w-0 flex-1 flex-col">
+      <FolderBar />
+      <div className="flex min-h-0 flex-1">
+        <div className="flex min-w-0 flex-1 flex-col">
+          {/* The contact sheet stays mounted, so switching tabs keeps its scroll position. */}
+          <div className="flex min-h-0 flex-1 flex-col" hidden={folderTab !== "photos"}>
+            <div className="relative min-h-0 flex-1">
+              <Grid />
+              {loupe && <Loupe />}
+            </div>
+            <StatusBar />
+          </div>
+          {folderTab === "folders" && <SubfoldersView />}
+          {folderTab === "documents" && <DocumentsView />}
         </div>
-        <StatusBar />
+        {folderTab === "photos" && captionPanel && <CaptionPanel />}
+        {folderTab === "documents" && selectedDoc && <DocumentInspector />}
       </div>
-      {captionPanel && <CaptionPanel />}
     </div>
   )
 }
 
 function Grid() {
-  const { thumbSize, selected, focus, detailsReady } = useStore(
-    useShallow((s) => ({ thumbSize: s.thumbSize, selected: s.selected, focus: s.focus, detailsReady: s.detailsReady })),
+  const { thumbSize, selected, focus, detailsReady, resumeMarker } = useStore(
+    useShallow((s) => ({ thumbSize: s.thumbSize, selected: s.selected, focus: s.focus, detailsReady: s.detailsReady, resumeMarker: s.resumeMarker })),
   )
   const list = useVisiblePhotos()
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -110,11 +128,17 @@ function Grid() {
   })
   useEffect(() => virtualizer.measure(), [rowHeight, virtualizer])
 
-  // Keep the focused photo on screen as the keyboard moves it.
+  // Keep the focused photo on screen as the keyboard moves it; Continue reviewing centers it.
   const focusIndex = useMemo(() => list.findIndex((p) => p.id === focus), [list, focus])
   useEffect(() => {
-    if (focusIndex >= 0) virtualizer.scrollToIndex(Math.floor(focusIndex / columns), { align: "auto" })
-  }, [focusIndex, columns, virtualizer])
+    if (focusIndex >= 0) virtualizer.scrollToIndex(Math.floor(focusIndex / columns), { align: resumeMarker ? "center" : "auto" })
+  }, [focusIndex, columns, virtualizer, resumeMarker])
+
+  // Review tracking: thumbnails that stay on screen long enough count as viewed.
+  const tracker = useViewTracker(scrollRef)
+  useEffect(() => {
+    if (scrollRef.current) tracker.scan(scrollRef.current)
+  })
 
   // ⌘/Ctrl + scroll or pinch resizes thumbnails.
   useEffect(() => {
@@ -164,6 +188,7 @@ function Grid() {
                   width={cellWidth}
                   selected={selected.has(p.id)}
                   focused={p.id === focus}
+                  resume={p.id === resumeMarker}
                   onPointerDown={(e) => {
                     if (e.button !== 0) return
                     click(p.id, { shift: e.shiftKey, toggle: e.metaKey || e.ctrlKey })
@@ -194,6 +219,8 @@ interface CardProps extends Omit<React.HTMLAttributes<HTMLDivElement>, "onPointe
   width: number
   selected: boolean
   focused: boolean
+  /** Continue reviewing landed here: a brief marker, never a lasting change to the card. */
+  resume?: boolean
   onPointerDown: (e: React.PointerEvent) => void
   onOpen: () => void
   onToggleTag: () => void
@@ -277,12 +304,13 @@ function PhotoMenu({ photo, selected, children }: { photo: Photo; selected: bool
   )
 }
 
-const PhotoCard = memo(function PhotoCard({ photo: p, width, selected, focused, onPointerDown, onOpen, onToggleTag, onRate, ref, className, style, ...rest }: CardProps) {
+const PhotoCard = memo(function PhotoCard({ photo: p, width, selected, focused, resume, onPointerDown, onOpen, onToggleTag, onRate, ref, className, style, ...rest }: CardProps) {
   const [failed, setFailed] = useState(false)
   return (
     <div
       {...rest}
       ref={ref}
+      data-view-key={photoKey(p)}
       className={cn(
         "group/card relative flex shrink-0 flex-col overflow-hidden rounded-md bg-card shadow-edge",
         selected && "bg-accent ring-2 ring-(--workspace-photos)",
@@ -312,6 +340,7 @@ const PhotoCard = memo(function PhotoCard({ photo: p, width, selected, focused, 
             onError={() => setFailed(true)}
           />
         )}
+        {resume && <ResumeMarker />}
       </div>
       <div className="flex h-[30px] shrink-0 items-center gap-1 px-1.5 text-xs">
         <Button
@@ -341,6 +370,20 @@ const PhotoCard = memo(function PhotoCard({ photo: p, width, selected, focused, 
   )
 })
 
+/** "Resume here": a soft orange glow and a label that fade out on their own. */
+function ResumeMarker() {
+  return (
+    <div
+      className="pointer-events-none absolute inset-0 animate-[resume-marker_6s_ease-out_forwards] rounded-t-md shadow-[inset_0_0_0_2px_var(--primary),inset_0_0_24px_oklch(0.65_0.24_35/0.45)] motion-reduce:animate-none"
+      aria-hidden
+    >
+      <span className="absolute top-2 left-2 flex items-center gap-1 rounded-full bg-primary px-2 py-0.5 text-[11px] font-semibold text-primary-foreground shadow-sm">
+        <Play className="size-2.5 fill-current" /> Resume here
+      </span>
+    </div>
+  )
+}
+
 function Stars({ rating, onRate }: { rating: number; onRate: (n: number) => void }) {
   return (
     <div className="flex" onPointerDown={(e) => e.stopPropagation()}>
@@ -364,8 +407,9 @@ function Stars({ rating, onRate }: { rating: number; onRate: (n: number) => void
 }
 
 function StatusBar() {
-  const { photos, focus, selectedCount, detailsReady, thumbSize, setThumbSize, busy } = useStore(
+  const { photos, focus, selectedCount, detailsReady, thumbSize, setThumbSize, busy, unviewedOnly } = useStore(
     useShallow((s) => ({
+      unviewedOnly: s.unviewedOnly,
       busy: s.busy,
       photos: s.photos,
       focus: s.focus,
@@ -392,6 +436,21 @@ function StatusBar() {
   return (
     <footer className="flex h-7 shrink-0 items-center gap-4 border-t bg-bar px-3 text-xs text-muted-foreground">
       <span className="min-w-0 flex-1 truncate">{left}</span>
+      {unviewedOnly && (
+        <span className="flex shrink-0 items-center gap-1 rounded-full bg-primary/15 py-0.5 pr-0.5 pl-2 text-[11px] text-foreground">
+          <Eye className="size-3 text-primary" /> Unviewed only
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            static
+            className="size-4 rounded-full"
+            aria-label="Show viewed photos too"
+            onClick={() => useStore.getState().setUnviewedOnly(false)}
+          >
+            <X className="size-3" />
+          </Button>
+        </span>
+      )}
       <Slider
         aria-label="Thumbnail size"
         min={THUMB_MIN}

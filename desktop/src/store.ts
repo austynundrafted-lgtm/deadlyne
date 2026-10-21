@@ -1,5 +1,6 @@
 // App state. One store, plain actions; components select only what they render.
 import { useMemo } from "react"
+import { invoke } from "@tauri-apps/api/core"
 import { create } from "zustand"
 import { useShallow } from "zustand/react/shallow"
 import { toast } from "sonner"
@@ -27,16 +28,32 @@ import {
 } from "@/lib/api"
 import { fetchRemoteProfile, pushRemoteProfile } from "@/lib/auth"
 import { expandCodes } from "@/lib/codes"
+import { docsInfo, folderContents, samePath, useLibrary, type DocEntry, type LibrarySection, type SubFolder } from "@/lib/library"
 import { noteRecentShoot } from "@/lib/recents"
 import { DEFAULT_COPYRIGHT, getSetting, pref, setPref, setSetting, type Profile } from "@/lib/settings"
 import { expandVariables } from "@/lib/variables"
+import { photoKey, useViewing } from "@/lib/viewing"
 
 export type Workspace = "home" | "photos" | "codes"
 export type TagFilter = "all" | "tagged" | "untagged"
+/** What an open folder shows: its photos (the contact sheet), its subfolders or its documents. */
+export type FolderTab = "photos" | "folders" | "documents"
+
+/** A document in the open folder: a file in the folder itself, or one linked from elsewhere. */
+export type FolderDoc = DocEntry & { linkId?: string }
 
 interface State {
   workspace: Workspace
+  /** A library list (All shoots, a collection…) shown instead of the open folder; null shows the folder. */
+  librarySection: LibrarySection | null
+  /** Where the open folder was reached from, for the breadcrumb. */
+  origin: LibrarySection
+  folderTab: FolderTab
   folder: string | null
+  subfolders: SubFolder[]
+  documents: FolderDoc[]
+  /** The document shown in the inspector. */
+  selectedDoc: string | null
   photos: Photo[]
   loading: boolean
   detailsReady: boolean
@@ -46,6 +63,11 @@ interface State {
   labelFilter: Label | null
   search: string
   fileScope: FileScope
+  /** Show unviewed only. The viewed set is snapshotted when it's turned on, so photos don't vanish while you look. */
+  unviewedOnly: boolean
+  unviewedSnapshot: Set<string> | null
+  /** "Continue reviewing" landed here: the grid briefly marks this photo. */
+  resumeMarker: string | null
 
   selected: Set<string>
   anchor: string | null
@@ -71,7 +93,14 @@ interface State {
   captionFocusRequest: number
 
   setWorkspace: (w: Workspace) => void
-  openFolder: (path: string) => Promise<void>
+  showSection: (section: LibrarySection) => void
+  setFolderTab: (tab: FolderTab) => void
+  openFolder: (path: string, opts?: { origin?: LibrarySection; tab?: FolderTab }) => Promise<void>
+  /** Re-reads the open folder's subfolders and documents (after adding files, a new folder…). */
+  refreshContents: () => Promise<void>
+  selectDoc: (path: string | null) => void
+  setUnviewedOnly: (on: boolean) => void
+  showResume: (id: string) => void
   setFilter: (f: Partial<Pick<State, "tagFilter" | "minRating" | "labelFilter" | "search" | "fileScope">>) => void
   clearFilters: () => void
   click: (id: string, opts: { shift?: boolean; toggle?: boolean }) => void
@@ -104,13 +133,15 @@ interface State {
 export const THUMB_MIN = 140
 export const THUMB_MAX = 420
 
-type FilterState = Pick<State, "photos" | "tagFilter" | "minRating" | "labelFilter" | "search" | "fileScope">
+type FilterState = Pick<State, "photos" | "tagFilter" | "minRating" | "labelFilter" | "search" | "fileScope" | "unviewedSnapshot">
 
 export function visiblePhotos(s: FilterState): Photo[] {
   const q = s.search.trim().toLowerCase()
-  if (s.tagFilter === "all" && s.minRating === 0 && !s.labelFilter && !q && s.fileScope === "both") return s.photos
+  const seen = s.unviewedSnapshot
+  if (s.tagFilter === "all" && s.minRating === 0 && !s.labelFilter && !q && s.fileScope === "both" && !seen) return s.photos
   return s.photos.filter(
     (p) =>
+      (!seen || !seen.has(photoKey(p))) &&
       (s.tagFilter === "all" || p.tagged === (s.tagFilter === "tagged")) &&
       p.rating >= s.minRating &&
       (!s.labelFilter || p.label === s.labelFilter) &&
@@ -122,9 +153,12 @@ export function visiblePhotos(s: FilterState): Photo[] {
 /** The photos the grid shows right now (filters, search and file type applied). */
 export function useVisiblePhotos(): Photo[] {
   const f = useStore(
-    useShallow((s) => ({ photos: s.photos, tagFilter: s.tagFilter, minRating: s.minRating, labelFilter: s.labelFilter, search: s.search, fileScope: s.fileScope })),
+    useShallow((s) => ({
+      photos: s.photos, tagFilter: s.tagFilter, minRating: s.minRating, labelFilter: s.labelFilter, search: s.search, fileScope: s.fileScope,
+      unviewedSnapshot: s.unviewedSnapshot,
+    })),
   )
-  return useMemo(() => visiblePhotos(f), [f.photos, f.tagFilter, f.minRating, f.labelFilter, f.search, f.fileScope]) // eslint-disable-line react-hooks/exhaustive-deps
+  return useMemo(() => visiblePhotos(f), [f.photos, f.tagFilter, f.minRating, f.labelFilter, f.search, f.fileScope, f.unviewedSnapshot]) // eslint-disable-line react-hooks/exhaustive-deps
 }
 
 function matchesSearch(p: Photo, q: string) {
@@ -163,10 +197,31 @@ function updatePhotos(get: () => State, set: (p: Partial<State>) => void, ids: S
 }
 
 let openGeneration = 0
+let resumeTimer: ReturnType<typeof setTimeout> | undefined
+
+/** The folder's own documents plus the ones linked to it, sorted by name. */
+async function readContents(folder: string): Promise<{ subfolders: SubFolder[]; documents: FolderDoc[] }> {
+  const links = useLibrary.getState().links.filter((l) => samePath(l.folder, folder))
+  const [contents, linked] = await Promise.all([
+    folderContents(folder).catch(() => ({ subfolders: [], documents: [] })),
+    links.length ? docsInfo(links.map((l) => l.path)) : Promise.resolve([]),
+  ])
+  const documents: FolderDoc[] = [
+    ...contents.documents,
+    ...linked.map((d, i) => ({ ...d, linkId: links[i].id })),
+  ].sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" }))
+  return { subfolders: contents.subfolders, documents }
+}
 
 export const useStore = create<State>((set, get) => ({
   workspace: "home",
+  librarySection: { kind: "all" },
+  origin: { kind: "all" },
+  folderTab: "photos",
   folder: null,
+  subfolders: [],
+  documents: [],
+  selectedDoc: null,
   photos: [],
   loading: false,
   detailsReady: false,
@@ -175,6 +230,9 @@ export const useStore = create<State>((set, get) => ({
   labelFilter: null,
   search: "",
   fileScope: pref<FileScope>("fileScope", "both"),
+  unviewedOnly: false,
+  unviewedSnapshot: null,
+  resumeMarker: null,
   selected: new Set(),
   anchor: null,
   focus: null,
@@ -193,20 +251,32 @@ export const useStore = create<State>((set, get) => ({
 
   setWorkspace: (workspace) => set({ workspace, loupe: workspace === "photos" ? get().loupe : false }),
 
-  openFolder: async (path) => {
+  showSection: (section) => set({ workspace: "photos", librarySection: section, loupe: false, zoom: null }),
+  setFolderTab: (folderTab) => set({ folderTab, librarySection: null, loupe: folderTab === "photos" ? get().loupe : false, selectedDoc: null }),
+
+  openFolder: async (path, opts) => {
     const gen = ++openGeneration
-    set({ loading: true, workspace: "photos", loupe: false })
+    const reopening = !!get().folder && samePath(get().folder!, path)
+    set({ loading: true, workspace: "photos", loupe: false, librarySection: null, ...(opts?.origin ? { origin: opts.origin } : {}) })
     try {
-      const { folder, photos: entries } = await scanFolder(path)
+      const [{ folder, photos: entries }] = await Promise.all([scanFolder(path), useViewing.getState().load(path.replace(/[\\/]+$/, ""))])
       if (gen !== openGeneration) return
       const photos: Photo[] = entries.map((e) => ({ ...e, rating: 0, label: null, tagged: false, captions: emptyCaptions() }))
       const first = photos[0]?.id ?? null
+      const contents = await readContents(folder)
+      if (gen !== openGeneration) return
+      if (useViewing.getState().folder !== folder) await useViewing.getState().load(folder)
       set({
         folder, photos, loading: false, detailsReady: false,
         selected: new Set(first ? [first] : []), anchor: first, focus: first, pristine: true,
         tagFilter: "all", minRating: 0, labelFilter: null, search: "",
+        unviewedOnly: false, unviewedSnapshot: null, resumeMarker: null,
+        ...contents,
+        selectedDoc: null,
+        folderTab: opts?.tab ?? (reopening ? get().folderTab : !photos.length && contents.subfolders.length ? "folders" : "photos"),
       })
       noteRecentShoot(folder, photos.length)
+      useLibrary.getState().noteOpened(folder)
       recordFolderOpened(folder, photos.length).then(notifyBadges)
 
       // Capture times, camera info, existing ratings and captions arrive a moment later.
@@ -236,15 +306,38 @@ export const useStore = create<State>((set, get) => ({
     }
   },
 
+  refreshContents: async () => {
+    const folder = get().folder
+    if (!folder) return
+    const contents = await readContents(folder)
+    if (get().folder !== folder) return
+    const selectedDoc = contents.documents.some((d) => d.path === get().selectedDoc) ? get().selectedDoc : null
+    set({ ...contents, selectedDoc })
+    useLibrary.getState().refreshStats([folder])
+  },
+
+  selectDoc: (selectedDoc) => set({ selectedDoc }),
+
+  setUnviewedOnly: (on) => set({ unviewedOnly: on, unviewedSnapshot: on ? new Set(useViewing.getState().viewed) : null }),
+
+  showResume: (id) => {
+    clearTimeout(resumeTimer)
+    set({
+      workspace: "photos", librarySection: null, folderTab: "photos", loupe: false, zoom: null,
+      selected: new Set([id]), anchor: id, focus: id, pristine: false, resumeMarker: id,
+    })
+    resumeTimer = setTimeout(() => set({ resumeMarker: null }), 6000)
+  },
+
   setFilter: (f) => {
     if (f.fileScope) setPref("fileScope", f.fileScope)
     set(f)
   },
-  clearFilters: () => set({ tagFilter: "all", minRating: 0, labelFilter: null, search: "" }),
+  clearFilters: () => set({ tagFilter: "all", minRating: 0, labelFilter: null, search: "", unviewedOnly: false, unviewedSnapshot: null }),
 
   click: (id, { shift, toggle }) => {
     const s = get()
-    set({ pristine: false })
+    set({ pristine: false, resumeMarker: null })
     if (shift && s.anchor) {
       const list = visiblePhotos(s)
       const a = list.findIndex((p) => p.id === s.anchor)
@@ -272,7 +365,7 @@ export const useStore = create<State>((set, get) => ({
 
   move: (delta, extend) => {
     const s = get()
-    set({ pristine: false })
+    set({ pristine: false, resumeMarker: null })
     const list = visiblePhotos(s)
     if (!list.length) return
     const i = Math.max(0, list.findIndex((p) => p.id === s.focus))
@@ -401,6 +494,13 @@ export const useStore = create<State>((set, get) => ({
     set({ busy: `${moveFiles ? "Moving" : "Copying"} ${photos.length} photo${photos.length === 1 ? "" : "s"}…` })
     try {
       const r = await transferPhotos(photos, fileScope, destination, moveFiles)
+      // Moved photos stay viewed in their new folder.
+      if (moveFiles && fileScope === "both" && r.completed.length && folder) {
+        const done = new Set(r.completed)
+        invoke("viewing_transfer", { from: folder, to: destination, keys: photos.filter((p) => done.has(p.id)).map(photoKey) })
+          .catch(() => {})
+          .finally(() => useLibrary.getState().refreshStats())
+      }
       if (moveFiles && fileScope !== "both") {
         await get().openFolder(folder!) // one half of each pair stays: re-read the folder
       } else if (moveFiles && r.completed.length) {

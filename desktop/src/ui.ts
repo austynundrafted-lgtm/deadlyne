@@ -18,9 +18,12 @@ interface UIState {
   sendWhich: "tagged" | "selected"
   /** What the export dialog starts with. */
   exportWhich: "tagged" | "selected"
+  /** Files waiting for "copy in or link?" before they join a folder. */
+  addFiles: { folder: string; paths: string[] } | null
   open: (d: Dialog, on?: boolean) => void
   openSend: (which: "tagged" | "selected") => void
   openExport: (which: "tagged" | "selected") => void
+  openAddFiles: (folder: string, paths: string[]) => void
 }
 
 export const useUI = create<UIState>((set) => ({
@@ -34,6 +37,7 @@ export const useUI = create<UIState>((set) => ({
   export: false,
   sendWhich: "tagged",
   exportWhich: "tagged",
+  addFiles: null,
   open: (d, on = true) => set({ [d]: on } as Partial<UIState>),
   openSend: (sendWhich) => {
     // Leave any caption field first, so its edit is saved before the files go out.
@@ -44,4 +48,5 @@ export const useUI = create<UIState>((set) => ({
     ;(document.activeElement as HTMLElement | null)?.blur()
     set({ export: true, exportWhich })
   },
+  openAddFiles: (folder, paths) => set({ addFiles: { folder, paths } }),
 }))
