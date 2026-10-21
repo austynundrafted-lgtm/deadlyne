@@ -2,7 +2,7 @@
 // JPEG when it's decoded, and pre-loads the neighbours so flipping is instant. Click or Z zooms
 // to 100% at that point to check focus; drag or scroll pans, and another click fits it again.
 import { useEffect, useLayoutEffect, useRef, useState } from "react"
-import { Check, FastForward, Star, X, ZoomIn } from "lucide-react"
+import { Check, ChevronLeft, ChevronRight, FastForward, Star, X, ZoomIn } from "lucide-react"
 import { useShallow } from "zustand/react/shallow"
 import { previewUrl, thumbUrl } from "@/lib/api"
 import { isIPad, labelColor, mod, orientationTransform } from "@/lib/format"
@@ -32,6 +32,8 @@ export function Loupe() {
   const zoomed = useRef<{ w: number; h: number } | null>(null)
   /** `swipe`: a finger on the fitted photo, which flips photos or, if it doesn't move, zooms there. */
   const drag = useRef<{ x: number; y: number; center: Point | null; wasZoomed: boolean; swipe?: boolean } | null>(null)
+  /** On iPad a single tap does nothing and a double tap zooms, like Photos; this is the first tap. */
+  const lastTap = useRef<{ t: number; x: number; y: number } | null>(null)
   useLayoutEffect(() => {
     const el = boxRef.current
     if (!el) return
@@ -132,7 +134,9 @@ export function Loupe() {
       setZoom(center)
     }
     drag.current = { x: e.clientX, y: e.clientY, center, wasZoomed: !!zoom }
-    e.currentTarget.setPointerCapture(e.pointerId)
+    // A mouse needs capture to keep panning past the edge. On iPad touches stay with the photo
+    // anyway, and capturing there swallows the pointerup that a double tap needs.
+    if (!isIPad) e.currentTarget.setPointerCapture(e.pointerId)
   }
 
   const onPointerMove = (e: React.PointerEvent) => {
@@ -142,19 +146,37 @@ export function Loupe() {
     setZoom(clampCenter({ x: d.center.x - (e.clientX - d.x) / z.w, y: d.center.y - (e.clientY - d.y) / z.h }))
   }
 
+  /** True when this tap is the second of a double tap. */
+  const isDoubleTap = (e: React.PointerEvent) => {
+    const prev = lastTap.current
+    const now = { t: e.timeStamp, x: e.clientX, y: e.clientY }
+    const double = !!prev && now.t - prev.t < 350 && Math.hypot(now.x - prev.x, now.y - prev.y) < 40
+    lastTap.current = double ? null : now
+    return double
+  }
+
   const onPointerUp = (e: React.PointerEvent) => {
     const d = drag.current
     drag.current = null
     if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId)
-    if (d?.swipe) {
-      const dx = e.clientX - d.x
-      const dy = e.clientY - d.y
-      if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5) useStore.getState().move(dx < 0 ? 1 : -1)
-      else if (Math.hypot(dx, dy) < 8) setZoom(pointAt(e.clientX, e.clientY))
+    if (!d) return
+    const dx = e.clientX - d.x
+    const dy = e.clientY - d.y
+    if (d.swipe && Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5) {
+      lastTap.current = null
+      useStore.getState().move(dx < 0 ? 1 : -1)
+      return
+    }
+    if (isIPad) {
+      if (Math.hypot(dx, dy) < 8 && isDoubleTap(e)) setZoom(zoom ? null : pointAt(e.clientX, e.clientY))
+      return
+    }
+    if (d.swipe) {
+      if (Math.hypot(dx, dy) < 8) setZoom(pointAt(e.clientX, e.clientY))
       return
     }
     // A click (not a drag) on a zoomed photo fits it again.
-    if (d?.wasZoomed && Math.hypot(e.clientX - d.x, e.clientY - d.y) < 3) setZoom(null)
+    if (d.wasZoomed && Math.hypot(dx, dy) < 3) setZoom(null)
   }
 
   const onWheel = (e: React.WheelEvent) => {
@@ -175,7 +197,9 @@ export function Loupe() {
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         onPointerCancel={() => (drag.current = null)}
-        onLostPointerCapture={() => (drag.current = null)}
+        // Only when the box itself lets go: the photo inside fires this too (it bubbles) as its
+        // implicit touch capture moves to the box, which would end every pan before it starts.
+        onLostPointerCapture={(e) => e.target === e.currentTarget && (drag.current = null)}
         onWheel={onWheel}
       >
         <img
@@ -199,16 +223,17 @@ export function Loupe() {
       </div>
 
       <div className="flex h-10 shrink-0 items-center gap-3 border-t bg-bar px-3 text-xs">
-        <span className="font-medium">{photo.name}</span>
-        <span className="text-muted-foreground tabular-nums">
+        <span className="min-w-0 truncate font-medium">{photo.name}</span>
+        <span className="shrink-0 whitespace-nowrap text-muted-foreground tabular-nums">
           {index + 1} / {list.length.toLocaleString()}
         </span>
-        {photo.tagged && (
+        {/* On iPad the tag and star buttons show these already. */}
+        {photo.tagged && !isIPad && (
           <Badge className="bg-(--workspace-photos) text-black">
             <Check /> Tagged
           </Badge>
         )}
-        {photo.rating > 0 && (
+        {photo.rating > 0 && !isIPad && (
           <span className="flex">
             {Array.from({ length: photo.rating }, (_, i) => (
               <Star key={i} className="size-3.5 fill-(--workspace-photos) text-(--workspace-photos)" />
@@ -222,10 +247,14 @@ export function Loupe() {
           </Badge>
         )}
         <span className="flex-1" />
-        <span className="hidden items-center gap-1 text-muted-foreground lg:flex">
-          <Kbd>←</Kbd>
-          <Kbd>→</Kbd> flip · <Kbd>T</Kbd> tag · <Kbd>1–5</Kbd> rate · <Kbd>Esc</Kbd> grid
-        </span>
+        {isIPad ? (
+          <TouchControls tagged={photo.tagged} rating={photo.rating} />
+        ) : (
+          <span className="hidden items-center gap-1 text-muted-foreground lg:flex">
+            <Kbd>←</Kbd>
+            <Kbd>→</Kbd> flip · <Kbd>T</Kbd> tag · <Kbd>1–5</Kbd> rate · <Kbd>Esc</Kbd> grid
+          </span>
+        )}
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
@@ -260,5 +289,44 @@ export function Loupe() {
         </Tooltip>
       </div>
     </div>
+  )
+}
+
+/** iPad has no keyboard, so the loupe's shortcuts become buttons: flip, tag and rate. */
+function TouchControls({ tagged, rating }: { tagged: boolean; rating: number }) {
+  const { move, cull } = useStore(useShallow((s) => ({ move: s.move, cull: s.cull })))
+  return (
+    <span className="flex items-center gap-1">
+      <Button variant="ghost" size="icon-sm" static aria-label="Previous photo" onClick={() => move(-1)}>
+        <ChevronLeft />
+      </Button>
+      <Button variant="ghost" size="icon-sm" static aria-label="Next photo" onClick={() => move(1)}>
+        <ChevronRight />
+      </Button>
+      <Button
+        variant="ghost"
+        size="sm"
+        static
+        aria-pressed={tagged}
+        className={cn(tagged ? "bg-(--workspace-photos) text-black hover:bg-(--workspace-photos)/80 hover:text-black" : "text-muted-foreground")}
+        onClick={() => cull(() => ({ tagged: !tagged }))}
+      >
+        <Check data-icon="inline-start" /> {tagged ? "Tagged" : "Tag"}
+      </Button>
+      <span className="flex">
+        {[1, 2, 3, 4, 5].map((n) => (
+          <Button
+            key={n}
+            variant="ghost"
+            size="icon-sm"
+            static
+            aria-label={`${n} star${n > 1 ? "s" : ""}`}
+            onClick={() => cull(() => ({ rating: n === rating ? 0 : n }))}
+          >
+            <Star className={cn(n <= rating ? "fill-(--workspace-photos) text-(--workspace-photos)" : "text-muted-foreground/50")} />
+          </Button>
+        ))}
+      </span>
+    </span>
   )
 }
