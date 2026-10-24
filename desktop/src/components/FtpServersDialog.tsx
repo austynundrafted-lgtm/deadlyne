@@ -1,7 +1,7 @@
 // FTP servers: a newsroom, a wire service, a client's drop box. Saved once, picked when sending.
 import { useEffect, useState } from "react"
 import { CircleCheck, CircleX, Loader2, Plus, Server } from "lucide-react"
-import { isMac } from "@/lib/format"
+import { isIPad, isMac } from "@/lib/format"
 import { describeServer, hasPassword, IF_EXISTS, newServer, PROTOCOLS, testServer, useFtp, type FtpServer } from "@/lib/ftp"
 import { cn } from "@/lib/utils"
 import { useUI } from "@/ui"
@@ -15,7 +15,7 @@ import { Item, ItemActions, ItemContent, ItemDescription, ItemGroup, ItemMedia, 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
 
-const keychainName = isMac ? "your Keychain" : "Windows Credential Manager"
+const keychainName = isMac || isIPad ? "your Keychain" : "Windows Credential Manager"
 
 export function FtpServersDialog() {
   const open = useUI((s) => s.ftpServers)

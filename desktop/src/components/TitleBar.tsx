@@ -4,7 +4,7 @@ import { Filter, FolderOpen, FolderOutput, House, Images, MessageSquareText, Mor
 import { useShallow } from "zustand/react/shallow"
 import logo from "@/assets/logo.png"
 import { FILE_SCOPES, LABELS, type FileScope } from "@/lib/api"
-import { isMac, labelColor, mod } from "@/lib/format"
+import { isMac, labelColor, mod, openLabel, revealLabel, trashAction } from "@/lib/format"
 import { cn } from "@/lib/utils"
 import { useStore, type Workspace } from "@/store"
 import { Badge } from "@/components/ui/badge"
@@ -275,17 +275,17 @@ function PhotoActions() {
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem onSelect={revealTarget}>
-          Show in {isMac ? "Finder" : "Explorer"} <DropdownMenuShortcut>⇧{mod}R</DropdownMenuShortcut>
+          {revealLabel} <DropdownMenuShortcut>⇧{mod}R</DropdownMenuShortcut>
         </DropdownMenuItem>
         <DropdownMenuItem onSelect={openTargets}>
-          Open in default app <DropdownMenuShortcut>{mod}E</DropdownMenuShortcut>
+          {openLabel} <DropdownMenuShortcut>{mod}E</DropdownMenuShortcut>
         </DropdownMenuItem>
         <DropdownMenuItem onSelect={() => useUI.getState().open("shortcuts")}>
           Keyboard shortcuts <DropdownMenuShortcut>?</DropdownMenuShortcut>
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem variant="destructive" onSelect={askTrash}>
-          Move to Trash… <DropdownMenuShortcut>{mod}⌫</DropdownMenuShortcut>
+          {trashAction}… <DropdownMenuShortcut>{mod}⌫</DropdownMenuShortcut>
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

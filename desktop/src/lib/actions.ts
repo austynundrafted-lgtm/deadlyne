@@ -1,13 +1,13 @@
 // Actions shared by buttons, menus, keyboard shortcuts and drag-and-drop.
-import { open } from "@tauri-apps/plugin-dialog"
 import { toast } from "sonner"
 import { FILE_SCOPES, openFiles, primaryFile, reveal } from "@/lib/api"
+import { pickFolder } from "@/lib/platform"
 import { targetPhotos, useStore } from "@/store"
 import { useUI } from "@/ui"
 
 export async function openFolderDialog() {
-  const path = await open({ directory: true, multiple: false, title: "Open a shoot" })
-  if (typeof path === "string") await useStore.getState().openFolder(path)
+  const path = await pickFolder("Open a shoot")
+  if (path) await useStore.getState().openFolder(path)
 }
 
 /** Copy or move the tagged photos (or the selection) to a folder the user picks. */
@@ -19,11 +19,8 @@ export async function copyOrMove(which: "tagged" | "selected", moveFiles: boolea
     return
   }
   const scope = FILE_SCOPES.find((f) => f.value === s.fileScope)!.label
-  const destination = await open({
-    directory: true,
-    title: `${moveFiles ? "Move" : "Copy"} ${photos.length} ${which} photo${photos.length === 1 ? "" : "s"} (${scope}) to…`,
-  })
-  if (typeof destination === "string") await s.transfer(photos, destination, moveFiles)
+  const destination = await pickFolder(`${moveFiles ? "Move" : "Copy"} ${photos.length} ${which} photo${photos.length === 1 ? "" : "s"} (${scope}) to…`)
+  if (destination) await s.transfer(photos, destination, moveFiles)
 }
 
 /**

@@ -92,7 +92,8 @@ pub async fn transfer_photos(app: AppHandle, items: Vec<Item>, destination: Stri
 }
 
 /// Moves one file or folder to the Trash / Recycle Bin (recoverable).
-pub fn move_to_trash(path: &Path) -> Result<(), trash::Error> {
+#[cfg(not(target_os = "ios"))]
+pub fn move_to_trash(path: &Path) -> Result<(), String> {
     #[allow(unused_mut)]
     let mut ctx = trash::TrashContext::default();
     // Finder's AppleScript route needs an automation permission and fails silently without it.
@@ -101,7 +102,17 @@ pub fn move_to_trash(path: &Path) -> Result<(), trash::Error> {
         use trash::macos::{DeleteMethod, TrashContextExtMacos};
         ctx.set_delete_method(DeleteMethod::NsFileManager);
     }
-    ctx.delete(path)
+    ctx.delete(path).map_err(|e| e.to_string())
+}
+
+/// On iPad: Files' Recently Deleted, through the same Foundation call Finder uses. Never deletes outright.
+#[cfg(target_os = "ios")]
+pub fn move_to_trash(path: &Path) -> Result<(), String> {
+    use objc2_foundation::{NSFileManager, NSString, NSURL};
+    let url = NSURL::fileURLWithPath(&NSString::from_str(&path.to_string_lossy()));
+    NSFileManager::defaultManager()
+        .trashItemAtURL_resultingItemURL_error(&url, None)
+        .map_err(|e| e.localizedDescription().to_string())
 }
 
 /// Moves files to the Trash / Recycle Bin — never deletes permanently.

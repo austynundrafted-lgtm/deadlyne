@@ -2,9 +2,9 @@
 // middle, and the delimiter plus a place to try codes on the right. Every edit saves itself.
 import { useEffect, useMemo, useRef, useState } from "react"
 import { invoke } from "@tauri-apps/api/core"
-import { open as openDialog } from "@tauri-apps/plugin-dialog"
 import { FileText, FolderOpen, Import, MoreHorizontal, Plus, Search, Table2, Trash2, TextCursorInput } from "lucide-react"
 import { toast } from "sonner"
+import { pickFiles } from "@/lib/platform"
 import { useShallow } from "zustand/react/shallow"
 import { reveal } from "@/lib/api"
 import { DELIMITERS, expandLive, resolve, useCodes, type CodeList } from "@/lib/codes"
@@ -88,8 +88,8 @@ export function CodesView() {
             variant="ghost"
             size="sm"
             onClick={async () => {
-              const picked = await openDialog({ multiple: true, title: "Import rosters", filters: [{ name: "Rosters", extensions: ["txt", "csv", "tsv", "tab"] }] })
-              if (picked) importFiles(Array.isArray(picked) ? picked : [picked])
+              const picked = await pickFiles("Import rosters", { extensions: ["txt", "csv", "tsv", "tab"] })
+              if (picked.length) importFiles(picked)
             }}
           >
             <Import data-icon="inline-start" /> Import…

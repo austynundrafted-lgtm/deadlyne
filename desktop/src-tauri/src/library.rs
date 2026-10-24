@@ -563,7 +563,7 @@ pub async fn rename_path(path: String, new_name: String) -> Result<String, Strin
 /// Moves a document or folder to the Trash / Recycle Bin (recoverable, never deleted outright).
 #[tauri::command]
 pub async fn trash_path(path: String) -> Result<(), String> {
-    jobs::serial(move || fileops::move_to_trash(Path::new(&path)).map_err(|e| e.to_string())).await
+    jobs::serial(move || fileops::move_to_trash(Path::new(&path))).await
 }
 
 /// Quick Look on macOS (like pressing Space in Finder); the default app elsewhere.

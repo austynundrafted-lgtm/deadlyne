@@ -2,11 +2,11 @@
 // cards, the folder bar and their menus. Disk operations are always explicit and named for what
 // they do ("Rename on disk", "Move to Trash"); everything else only changes the library.
 import { invoke } from "@tauri-apps/api/core"
-import { open } from "@tauri-apps/plugin-dialog"
 import { toast } from "sonner"
 import { create } from "zustand"
 import { openFiles, reveal } from "@/lib/api"
-import { isMac, plural } from "@/lib/format"
+import { plural, trashName } from "@/lib/format"
+import { pickFiles as choose, pickFolder, preview } from "@/lib/platform"
 import {
   baseName,
   folderContents,
@@ -18,7 +18,7 @@ import {
   type LibrarySection,
   type SubFolder,
 } from "@/lib/library"
-import { forgetRecentShoot } from "@/lib/recents"
+import { forgetRecentShoot, relocateRecentShoots } from "@/lib/recents"
 import { continueReviewing, useViewing } from "@/lib/viewing"
 import { useStore, type FolderDoc } from "@/store"
 import { useUI } from "@/ui"
@@ -113,12 +113,18 @@ export function removeFromLibrary(path: string) {
   })
 }
 
+/** A folder now lives somewhere else: its review progress, library entries and recents follow it. */
+export async function followMovedFolder(from: string, to: string) {
+  await invoke("viewing_relocate", { from, to }).catch(() => {})
+  useLibrary.getState().relocate(from, to)
+  await relocateRecentShoots(from, to)
+}
+
 /** For a shoot whose folder was moved or renamed outside Deadlyne: point it at the new place. */
 export async function locateFolder(path: string) {
-  const picked = await open({ directory: true, title: `Where is “${baseName(path)}” now?` })
-  if (typeof picked !== "string") return
-  await invoke("viewing_relocate", { from: path, to: picked })
-  useLibrary.getState().relocate(path, picked)
+  const picked = await pickFolder(`Where is “${baseName(path)}” now?`)
+  if (!picked) return
+  await followMovedFolder(path, picked)
   toast.success(`Found “${baseName(picked)}”`, { description: "Its collections and review progress came along." })
 }
 
@@ -176,8 +182,8 @@ export async function renameOnDisk(path: string) {
 
 export async function trashFolder(path: string) {
   const ok = await confirm({
-    title: `Move “${baseName(path)}” to the Trash?`,
-    description: `The folder and everything in it go to the ${isMac ? "Trash" : "Recycle Bin"}. You can put it back from there.`,
+    title: `Move “${baseName(path)}” to ${trashName}?`,
+    description: `The folder and everything in it go to ${trashName}. You can put it back from there.`,
     action: "Move to Trash",
     destructive: true,
   })
@@ -197,15 +203,14 @@ export async function trashFolder(path: string) {
     else s.showSection(s.origin)
   }
   refreshAround(path)
-  toast.success(`Moved “${baseName(path)}” to the ${isMac ? "Trash" : "Recycle Bin"}`)
+  toast.success(`Moved “${baseName(path)}” to ${trashName}`)
 }
 
 // MARK: - Documents
 
 /** Lets the photographer pick files, then asks whether to copy them in or link them. */
 export async function pickFiles(folder: string) {
-  const picked = await open({ multiple: true, directory: false, title: `Add files to “${folderTitle(folder)}”` })
-  const paths = Array.isArray(picked) ? picked : typeof picked === "string" ? [picked] : []
+  const paths = await choose(`Add files to “${folderTitle(folder)}”`)
   if (paths.length) useUI.getState().openAddFiles(folder, paths)
 }
 
@@ -232,7 +237,7 @@ export async function addFiles(folder: string, paths: string[], mode: "copy" | "
 
 export function quickLook(doc: FolderDoc) {
   if (!doc.exists) return
-  invoke("quick_look", { path: doc.path }).catch((e) => toast.error("Couldn’t preview it", { description: String(e) }))
+  preview(doc.path).catch((e) => toast.error("Couldn’t preview it", { description: String(e) }))
 }
 
 export function openDoc(doc: FolderDoc) {
@@ -256,8 +261,8 @@ export async function renameDoc(doc: FolderDoc) {
 }
 
 export async function moveDoc(doc: FolderDoc) {
-  const destination = await open({ directory: true, title: `Move “${doc.name}” to…` })
-  if (typeof destination !== "string") return
+  const destination = await pickFolder(`Move “${doc.name}” to…`)
+  if (!destination) return
   if (doc.linkId) {
     // A link moves to another folder in the library; the file itself stays put.
     useLibrary.getState().unlinkDocument(doc.linkId)
@@ -280,8 +285,8 @@ export async function removeDoc(doc: FolderDoc) {
     return
   }
   const ok = await confirm({
-    title: `Move “${doc.name}” to the Trash?`,
-    description: `It’s a file inside this shoot folder. You can put it back from the ${isMac ? "Trash" : "Recycle Bin"}.`,
+    title: `Move “${doc.name}” to ${trashName}?`,
+    description: `It’s a file inside this shoot folder. You can put it back from ${trashName}.`,
     action: "Move to Trash",
     destructive: true,
   })
@@ -297,8 +302,8 @@ export async function removeDoc(doc: FolderDoc) {
 /** A linked document that moved: point the link at the file's new place. */
 export async function relinkDoc(doc: FolderDoc) {
   if (!doc.linkId) return
-  const picked = await open({ multiple: false, directory: false, title: `Where is “${doc.name}” now?` })
-  if (typeof picked !== "string") return
+  const [picked] = await choose(`Where is “${doc.name}” now?`, { multiple: false })
+  if (!picked) return
   useLibrary.getState().relinkDocument(doc.linkId, picked)
   await useStore.getState().refreshContents()
   useStore.setState({ selectedDoc: picked })

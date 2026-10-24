@@ -8,10 +8,12 @@ import { FILE_SCOPES } from "@/lib/api"
 import { useCodes } from "@/lib/codes"
 import { useDnd } from "@/lib/dnd"
 import { folderTitle, useLibrary } from "@/lib/library"
+import { followMovedFolder } from "@/lib/folders"
+import { restoreAccess } from "@/lib/platform"
 import { initViewing } from "@/lib/viewing"
 import { initExport } from "@/lib/export"
 import { initFtp } from "@/lib/ftp"
-import { plural } from "@/lib/format"
+import { isIPad, plural, trashAction, trashName } from "@/lib/format"
 import { useHotkeys } from "@/lib/hotkeys"
 import { checkForUpdates } from "@/lib/updates"
 import { loadSettings, targetPhotos, useStore } from "@/store"
@@ -61,13 +63,17 @@ export default function App() {
 
   useEffect(() => {
     loadSettings()
-    useLibrary.getState().load()
+    // On iPad, reopen the folders picked in Files before anything reads them; follow any that moved.
+    restoreAccess().then(async (moved) => {
+      await useLibrary.getState().load()
+      for (const [from, to] of moved) await followMovedFolder(from, to)
+    })
     initViewing()
     useCodes.getState().load()
     initIngest()
     initFtp()
     initExport()
-    checkForUpdates({ quiet: true })
+    if (!isIPad) checkForUpdates({ quiet: true })
     invoke<string | null>("launch_folder").then((path) => {
       if (path) useStore.getState().openFolder(path)
     })
@@ -156,18 +162,18 @@ function ConfirmTrash() {
     <AlertDialog open={open} onOpenChange={(o) => useUI.getState().open("confirmTrash", o)}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Move {plural(targets.length, "photo")} to the Trash?</AlertDialogTitle>
+          <AlertDialogTitle>Move {plural(targets.length, "photo")} to {trashName}?</AlertDialogTitle>
           <AlertDialogDescription>
             {fileScope === "both"
-              ? "Their RAW, JPG and sidecar files go to the Trash."
+              ? `Their RAW, JPG and sidecar files go to ${trashName}.`
               : `Only the ${scope.replace(" only", "")} files go; the other half of each pair stays.`}{" "}
-            You can put them back from the Trash.
+            You can put them back from {trashName}.
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel>Cancel</AlertDialogCancel>
           <AlertDialogAction variant="destructive" onClick={() => trash(targets)}>
-            Move to Trash
+            {trashAction}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

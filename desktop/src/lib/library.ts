@@ -141,6 +141,7 @@ function persist(get: () => LibraryState) {
 }
 
 const newId = () => crypto.randomUUID()
+let loading: Promise<void> | null = null
 
 /** A collection and every collection nested inside it. */
 export function descendantIds(collections: Collection[], id: string): Set<string> {
@@ -164,6 +165,25 @@ export const useLibrary = create<LibraryState>((set, get) => {
     persist(get)
   }
 
+  async function loadOnce() {
+    const [shoots, collections, links] = await Promise.all([
+      file.get<LibraryShoot[]>("shoots"),
+      file.get<Collection[]>("collections"),
+      file.get<LinkedDoc[]>("links"),
+    ])
+    let list = shoots ?? []
+    // First run: the library starts with the recent shoots Home already knows.
+    if (!shoots) {
+      list = (await recentShoots()).map((r) => ({ path: r.path, addedAt: r.openedAt, openedAt: r.openedAt }))
+    }
+    // Anything noted before the file finished loading wins.
+    const early = get().shoots
+    const merged = [...early, ...list.filter((s) => !early.some((e) => samePath(e.path, s.path)))]
+    set({ loaded: true, shoots: merged, collections: collections ?? [], links: links ?? [] })
+    if (!shoots || early.length) persist(get)
+    get().refreshStats()
+  }
+
   return {
     loaded: false,
     shoots: [],
@@ -171,24 +191,8 @@ export const useLibrary = create<LibraryState>((set, get) => {
     links: [],
     stats: {},
 
-    load: async () => {
-      const [shoots, collections, links] = await Promise.all([
-        file.get<LibraryShoot[]>("shoots"),
-        file.get<Collection[]>("collections"),
-        file.get<LinkedDoc[]>("links"),
-      ])
-      let list = shoots ?? []
-      // First run: the library starts with the recent shoots Home already knows.
-      if (!shoots) {
-        list = (await recentShoots()).map((r) => ({ path: r.path, addedAt: r.openedAt, openedAt: r.openedAt }))
-      }
-      // Anything noted before the file finished loading wins.
-      const early = get().shoots
-      const merged = [...early, ...list.filter((s) => !early.some((e) => samePath(e.path, s.path)))]
-      set({ loaded: true, shoots: merged, collections: collections ?? [], links: links ?? [] })
-      if (!shoots || early.length) persist(get)
-      get().refreshStats()
-    },
+    // Once per launch: a second read would merge the stale file back over changes made since.
+    load: () => (loading ??= loadOnce()),
 
     noteOpened: (path) => {
       const now = Date.now()
