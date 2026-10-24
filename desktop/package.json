@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "release": "node scripts/release.mjs",
-    "test": "vitest run"
+    "test": "vitest run",
+    "app": "tauri dev --config src-tauri/tauri.dev.conf.json"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.116.0",

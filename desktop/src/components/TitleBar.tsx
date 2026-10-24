@@ -28,7 +28,6 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { askTrash, copyOrMove, openExport, openFolderDialog, openTargets, revealTarget } from "@/lib/actions"
 import { Input } from "@/components/ui/input"
 import { useUI } from "@/ui"
-import { shootName } from "@/lib/shootName"
 import { SendQueue } from "@/components/SendDialog"
 
 const WORKSPACES: { value: Workspace; label: string; icon: typeof House; key: string }[] = [
@@ -38,10 +37,12 @@ const WORKSPACES: { value: Workspace; label: string; icon: typeof House; key: st
 ]
 
 export function TitleBar() {
-  const { workspace, setWorkspace, folder } = useStore(
-    useShallow((s) => ({ workspace: s.workspace, setWorkspace: s.setWorkspace, folder: s.folder })),
+  const { workspace, setWorkspace, folder, librarySection, folderTab } = useStore(
+    useShallow((s) => ({ workspace: s.workspace, setWorkspace: s.setWorkspace, folder: s.folder, librarySection: s.librarySection, folderTab: s.folderTab })),
   )
-  const folderName = folder ? shootName(folder.split(/[\\/]/).filter(Boolean).pop() ?? folder).title : undefined
+  // The culling controls belong to the contact sheet; documents and subfolders only need search.
+  const inFolder = workspace === "photos" && !!folder && !librarySection
+  const culling = inFolder && folderTab === "photos"
 
   return (
     <header
@@ -76,17 +77,11 @@ export function TitleBar() {
         </TabsList>
       </Tabs>
 
-      <div data-tauri-drag-region className="flex min-w-0 flex-1 items-center justify-center">
-        {workspace === "photos" && folderName && (
-          <span data-tauri-drag-region className="truncate text-sm font-medium text-muted-foreground" title={folder!}>
-            {folderName}
-          </span>
-        )}
-      </div>
+      <div data-tauri-drag-region className="flex min-w-0 flex-1 items-center justify-center" />
 
-      {workspace === "photos" && folder && (
+      {inFolder && <PhotoSearch placeholder={culling ? "Search" : folderTab === "documents" ? "Search documents" : "Search folders"} />}
+      {culling && (
         <>
-          <PhotoSearch />
           <PhotoFilters />
           <ExportButton />
           <PhotoActions />
@@ -126,7 +121,8 @@ function PhotoFilters() {
     })),
   )
   const fileScope = useStore((s) => s.fileScope)
-  const extra = (minRating > 0 ? 1 : 0) + (labelFilter ? 1 : 0) + (fileScope !== "both" ? 1 : 0)
+  const unviewedOnly = useStore((s) => s.unviewedOnly)
+  const extra = (minRating > 0 ? 1 : 0) + (labelFilter ? 1 : 0) + (fileScope !== "both" ? 1 : 0) + (unviewedOnly ? 1 : 0)
 
   return (
     <div className="flex items-center gap-1">
@@ -175,6 +171,12 @@ function PhotoFilters() {
             ))}
           </DropdownMenuRadioGroup>
           <DropdownMenuSeparator />
+          <DropdownMenuLabel>Review</DropdownMenuLabel>
+          <DropdownMenuCheckboxItem checked={unviewedOnly} onCheckedChange={(v) => useStore.getState().setUnviewedOnly(v === true)}>
+            Show unviewed only
+            <DropdownMenuShortcut>⌥{mod}U</DropdownMenuShortcut>
+          </DropdownMenuCheckboxItem>
+          <DropdownMenuSeparator />
           <DropdownMenuLabel>Files</DropdownMenuLabel>
           <DropdownMenuRadioGroup value={fileScope} onValueChange={(v) => setFilter({ fileScope: v as FileScope })}>
             {FILE_SCOPES.map((f, i) => (
@@ -196,8 +198,8 @@ function PhotoFilters() {
   )
 }
 
-/** Searches file names, captions and keywords. ⌘F focuses it. */
-function PhotoSearch() {
+/** Searches file names, captions and keywords (or document and folder names). ⌘F focuses it. */
+function PhotoSearch({ placeholder }: { placeholder: string }) {
   const { search, setFilter } = useStore(useShallow((s) => ({ search: s.search, setFilter: s.setFilter })))
   return (
     <div className="relative w-44 shrink">
@@ -209,7 +211,7 @@ function PhotoSearch() {
         onKeyDown={(e) => {
           if (e.key === "Escape" || e.key === "Enter") e.currentTarget.blur()
         }}
-        placeholder={`Search  ${mod}F`}
+        placeholder={`${placeholder}  ${mod}F`}
         className="h-7 pl-7 text-sm"
         aria-label="Search file names, captions and keywords"
       />

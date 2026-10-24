@@ -10,6 +10,13 @@ The original native Mac app (Swift/AppKit) still lives at the repo root and keep
 - **Home:**
   - Ingest a card (⇧⌘I) or open a shoot (⌘O, or drop a folder on the window).
   - Recent shoots with readable names, a live ingest progress bar, this month's photos and the next badge.
+- **Library and folders:**
+  - A collapsible sidebar beside Photos (⌥⌘S, or the icon rail in narrow windows): All shoots, Recent, Favorites, Pinned, Collections, the shoot folders with their real subfolders, and the Archive. Arrow keys move through it; right-click for everything else.
+  - Collections, pins, favorites and the archive are virtual: they never move or rename files. Drag a shoot onto a collection, Favorites or Archive. Renaming a folder on disk, making a new folder (⇧⌘N) and Move to Trash are separate, explicit actions.
+  - Shoots show as folders in a grid or a list with photo and document counts. A folder that was moved or unplugged shows as missing, with Locate… to point at its new place.
+  - **Documents:** add shot lists, briefs, rosters and other files to a shoot with Add files or by dropping them on the window. Choose to copy them into the shoot folder (nothing is replaced; a taken name gets `-1`) or link them where they are. They live under Documents, apart from the photos, with Quick Look (Space), open in the default app, rename, move and remove, and a details panel in the caption panel's place.
+  - **Review progress:** a photo counts as viewed once its thumbnail has been at least half on screen for a second while Deadlyne is active, or when it's opened in the loupe; scrolling past doesn't count. Each folder remembers its viewed photos by file name, so sorting and filters never lose them; deleted photos drop out and new ones start unviewed. A parent folder adds up the folders inside it. Progress shows on folder cards, list rows, the sidebar, the folder bar and Home's recent shoots, and is separate from tags, ratings and captions.
+  - **Continue reviewing (⌥⌘R)** goes back to the photo you were last reviewing (or the first unviewed one if it's gone) and marks it briefly. **Show unviewed only** (⌥⌘U) is in the Filter menu and the progress popover; Reset viewing progress… asks first.
 - **Photos:**
   - An instant contact sheet for thousands of RAW+JPEG files, with pairing and capture-time order.
   - Search (⌘F) across file names, captions and keywords.
@@ -66,6 +73,8 @@ npm run tauri dev
 
 Without `.env.local`, development builds offer "Continue without signing in". Release builds never do, and the release workflow refuses to build without the `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY` repository variables.
 
+To see your edits live, run `npm run app`. It opens **Deadlyne Dev**, a separate app (its own settings, recents and library, so it never disturbs the installed Deadlyne) that reloads the interface as soon as you save a file in `src/` and rebuilds when Rust in `src-tauri/` changes. The installed Deadlyne only changes when a new release is published and it updates itself.
+
 Other useful commands:
 - `npm run tauri build`: a release build and installers for the current OS.
 - `npx tauri build --debug --bundles app`: a quick Mac .app for testing.
@@ -96,6 +105,12 @@ desktop/
     components/CaptionPanel.tsx, CodesView.tsx, IngestDialog.tsx, BadgesDialog.tsx, ProfileDialog.tsx
     components/TitleBar.tsx workspace tabs + filters (sits in the macOS title bar)
     components/HomeView.tsx, PhotosView.tsx, Loupe.tsx
+    lib/library.ts          the library: shoots, collections, pins, archive, linked documents (library.json)
+    lib/viewing.ts          review progress: the dwell tracker, batching, Continue reviewing
+    lib/folders.ts          folder, collection and document actions shared by menus and buttons
+    lib/dnd.ts              pointer drag and drop inside the library
+    components/Sidebar.tsx, LibraryView.tsx, FolderView.tsx, LibraryMenus.tsx
+    components/FolderIcon.tsx, ViewProgress.tsx, AddFilesDialog.tsx, Prompts.tsx
     components/ui/          shadcn/ui components (add more with `npx shadcn@latest add <name>`)
   src-tauri/                Rust
     src/raw.rs              embedded-JPEG extraction: CR3, RAF, TIFF-based RAWs (CR2/NEF/ARW/DNG…)
@@ -111,6 +126,7 @@ desktop/
     src/export.rs           export: copy, rename, resize JPGs keeping their metadata
     src/ftp.rs              FTP/FTPS sending with retries; passwords in the system keychain
     src/achievements.rs     badges and photo/shoot counting
+    src/library.rs          review progress records, folder stats, documents, new/rename/trash folder
     src/jobs.rs             background threads; one lock for all file writes
     src/images.rs           thumb:// and preview:// URL schemes + thumbnail cache
     tauri.conf.json         window, bundle, updater config

@@ -120,6 +120,12 @@
   to { translate: 250%; }
 }
 
+/* Continue reviewing's marker: visible at once, then fades away so the card looks normal again. */
+@keyframes resume-marker {
+  0%, 60% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
 /* A desktop app, not a web page: no text selection or rubber-banding outside inputs. */
 html, body, #root {
   height: 100%;
