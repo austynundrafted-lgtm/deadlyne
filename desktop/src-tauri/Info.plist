@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Merged into the bundle's Info.plist by Tauri. Finder's "Open With", folders dropped on the Dock
+     icon and memory-card access come from here. Keep the RAW list the same as folder.rs. -->
+<plist version="1.0">
+<dict>
+    <key>NSRemovableVolumesUsageDescription</key>
+    <string>Deadlyne reads your memory card to ingest its photos.</string>
+    <key>CFBundleDocumentTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleTypeName</key>
+            <string>Shoot folder</string>
+            <key>CFBundleTypeRole</key>
+            <string>Viewer</string>
+            <key>LSHandlerRank</key>
+            <string>Alternate</string>
+            <key>LSItemContentTypes</key>
+            <array>
+                <string>public.folder</string>
+            </array>
+        </dict>
+        <dict>
+            <key>CFBundleTypeName</key>
+            <string>Photo</string>
+            <key>CFBundleTypeRole</key>
+            <string>Viewer</string>
+            <key>LSHandlerRank</key>
+            <string>Alternate</string>
+            <key>LSItemContentTypes</key>
+            <array>
+                <string>public.jpeg</string>
+                <string>public.camera-raw-image</string>
+                <string>com.adobe.raw-image</string>
+            </array>
+            <key>CFBundleTypeExtensions</key>
+            <array>
+                <string>cr2</string>
+                <string>cr3</string>
+                <string>crw</string>
+                <string>nef</string>
+                <string>nrw</string>
+                <string>arw</string>
+                <string>srf</string>
+                <string>sr2</string>
+                <string>dng</string>
+                <string>raf</string>
+                <string>orf</string>
+                <string>rw2</string>
+                <string>pef</string>
+                <string>srw</string>
+                <string>3fr</string>
+                <string>iiq</string>
+                <string>erf</string>
+                <string>kdc</string>
+                <string>mos</string>
+                <string>mrw</string>
+                <string>x3f</string>
+                <string>rwl</string>
+                <string>gpr</string>
+                <string>jpg</string>
+                <string>jpeg</string>
+                <string>jpe</string>
+            </array>
+        </dict>
+    </array>
+</dict>
+</plist>

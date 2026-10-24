@@ -57,6 +57,11 @@ The original native Mac app (Swift/AppKit) still lives at the repo root and keep
 - **Badges:** photos and shoots milestones with the same ids as the Mac app. On a Mac, progress is imported from the Swift app the first time.
 - **Profile:** name, credit line and copyright (`{year}` becomes each photo's capture year), kept on this computer.
 - **Updates:** checked at launch and from Home → Check for updates.
+- **On a Mac, it behaves like a Mac app:**
+  - A real menu bar: File, Edit, Caption, Cull, View, Window and Help, with every command and its key, enabled only when it applies. Settings… is ⌘, and Check for Updates… is in the Deadlyne menu; Open Recent lists the recent shoots.
+  - Finder's Open With and the Dock icon open shoots: drop a folder (or a photo) on the icon, or right-click one in Finder. A photo opens its folder with that photo in focus.
+  - The window comes back where it was left.
+  - An ingest, export or send shows its progress on the Dock icon. If you're in another app when it finishes, a notification says so and the Dock icon bounces.
 
 Tests: `npm test` covers the code replacement engine and shoot names. `cd src-tauri && cargo test` covers sidecars, Lightroom-sidecar safety, JPG embedding, roster parsing, ingest naming and export resizing. Ignored tests exercise real files (see the comments in `jpeg_meta.rs`, `xmp.rs`, `ingest.rs` and `export.rs`) and real servers: `ftp_sends_renames_and_skips` against a local test server, `ftps_connects` against any FTPS server (see the comments in `ftp.rs`).
 
@@ -93,7 +98,7 @@ What's different on iPad:
 Other useful commands:
 - `npm run tauri build`: a release build and installers for the current OS.
 - `npx tauri build --debug --bundles app`: a quick Mac .app for testing.
-- `open src-tauri/target/debug/bundle/macos/Deadlyne.app --args /path/to/shoot`: opens straight into a folder.
+- `open src-tauri/target/debug/bundle/macos/Deadlyne.app --args /path/to/shoot` (or `open -a <that .app> /path/to/shoot`, the way Finder does it): opens straight into a folder.
 - `cd src-tauri && cargo test`: Rust tests (XMP sidecar compatibility).
 - `DEADLYNE_SAMPLE=/path/to/shoot cargo test --release bench -- --nocapture`: a **read-only** speed benchmark on a real folder.
 
@@ -102,10 +107,13 @@ Other useful commands:
 ```
 desktop/
   src/                      React interface
-    App.tsx                 window shell, drag-and-drop, launch folder, update check
+    App.tsx                 window shell, drag-and-drop, update check
     store.ts                all app state + actions (zustand)
     lib/api.ts              typed calls into Rust + thumb/preview image URLs
+    lib/commands.ts         every command by id: what the menu bar, the keys and the toolbar run
     lib/hotkeys.ts          keyboard shortcuts (same keys as the Mac app)
+    lib/menu.ts             the macOS menu bar: enabled/checked state, Open Recent, running what it picks
+    lib/opening.ts          shoots opened from Finder, the Dock or the command line
     lib/recents.ts          recent shoots (Tauri store plugin)
     lib/updates.ts          self-update flow
     lib/codes.ts            code replacement engine + lookup file state
@@ -144,7 +152,9 @@ desktop/
     src/library.rs          review progress records, folder stats, documents, new/rename/trash folder
     src/jobs.rs             background threads; one lock for all file writes
     src/images.rs           thumb:// and preview:// URL schemes + thumbnail cache
+    src/native.rs           macOS menu bar, Finder/Dock opening, Dock progress, notifications
     tauri.conf.json         window, bundle, updater config
+    Info.plist              merged into the Mac bundle: folder and photo document types, memory-card text
   supabase/                 accounts backend: migrations (profiles table + row level security) and setup guide
 ```
 

@@ -95,7 +95,8 @@ interface State {
   setWorkspace: (w: Workspace) => void
   showSection: (section: LibrarySection) => void
   setFolderTab: (tab: FolderTab) => void
-  openFolder: (path: string, opts?: { origin?: LibrarySection; tab?: FolderTab }) => Promise<void>
+  /** `select`: a file in the folder (RAW or JPG) whose photo should be in focus, instead of the first frame. */
+  openFolder: (path: string, opts?: { origin?: LibrarySection; tab?: FolderTab; select?: string }) => Promise<void>
   /** Re-reads the open folder's subfolders and documents (after adding files, a new folder…). */
   refreshContents: () => Promise<void>
   selectDoc: (path: string | null) => void
@@ -262,13 +263,14 @@ export const useStore = create<State>((set, get) => ({
       const [{ folder, photos: entries }] = await Promise.all([scanFolder(path), useViewing.getState().load(path.replace(/[\\/]+$/, ""))])
       if (gen !== openGeneration) return
       const photos: Photo[] = entries.map((e) => ({ ...e, rating: 0, label: null, tagged: false, captions: emptyCaptions() }))
-      const first = photos[0]?.id ?? null
+      const wanted = opts?.select ? (photos.find((p) => p.id === opts.select || p.raw === opts.select || p.jpeg === opts.select)?.id ?? null) : null
+      const first = wanted ?? photos[0]?.id ?? null
       const contents = await readContents(folder)
       if (gen !== openGeneration) return
       if (useViewing.getState().folder !== folder) await useViewing.getState().load(folder)
       set({
         folder, photos, loading: false, detailsReady: false,
-        selected: new Set(first ? [first] : []), anchor: first, focus: first, pristine: true,
+        selected: new Set(first ? [first] : []), anchor: first, focus: first, pristine: !wanted,
         tagFilter: "all", minRating: 0, labelFilter: null, search: "",
         unviewedOnly: false, unviewedSnapshot: null, resumeMarker: null,
         ...contents,
