@@ -332,6 +332,7 @@ pub fn ftp_send(app: AppHandle, job: SendJob) -> Result<(), String> {
         let id = job.id.clone();
         let summary = match password_for(&job.server, None) {
             Ok(password) => run(&job, &password, |p| {
+                crate::native::progress(&app, p.bytes_done, p.bytes_total);
                 let _ = app.emit("ftp-progress", p);
             }),
             Err(e) => Summary { job_id: id.clone(), errors: vec![e], ..Default::default() },
@@ -339,7 +340,18 @@ pub fn ftp_send(app: AppHandle, job: SendJob) -> Result<(), String> {
         if let Some(set) = CANCELLED.lock().unwrap_or_else(|e| e.into_inner()).as_mut() {
             set.remove(&id);
         }
+        let note = (!summary.cancelled).then(|| {
+            let mut note = format!("Sent {} to {}", crate::native::count(summary.sent, "photo"), job.server.host);
+            if !summary.errors.is_empty() {
+                note.push_str(&format!(", {}", crate::native::count(summary.errors.len(), "error")));
+            }
+            note
+        });
         let _ = app.emit("ftp-done", summary);
+        match note {
+            Some(note) => crate::native::finished(&app, "Send finished", &note),
+            None => crate::native::progress_done(&app),
+        }
     });
     Ok(())
 }

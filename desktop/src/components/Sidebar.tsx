@@ -83,6 +83,9 @@ function usePrefs() {
   return [state, update] as const
 }
 
+/** Whether the sidebar is collapsed to the rail (the menu's "Show Sidebar" / "Hide Sidebar"). */
+export const isSidebarRail = () => prefs.rail
+
 export function toggleSidebar() {
   prefs = { ...prefs, rail: !prefs.rail }
   setPref("sidebar", prefs)

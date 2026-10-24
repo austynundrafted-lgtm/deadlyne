@@ -1,26 +1,13 @@
 // Keyboard shortcuts — the same keys as the Mac app, so muscle memory carries over.
 // ⌘ on macOS is Ctrl on Windows. Shortcuts with ⌥ use `e.code`, since ⌥ changes the typed character.
+// On macOS the menu bar shows the same keys (src-tauri/src/native.rs): a key handled here never
+// reaches the menu, and one left alone (while typing, say) falls through to it.
 import { useEffect } from "react"
-import { LABELS, type Label } from "@/lib/api"
-import { toast } from "sonner"
-import { askTrash, copyOrMove, openExport, openFolderDialog, openTargets, revealTarget } from "@/lib/actions"
-import { newFolder } from "@/lib/folders"
-import { continueReviewing } from "@/lib/viewing"
-import { toggleSidebar } from "@/components/Sidebar"
-import { targetPhotos, useStore, visiblePhotos } from "@/store"
-import { useUI } from "@/ui"
+import { commands } from "@/lib/commands"
+import { useStore, visiblePhotos } from "@/store"
 
 /** 6 red, 7 yellow, 8 green, 9 blue (Lightroom / Bridge convention). */
-const LABEL_KEYS: Record<string, Label> = { "6": LABELS[0], "7": LABELS[1], "8": LABELS[2], "9": LABELS[3] }
-
-function focusSearch() {
-  useStore.getState().setWorkspace("photos")
-  requestAnimationFrame(() => {
-    const el = document.getElementById("photo-search") as HTMLInputElement | null
-    el?.focus()
-    el?.select()
-  })
-}
+const LABEL_KEYS: Record<string, string> = { "6": "label:0", "7": "label:1", "8": "label:2", "9": "label:3" }
 
 export function useHotkeys() {
   useEffect(() => {
@@ -31,7 +18,6 @@ export function useHotkeys() {
       const typing = !!target.closest("input, textarea, select, [contenteditable=true]")
       if (target.closest("[role=menu], [role=dialog], [role=alertdialog], [role=listbox]")) return
       const s = useStore.getState()
-      const ui = useUI.getState()
       const cmd = e.metaKey || e.ctrlKey
       const key = e.key.toLowerCase()
       const inFolder = s.workspace === "photos" && !!s.folder && !s.librarySection
@@ -40,80 +26,59 @@ export function useHotkeys() {
 
       // These work everywhere, even while typing in a field.
       if (cmd && !e.altKey && !e.shiftKey) {
-        if (key === "o") return run(e, openFolderDialog)
-        if (key === "1") return run(e, () => s.setWorkspace("home"))
-        if (key === "2") return run(e, () => s.setWorkspace("photos"))
-        if (key === "3") return run(e, () => s.setWorkspace("codes"))
-        if (key === "f") return run(e, focusSearch)
-        if (key === "i" && s.folder) return run(e, () => s.setCaptionPanel(!s.captionPanel))
+        if (key === "o") return run(e, commands.open)
+        if (key === "1") return run(e, commands["workspace:home"])
+        if (key === "2") return run(e, commands["workspace:photos"])
+        if (key === "3") return run(e, commands["workspace:codes"])
+        if (key === "f") return run(e, commands.find)
+        if (key === "i" && s.folder) return run(e, commands["caption-panel"])
       }
-      if (cmd && e.shiftKey && e.code === "KeyI") return run(e, () => ui.open("ingest"))
-      if (cmd && e.altKey && e.code === "KeyS" && s.workspace === "photos") return run(e, toggleSidebar)
-      if (cmd && e.shiftKey && e.code === "KeyN" && inFolder) return run(e, () => newFolder(s.folder!))
+      if (cmd && e.shiftKey && e.code === "KeyI") return run(e, commands.ingest)
+      if (cmd && e.altKey && e.code === "KeyS" && s.workspace === "photos") return run(e, commands.sidebar)
+      if (cmd && e.shiftKey && e.code === "KeyN" && inFolder) return run(e, commands["new-folder"])
       // The sidebar tree and folder lists move with the arrows themselves.
       if (typing || target.closest("[role=tree], [data-card], [data-doc]")) return
 
-      if (cmd && e.key === "Enter" && photos) return run(e, s.focusCaption)
-      if (e.key === "?" && !cmd) return run(e, () => ui.open("shortcuts"))
+      if (cmd && e.key === "Enter" && photos) return run(e, commands["edit-caption"])
+      if (e.key === "?" && !cmd) return run(e, commands.shortcuts)
       if (!photos) return
 
       if (cmd && e.altKey) {
-        if (e.code === "Digit1") return run(e, () => s.setFilter({ tagFilter: "all" }))
-        if (e.code === "Digit2") return run(e, () => s.setFilter({ tagFilter: "tagged" }))
-        if (e.code === "Digit3") return run(e, () => s.setFilter({ tagFilter: "untagged" }))
-        if (e.code === "Digit4") return run(e, () => s.setFilter({ fileScope: "both" }))
-        if (e.code === "Digit5") return run(e, () => s.setFilter({ fileScope: "raw" }))
-        if (e.code === "Digit6") return run(e, () => s.setFilter({ fileScope: "jpeg" }))
-        if (e.code === "KeyC") return run(e, s.copyCaptions)
-        if (e.code === "KeyV") return run(e, s.pasteCaptions)
-        if (e.code === "KeyP") return run(e, () => s.fillCredits() || ui.open("profile"))
-        if (e.code === "KeyR") return run(e, continueReviewing)
-        if (e.code === "KeyU") return run(e, () => s.setUnviewedOnly(!s.unviewedOnly))
+        if (e.code === "Digit1") return run(e, commands["filter:all"])
+        if (e.code === "Digit2") return run(e, commands["filter:tagged"])
+        if (e.code === "Digit3") return run(e, commands["filter:untagged"])
+        if (e.code === "Digit4") return run(e, commands["scope:both"])
+        if (e.code === "Digit5") return run(e, commands["scope:raw"])
+        if (e.code === "Digit6") return run(e, commands["scope:jpeg"])
+        if (e.code === "KeyC") return run(e, commands["copy-caption"])
+        if (e.code === "KeyV") return run(e, commands["paste-caption"])
+        if (e.code === "KeyP") return run(e, commands["fill-credits"])
+        if (e.code === "KeyR") return run(e, commands.continue)
+        if (e.code === "KeyU") return run(e, commands.unviewed)
       }
       if (cmd && e.shiftKey) {
-        if (e.code === "KeyC") return run(e, () => copyOrMove("tagged", false))
-        if (e.code === "KeyM") return run(e, () => copyOrMove("tagged", true))
-        if (e.code === "KeyT") return run(e, s.selectTagged)
-        if (e.code === "KeyU") return run(e, () => ui.openSend("tagged"))
-        if (e.code === "KeyE") return run(e, () => openExport())
-        if (e.code === "KeyR") return run(e, revealTarget)
-        if (e.code === "KeyA") {
-          return run(e, () => {
-            s.setAutoAdvance(!s.autoAdvance)
-            toast(s.autoAdvance ? "Auto-advance off" : "Auto-advance on", {
-              description: s.autoAdvance ? undefined : "In the loupe, the next photo comes up after you tag, rate or label.",
-            })
-          })
-        }
+        if (e.code === "KeyC") return run(e, commands["copy-tagged"])
+        if (e.code === "KeyM") return run(e, commands["move-tagged"])
+        if (e.code === "KeyT") return run(e, commands["select-tagged"])
+        if (e.code === "KeyU") return run(e, commands.send)
+        if (e.code === "KeyE") return run(e, commands.export)
+        if (e.code === "KeyR") return run(e, commands.reveal)
+        if (e.code === "KeyA") return run(e, commands["auto-advance"])
       }
-      if (cmd && (e.key === "Backspace" || e.key === "Delete")) return run(e, askTrash)
-      if (cmd && key === "a") return run(e, s.selectAll)
-      if (cmd && key === "d") return run(e, s.deselectAll)
-      if (cmd && key === "e") return run(e, openTargets)
-      if (cmd && (e.key === "=" || e.key === "+")) return run(e, () => s.setThumbSize(s.thumbSize * 1.15))
-      if (cmd && e.key === "-") return run(e, () => s.setThumbSize(s.thumbSize / 1.15))
+      if (cmd && (e.key === "Backspace" || e.key === "Delete")) return run(e, commands.trash)
+      if (cmd && key === "a") return run(e, commands["select-all"])
+      if (cmd && key === "d") return run(e, commands.deselect)
+      if (cmd && key === "e") return run(e, commands["open-default"])
+      if (cmd && (e.key === "=" || e.key === "+")) return run(e, commands["thumbs-bigger"])
+      if (cmd && e.key === "-") return run(e, commands["thumbs-smaller"])
       if (cmd || e.altKey) return
 
       // Culling
-      if (key === "t") {
-        const targets = targetPhotos(s)
-        return run(e, () => s.cull(() => ({ tagged: !targets.every((p) => p.tagged) })))
-      }
-      if (/^[0-5]$/.test(e.key)) return run(e, () => s.cull(() => ({ rating: Number(e.key) })))
-      if (LABEL_KEYS[e.key]) {
-        const label = LABEL_KEYS[e.key]
-        const targets = targetPhotos(s)
-        return run(e, () => s.cull(() => ({ label: targets.every((p) => p.label === label) ? null : label })))
-      }
-
+      if (key === "t") return run(e, commands.tag)
+      if (/^[0-5]$/.test(e.key)) return run(e, commands[`rate:${e.key}`])
+      if (LABEL_KEYS[e.key]) return run(e, commands[LABEL_KEYS[e.key]])
       // Z: 100% to check focus (opens the loupe if needed). Esc fits it again first.
-      if (key === "z") {
-        return run(e, () => {
-          if (!s.loupe) s.setLoupe(true)
-          const now = useStore.getState()
-          now.setZoom(now.zoom ? null : { x: 0.5, y: 0.5 })
-        })
-      }
+      if (key === "z") return run(e, commands.zoom)
 
       // Moving around
       const step = s.loupe ? 1 : s.columns
@@ -125,7 +90,7 @@ export function useHotkeys() {
         case "Home": return run(e, () => s.move(-Infinity))
         case "End": return run(e, () => s.move(visiblePhotos(s).length))
         case " ":
-        case "Enter": return run(e, () => s.setLoupe(!s.loupe))
+        case "Enter": return run(e, commands.loupe)
         case "Escape":
           escapeHandled = true
           if (s.zoom) return run(e, () => s.setZoom(null))

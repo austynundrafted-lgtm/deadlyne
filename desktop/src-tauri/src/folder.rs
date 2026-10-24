@@ -154,12 +154,6 @@ pub async fn scan_folder(path: String) -> Result<Shoot, String> {
     .map_err(|e| e.to_string())?
 }
 
-/// A folder passed on the command line (`Deadlyne /path/to/shoot`), opened at launch.
-#[tauri::command]
-pub fn launch_folder() -> Option<String> {
-    std::env::args().skip(1).find(|a| !a.starts_with('-') && Path::new(a).exists())
-}
-
 /// Capture metadata and sidecar culling for every photo, index-aligned with the request.
 #[tauri::command]
 pub async fn load_details(photos: Vec<DetailsRequest>) -> Vec<Details> {

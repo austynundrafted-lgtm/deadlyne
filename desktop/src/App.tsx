@@ -15,6 +15,8 @@ import { initExport } from "@/lib/export"
 import { initFtp } from "@/lib/ftp"
 import { isIPad, plural, trashAction, trashName } from "@/lib/format"
 import { useHotkeys } from "@/lib/hotkeys"
+import { initMenu } from "@/lib/menu"
+import { initOpening } from "@/lib/opening"
 import { checkForUpdates } from "@/lib/updates"
 import { loadSettings, targetPhotos, useStore } from "@/store"
 import { useUI } from "@/ui"
@@ -73,10 +75,10 @@ export default function App() {
     initIngest()
     initFtp()
     initExport()
+    initMenu()
     if (!isIPad) checkForUpdates({ quiet: true })
-    invoke<string | null>("launch_folder").then((path) => {
-      if (path) useStore.getState().openFolder(path)
-    })
+    // A shoot opened from Finder, the Dock or the command line comes up instead of Home.
+    initOpening()
     // Rosters edited in a text editor (or by the Mac app) show up when you come back, and so do folder changes.
     const unfocus = getCurrentWindow().onFocusChanged(({ payload: focused }) => {
       if (!focused) return

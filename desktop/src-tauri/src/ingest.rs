@@ -200,12 +200,30 @@ pub fn start_ingest(app: AppHandle, options: Options) -> Result<(), String> {
     CANCEL.store(false, Ordering::SeqCst);
     std::thread::spawn(move || {
         let summary = run(&options, |p| {
+            crate::native::progress(&app, p.bytes_done, p.bytes_total);
             let _ = app.emit("ingest-progress", p.clone());
         });
         RUNNING.store(false, Ordering::SeqCst);
+        let note = (!summary.cancelled).then(|| ingest_note(&summary));
         let _ = app.emit("ingest-done", summary);
+        match note {
+            Some(note) => crate::native::finished(&app, "Ingest finished", &note),
+            None => crate::native::progress_done(&app),
+        }
     });
     Ok(())
+}
+
+/// "Ingested 1,234 photos, 12 already there, 1 error", for the notification.
+fn ingest_note(s: &Summary) -> String {
+    let mut parts = vec![format!("Ingested {}", crate::native::count(s.copied, "photo"))];
+    if s.skipped > 0 {
+        parts.push(format!("{} already there", s.skipped));
+    }
+    if !s.errors.is_empty() {
+        parts.push(crate::native::count(s.errors.len(), "error"));
+    }
+    parts.join(", ")
 }
 
 pub fn run(o: &Options, mut emit: impl FnMut(&Progress)) -> Summary {

@@ -25,6 +25,8 @@ Read this before changing anything. It covers what the app is, who it's for, how
     - Show the selected item with a fill (`bg-accent`, or the workspace color at /15), never a stroke on one side.
     - Tailwind's base style caps `<img>` at `max-width: 100%`; set `maxWidth: "none"` on anything drawn larger than its box (the loupe at 100%).
 >   - Keep keyboard shortcuts the same as the Mac app.
+>   - Mac shell: `src-tauri/src/native.rs` builds the menu bar (macOS only) out of command ids that `src/lib/commands.ts` runs; `src/lib/menu.ts` keeps it enabled/checked and fills Open Recent. The interface still handles every key itself: a key it handles never reaches the menu, and one it leaves alone (while typing, say) falls through to the menu item. To add a ⌘ shortcut: the command in `commands.ts`, the key in `hotkeys.ts`, the item in `native.rs` with the same id, its rule in `Menus::apply` (plus any new `MenuState` field on both sides), and the row in `ShortcutsDialog.tsx`. Never give a bare culling key (T, 0–9, Space, Z) a menu accelerator: it would fire while typing a caption.
+>   - `src-tauri/Info.plist` is merged into the Mac bundle: document types for folders and photos (Finder's Open With, drops on the Dock icon) and the memory-card usage text. Paths opened from outside queue in `native::Opened`; `src/lib/opening.ts` drains them with `take_opened_paths`. Long jobs call `native::progress` while they run and `native::finished` when done (Dock progress; a notification only when the window isn't focused). The window-state plugin remembers the window frame.
 >   - Never commit `~/.tauri/deadlyne-updater.key`.
 
 ---

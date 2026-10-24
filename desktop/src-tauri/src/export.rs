@@ -70,7 +70,26 @@ pub fn export_cancel() {
 #[tauri::command]
 pub async fn export_photos(app: AppHandle, items: Vec<Item>, options: Options) -> Result<Summary, String> {
     CANCEL.store(false, Ordering::Relaxed);
-    jobs::blocking(move || run(&items, &options, |p| drop(app.emit("export-progress", p)))).await
+    let progress = app.clone();
+    let summary = jobs::blocking(move || {
+        run(&items, &options, |p| {
+            crate::native::progress(&progress, p.files_done as u64, p.files_total as u64);
+            drop(progress.emit("export-progress", p))
+        })
+    })
+    .await;
+    match &summary {
+        Ok(s) if !s.cancelled => {
+            let folder = std::path::Path::new(&s.folder).file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+            let mut note = format!("{} to {folder}", crate::native::count(s.files, "photo"));
+            if !s.errors.is_empty() {
+                note.push_str(&format!(", {}", crate::native::count(s.errors.len(), "error")));
+            }
+            crate::native::finished(&app, "Export finished", &note);
+        }
+        _ => crate::native::progress_done(&app),
+    }
+    summary
 }
 
 fn clean_name(s: &str) -> String {
