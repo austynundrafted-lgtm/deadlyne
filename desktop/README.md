@@ -1,4 +1,4 @@
-# Deadlyne desktop (macOS + Windows)
+# Deadlyne desktop (macOS first, with Windows and iPad support)
 
 The cross-platform version of Deadlyne, built with [Tauri 2](https://tauri.app). **Rust** does everything that touches files and must be fast. The interface is **React + Tailwind + shadcn/ui**. It installs from GitHub Releases and **updates itself**.
 
@@ -16,6 +16,7 @@ The original native Mac app (Swift/AppKit) still lives at the repo root and keep
   - Shoots show as folders in a grid or a list with photo and document counts. A folder that was moved or unplugged shows as missing, with Locate… to point at its new place.
   - **Documents:** add shot lists, briefs, rosters and other files to a shoot with Add files or by dropping them on the window. Choose to copy them into the shoot folder (nothing is replaced; a taken name gets `-1`) or link them where they are. They live under Documents, apart from the photos, with Quick Look (Space), open in the default app, rename, move and remove, and a details panel in the caption panel's place.
   - **Review progress:** a photo counts as viewed once its thumbnail has been at least half on screen for a second while Deadlyne is active, or when it's opened in the loupe; scrolling past doesn't count. Each folder remembers its viewed photos by file name, so sorting and filters never lose them; deleted photos drop out and new ones start unviewed. A parent folder adds up the folders inside it. Progress shows on folder cards, list rows, the sidebar, the folder bar and Home's recent shoots, and is separate from tags, ratings and captions.
+  - The open shoot's segmented progress bar stays in the folder toolbar. Its popover gives the exact viewed count, last-reviewed filename and controls without repeating the bar; long filenames truncate with the full name available on hover.
   - **Continue reviewing (⌥⌘R)** goes back to the photo you were last reviewing (or the first unviewed one if it's gone) and marks it briefly. **Show unviewed only** (⌥⌘U) is in the Filter menu and the progress popover; Reset viewing progress… asks first.
 - **Photos:**
   - An instant contact sheet for thousands of RAW+JPEG files, with pairing and capture-time order.
@@ -67,18 +68,26 @@ Tests: `npm test` covers the code replacement engine and shoot names. `cd src-ta
 
 ## Develop
 
-Requires Node 20+, Rust (`rustup`), and on Windows the WebView2 runtime (preinstalled on Windows 11).
+Requires Node 22.12+ (Node 26 was used for the recovery build), Rust (`rustup`), Xcode Command Line Tools on macOS, and on Windows the WebView2 runtime (preinstalled on Windows 11).
 
 ```bash
 cd desktop
-npm install
+npm ci
 cp .env.example .env.local   # then add your Supabase URL and publishable key
 npm run tauri dev
 ```
 
 Without `.env.local`, development builds offer "Continue without signing in". Release builds never do, and the release workflow refuses to build without the `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY` repository variables.
 
-To see your edits live, run `npm run app`. It opens **Deadlyne Dev**, a separate app (its own settings, recents and library, so it never disturbs the installed Deadlyne) that reloads the interface as soon as you save a file in `src/` and rebuilds when Rust in `src-tauri/` changes. The installed Deadlyne only changes when a new release is published and it updates itself.
+To see your edits live, run `npm run app`. It opens **Deadlyne Dev**, with its own Tauri settings, recents and library, and reloads the interface as soon as you save a file in `src/`. Rust edits rebuild the app. The Rust viewing records, achievements and code-replacement files are still shared with the installed app: use scratch photo copies for testing and remove only the scratch records afterward. The installed application bundle changes only when you replace it or install an update.
+
+### Local macOS rebuild and disk space
+
+Run `npm run build:mac` to build `src-tauri/target/release/bundle/macos/Deadlyne.app` from the lockfiles. This creates a standalone, ad-hoc-signed local app without updater distribution artifacts. It retains the production app identifier and sign-in behavior, so it uses the installed app's settings. Quit the installed app before running this copy. Public releases still use the normal release workflow and updater signing key.
+
+Keep `.env.local` private. Preserve the source folders, artwork, `package-lock.json`, `Cargo.lock`, and the iPad `gen/apple/project.yml` and plugin sources. The root and nested `.gitignore` files exclude dependencies, compiled output, private environment files, signing material and local verification files.
+
+Builds necessarily create caches. When no build or dev server is running, `cargo clean --manifest-path src-tauri/Cargo.toml` reclaims Rust build output (including locally built apps). `node_modules/` and `dist/` are also reproducible: remove them when no longer needed, then restore with `npm ci` and rebuild. Avoid broad cleanup commands such as `git clean -fdx`, which would also delete private ignored configuration. Commit source changes regularly and push reviewed commits to retain an off-machine copy.
 
 ### iPad
 

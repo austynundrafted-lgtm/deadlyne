@@ -212,10 +212,9 @@ function ReviewProgress() {
                 A photo counts once it’s been on screen for a second, or opened in the loupe. Tags, ratings and captions are separate.
               </span>
             </div>
-            <ViewProgress viewed={viewed} total={total} size="md" />
             <div className="text-[13px] tabular-nums">
               {viewedSummary(viewed, total)}
-              {lastName && <span className="block text-xs text-muted-foreground">Left off at {lastName}</span>}
+              {lastName && <span className="block truncate text-xs text-muted-foreground" title={lastName}>Left off at {lastName}</span>}
             </div>
             {viewed < total && (
               <Button size="sm" onClick={continueReviewing}>

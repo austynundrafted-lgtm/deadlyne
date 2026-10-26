@@ -2,6 +2,15 @@
 
 Read this before changing anything. It covers what the app is, who it's for, how the code is organized, the rules that must not be broken, and step-by-step recipes for the most common kinds of additions. `README.md` is the user-facing feature list; this file is the engineering view.
 
+## Current workspace (October 25, 2026)
+
+- Work in `/Users/austyn/Documents/ChatGPT/Deadlyne`. Source and history were recovered from the archived Desktop repository at commit `63bf02d`; do not develop in or copy generated artifacts from that archive.
+- Prioritize the macOS desktop app in `desktop/`; preserve the existing iPad plugin and project sources for later iPad work. The Swift/AppKit root remains a reference implementation.
+- Restore dependencies with `npm ci`. For a standalone local Mac build, use `npm run build:mac` in `desktop/` (locked Cargo dependencies, app bundle only, no updater signing artifacts). Public releases keep the existing CI workflow.
+- Keep the segmented review bar in the folder toolbar; the popover contains counts, the last filename and actions, without a second bar.
+- Keep dependencies, compiled output, `.verification/`, private environment files and signing material out of Git. Preserve lockfiles, real source, artwork and iPad project inputs. Never use a broad ignored-file cleanup that could remove `.env.local` or signing keys.
+- Dev identifiers isolate Tauri settings, but Rust's `Deadlyne/Viewing`, achievements and code-replacement directories are shared. Test only scratch photo copies and clean only the test records you created.
+
 > **Two codebases.**
 > - **`desktop/` is the future:** Deadlyne for macOS **and Windows**, built with Tauri 2. Rust in `desktop/src-tauri` does files, RAW previews, EXIF, sidecars and thumbnails; the interface in `desktop/src` is React + Tailwind + **shadcn/ui only**, designed "less is more" (reusable components, fewest steps). It updates itself from GitHub Releases. Read [desktop/README.md](desktop/README.md) for its layout, commands and release process.
 > - **The Swift/AppKit app at the repo root** (sections 3–6 below) is the reference implementation. Port features from it into `desktop/` in the order the photographer uses them: captions + code replacements, then ingest, copy/move, search, badges. Keep sidecar and file formats identical, so both apps (and Lightroom) read each other's work.

@@ -4,3 +4,22 @@ build/
 *.xcodeproj/
 DerivedData/
 .DS_Store
+
+# Local configuration and signing material; examples belong in source control.
+.env
+.env.*
+!.env.example
+*.key
+*.p12
+*.mobileprovision
+
+# Reproducible dependencies, build output, and local verification artifacts.
+node_modules/
+target/
+dist/
+coverage/
+.verification/
+*.tsbuildinfo
+*.log
+xcuserdata/
+Pods/

@@ -4,8 +4,14 @@ A photo browser and culler in the spirit of Photo Mechanic, built for flipping t
 
 This repo holds two apps:
 
-- **`desktop/`: Deadlyne for macOS and Windows** (Tauri: Rust + React + shadcn/ui), with auto-updates from GitHub Releases. This is where new work goes. See [desktop/README.md](desktop/README.md).
+- **`desktop/`: Deadlyne for macOS, Windows and iPad** (Tauri: Rust + React + shadcn/ui). macOS is the current development priority; the existing iPad integration shares the interface and Rust core. This is where new work goes. See [desktop/README.md](desktop/README.md).
 - **The repo root: the original native Mac app** (Swift/AppKit), described below. It stays usable until the desktop app has all its features.
+
+## Working copy and rebuilds
+
+The active working copy is `/Users/austyn/Documents/ChatGPT/Deadlyne`, recovered with its Git history from the archived Desktop copy on October 25, 2026. Keep source, artwork, lockfiles and project configuration in Git. Generated dependencies and builds are ignored and can be recreated; `.gitignore` does not prevent them from using disk space or provide a backup of source changes.
+
+From `desktop/`, use `npm ci` to restore the locked dependencies, `npm run app` for live development, or `npm run build:mac` for a standalone Mac app. The Mac app is written to `desktop/src-tauri/target/release/bundle/macos/Deadlyne.app`. Local builds do not require the release updater signing key. See the desktop README for private sign-in configuration and safe cleanup commands.
 
 ## Why Photo Mechanic (and Deadlyne) are fast
 
