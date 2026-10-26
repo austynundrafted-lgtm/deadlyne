@@ -2,9 +2,9 @@
 
 Read this before changing anything. It covers what the app is, who it's for, how the code is organized, the rules that must not be broken, and step-by-step recipes for the most common kinds of additions. `README.md` is the user-facing feature list; this file is the engineering view.
 
-## Current workspace (October 25, 2026)
+## Current workspace (October 26, 2026)
 
-- Work in `/Users/austyn/Documents/ChatGPT/Deadlyne`. Source and history were recovered from the archived Desktop repository at commit `63bf02d`; do not develop in or copy generated artifacts from that archive.
+- Work in `/Users/austyn/Desktop/Desktop_082026/Deadlyne`, the checkout linked to GitHub. `/Users/austyn/Documents/ChatGPT/Deadlyne` is an old Codex copy whose work was merged in PR #15; don't develop there.
 - Prioritize the macOS desktop app in `desktop/`; preserve the existing iPad plugin and project sources for later iPad work. The Swift/AppKit root remains a reference implementation.
 - Restore dependencies with `npm ci`. For a standalone local Mac build, use `npm run build:mac` in `desktop/` (locked Cargo dependencies, app bundle only, no updater signing artifacts). Public releases keep the existing CI workflow.
 - Keep the segmented review bar in the folder toolbar; the popover contains counts, the last filename and actions, without a second bar.
