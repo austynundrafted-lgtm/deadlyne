@@ -16,7 +16,6 @@ import { useStore } from "@/store"
 import { useUI } from "@/ui"
 import { BadgeMedal, nextBadge, useAchievements } from "@/components/BadgesDialog"
 import { FolderIcon } from "@/components/FolderIcon"
-import { ViewProgress } from "@/components/ViewProgress"
 import { IngestProgressView, useIngest } from "@/components/IngestDialog"
 import { Button } from "@/components/ui/button"
 import {
@@ -139,8 +138,6 @@ export function HomeView() {
                     </ItemDescription>
                   </ItemContent>
                   <ItemActions>
-                    {/* Progress only once a review has started: a fresh shoot needs no 0%. */}
-                    {viewed > 0 && total > 0 && <ViewProgress viewed={viewed} total={total} size="xs" />}
                     {partial && (
                       <Button
                         variant="secondary"

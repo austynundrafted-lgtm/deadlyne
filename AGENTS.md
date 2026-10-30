@@ -7,7 +7,7 @@ Read this before changing anything. It covers what the app is, who it's for, how
 - Work in `/Users/austyn/Documents/ChatGPT/Deadlyne`. Source and history were recovered from the archived Desktop repository at commit `63bf02d`; do not develop in or copy generated artifacts from that archive.
 - Prioritize the macOS desktop app in `desktop/`; preserve the existing iPad plugin and project sources for later iPad work. The Swift/AppKit root remains a reference implementation.
 - Restore dependencies with `npm ci`. For a standalone local Mac build, use `npm run build:mac` in `desktop/` (locked Cargo dependencies, app bundle only, no updater signing artifacts). Public releases keep the existing CI workflow.
-- Keep the segmented review bar in the folder toolbar; the popover contains counts, the last filename and actions, without a second bar.
+- No review progress bar in the folder toolbar or on Home's recent shoots (removed at the user's request, October 29, 2026). The toolbar shows only Continue reviewing while a review is partway; its tooltip carries the viewed count. Show unviewed only lives in Filter, and Reset viewing progress in the folder menu.
 - Keep dependencies, compiled output, `.verification/`, private environment files and signing material out of Git. Preserve lockfiles, real source, artwork and iPad project inputs. Never use a broad ignored-file cleanup that could remove `.env.local` or signing keys.
 - Dev identifiers isolate Tauri settings, but Rust's `Deadlyne/Viewing`, achievements and code-replacement directories are shared. Test only scratch photo copies and clean only the test records you created.
 
