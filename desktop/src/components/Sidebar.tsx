@@ -39,7 +39,6 @@ import { pref, setPref } from "@/lib/settings"
 import { cn } from "@/lib/utils"
 import { useStore } from "@/store"
 import { collectionMenu, ContextEntries, folderMenu } from "@/components/LibraryMenus"
-import { ViewProgress } from "@/components/ViewProgress"
 import { Button } from "@/components/ui/button"
 import { ContextMenu, ContextMenuTrigger } from "@/components/ui/context-menu"
 import { Kbd } from "@/components/ui/kbd"
@@ -539,25 +538,7 @@ function FolderRow({
             <Disclosure open={open} visible={expandable} onToggle={() => toggle?.(key)} />
             <Icon className={cn("size-4 shrink-0", missing ? "text-(--label-yellow)" : active || containsOpen ? "text-primary" : "text-muted-foreground")} />
             <span className={cn("min-w-0 flex-1 truncate", missing && "text-muted-foreground")}>{label}</span>
-            {/* The count gives way to progress on the open folder, or while pointing at one. The open
-                folder's meter takes its own space so the name truncates before it instead of under it. */}
-            {total > 0 && (
-              <span className="relative flex shrink-0 items-center justify-end">
-                {!active && (
-                  <span className="text-[11px] text-muted-foreground tabular-nums group-hover/row:opacity-0 group-focus-visible/row:opacity-0">
-                    {total.toLocaleString()}
-                  </span>
-                )}
-                <ViewProgress
-                  size="xs"
-                  viewed={stats!.totalViewed}
-                  total={total}
-                  className={cn(
-                    !active && "absolute right-0 opacity-0 transition-opacity duration-150 group-hover/row:opacity-100 group-focus-visible/row:opacity-100",
-                  )}
-                />
-              </span>
-            )}
+            {total > 0 && <span className="shrink-0 text-[11px] text-muted-foreground tabular-nums">{total.toLocaleString()}</span>}
           </button>
         </ContextMenuTrigger>
         <ContextEntries entries={folderMenu(path, { origin, collectionId })} />

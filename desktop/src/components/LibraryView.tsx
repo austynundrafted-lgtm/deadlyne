@@ -1,5 +1,4 @@
-// Shoots and collections as folders: a grid of folder cards or a dense list with a progress
-// column. Used for the library lists (All shoots, a collection…) and for an open folder's
+// Shoots and collections as folders: a grid of folder cards or a dense list. Used for the library lists (All shoots, a collection…) and for an open folder's
 // subfolders. Click selects, double-click or Return opens, arrows move, right-click for more.
 import { useEffect, useMemo, useState } from "react"
 import { ArrowDownUp, FolderOpen, HardDriveDownload, LayoutGrid, List, Plus, TriangleAlert } from "lucide-react"
@@ -26,7 +25,6 @@ import { useUI } from "@/ui"
 import { FolderIcon } from "@/components/FolderIcon"
 import { collectionMenu, ContextEntries, folderMenu } from "@/components/LibraryMenus"
 import { byTitle, topLevelShoots } from "@/components/Sidebar"
-import { ViewProgress } from "@/components/ViewProgress"
 import { Button } from "@/components/ui/button"
 import { ContextMenu, ContextMenuTrigger } from "@/components/ui/context-menu"
 import {
@@ -290,7 +288,6 @@ export function FolderItems({
             <span role="columnheader" className="text-right">Photos</span>
             <span role="columnheader" className="text-right">Docs</span>
             <span role="columnheader">Opened</span>
-            <span role="columnheader">Viewed</span>
           </div>
           {items.map((i) => (
             <ItemMenu key={itemKey(i)} item={i} origin={origin} collectionId={collectionId}>
@@ -432,11 +429,6 @@ function GridCard({ item, stats, selected, current, onSelect, onOpen, collection
         <span className="truncate text-[13px] font-medium">{item.title}</span>
         <span className="truncate text-[11px] text-muted-foreground">{statusLine(item, stats)}</span>
       </span>
-      {item.kind === "folder" && stats && stats.totalPhotos > 0 ? (
-        <ViewProgress viewed={stats.totalViewed} total={stats.totalPhotos} size="sm" />
-      ) : (
-        <span className="h-[10px]" aria-hidden />
-      )}
     </button>
   )
 }
@@ -444,7 +436,7 @@ function GridCard({ item, stats, selected, current, onSelect, onOpen, collection
 /** When a finger came down on a card (0 for mouse). */
 let tapAt = 0
 
-const LIST_COLUMNS = "24px minmax(0,1fr) 72px 48px 96px 168px"
+const LIST_COLUMNS = "24px minmax(0,1fr) 72px 48px 96px"
 
 function ListRow({ item, stats, selected, current, onSelect, onOpen, collectionId, ref, className, ...rest }: ItemProps) {
   const dnd = useCardDnd(item, collectionId)
@@ -501,9 +493,6 @@ function ListRow({ item, stats, selected, current, onSelect, onOpen, collectionI
         {stats?.documents ? stats.documents.toLocaleString() : ""}
       </span>
       <span role="cell" className="truncate text-xs text-muted-foreground">{opened}</span>
-      <span role="cell">
-        {item.kind === "folder" && stats && stats.totalPhotos > 0 && <ViewProgress viewed={stats.totalViewed} total={stats.totalPhotos} size="sm" />}
-      </span>
     </button>
   )
 }
