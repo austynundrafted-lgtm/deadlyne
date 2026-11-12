@@ -1,6 +1,6 @@
 # Mac App Store readiness
 
-Updated November 4, 2026. Shipping code is in `desktop/`, public version 0.3.6. Build 4 (0.3.6) includes the UI audit fixes and is available to the existing Internal Testing group (one tester), with matching debug symbols. App Store Connect compliance is cleared; the owner selected current US internal testing only, without France. Builds 1–3 remain in TestFlight. The initial release is free; the owner is enrolled in the Apple Developer Program.
+Updated November 12, 2026. Shipping code is in `desktop/`, public version 0.3.6. Build 5 (0.3.6) was built from commit `92a62d5`, which includes the removal of gamification, the November 11 usability pass and the November 12 tactile visual system. It was uploaded with matching debug symbols on November 12 and accepted by App Store Connect for processing; whether it has finished processing and reached the Internal Testing group was not confirmed from this Mac. Build 4 (0.3.6) includes the UI audit fixes and is available to the existing Internal Testing group (one tester), with matching debug symbols. App Store Connect compliance is cleared; the owner selected current US internal testing only, without France. Builds 1–3 remain in TestFlight. The initial release is free; the owner is enrolled in the Apple Developer Program.
 
 ## Store build
 
@@ -23,6 +23,17 @@ For manually managed certificates, omit `--automatic` and provide `DEADLYNE_STOR
 The build script verifies the exported installer signature, embedded profile, team and app IDs, sandbox entitlements, absence of debugger access, version/build number, and both architectures. It compares Mach-O UUIDs to ensure Xcode exported the actual Tauri executable. Updater and legacy notification dependencies are forbidden in the store graph; final binaries are checked for known updater/private notification markers. These are local checks, not Apple's server validation.
 
 Store builds preserve line-level Rust debug information in per-architecture dSYMs at compilation, merge them into the Xcode archive, and verify both UUIDs and source locations. Enable symbol upload when distributing the archive; the older build 1 did not include these symbols. Build numbers must increase for every upload.
+
+To put a build in TestFlight, export the same archive again with the destination set to upload. Xcode's signed-in account does the upload, so no password or API key is typed anywhere:
+
+```sh
+xcodebuild -exportArchive -archivePath "<archive from build-report.json>" -exportPath .verification/mac-app-store/upload-N \
+  -exportOptionsPlist .verification/mac-app-store/UploadOptions.plist -allowProvisioningUpdates
+```
+
+`UploadOptions.plist` is the generated `ExportOptions.plist` with `destination` changed from `export` to `upload` (`method` `app-store-connect`, automatic signing, the team ID, `manageAppVersionAndBuildNumber` false, `uploadSymbols` true). "Upload succeeded" and "EXPORT SUCCEEDED" mean Apple has the package; processing then takes a while before TestFlight offers the build, and the Internal Testing group may need the build added in App Store Connect. Before uploading, launch the check build once: it is the same code with its own container.
+
+On this Mac, TestFlight installed its copy as "Deadlyne 2" while a locally built `Deadlyne.app` was in Applications (the likely cause, not confirmed), and build leftovers under `src-tauri/target/` showed up in Spotlight as more Deadlyne apps. Keep only the TestFlight copy installed on a Mac that tests through TestFlight.
 
 ## Engineering completed
 
@@ -49,7 +60,7 @@ Store builds preserve line-level Rust debug information in per-architecture dSYM
 
 The signed build is one part of submission. These release tasks remain:
 
-1. The macOS App Store Connect record for `app.deadlyne.desktop` exists (Apple ID `6830865299`), and build 4 passed Apple upload processing and is assigned to Internal Testing. Use TestFlight for a clean installation/update check on another Mac; test Intel if advertising Intel support. The configured minimum is macOS 12.0, while this machine runs macOS 26.
+1. The macOS App Store Connect record for `app.deadlyne.desktop` exists (Apple ID `6830865299`), and build 4 passed Apple upload processing and is assigned to Internal Testing. Build 5 was uploaded on November 12, 2026; confirm in App Store Connect that it finished processing and is in the group. Use TestFlight for a clean installation/update check on another Mac; test Intel if advertising Intel support. The configured minimum is macOS 12.0, while this machine runs macOS 26.
 2. Publish support/contact and privacy-policy URLs, and link the policy in the app before signup. Disclose email/account identity, synced profile and presets, Supabase hosting/log/backup retention, offline caches and explicit FTP delivery. Finish App Privacy and inspect SDK privacy-manifest requirements accurately for macOS.
 3. Make public account approval deliberate: new profiles default to active (open sign-up since November 9, 2026). Supply an active reviewer login, sample media/roster and steps for presets/account deletion. Mandatory login remains an App Review consideration even with useful account sync; do not add unrequested cloud photo storage.
 4. Finish name/subtitle/description/keywords, Photography category, screenshots with display permission, copyright, age rating, content rights, encryption/export compliance, free pricing, territories and applicable trader declarations. Legal declarations require the owner's accurate information.
