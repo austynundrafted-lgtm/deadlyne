@@ -87,7 +87,7 @@ export function exportName(pattern: string, p: Photo, shoot: string, seq: number
   const tokens: Record<string, string> = {
     "{shoot}": shoot,
     "{seq}": String(seq).padStart(4, "0"),
-    "{original}": p.name,
+    "{original}": p.name.replace(/\.[^.]+$/, ""),
     "{date}": date || "0000-00-00",
     "{time}": time.slice(0, 8).replace(/:/g, "") || "000000",
     "{camera}": (p.meta?.camera ?? "").replace(/\s+/g, ""),

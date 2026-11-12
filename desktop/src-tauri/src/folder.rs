@@ -33,6 +33,7 @@ fn ext_of(p: &Path) -> String {
 }
 
 pub fn scan(folder: &Path) -> std::io::Result<Vec<PhotoEntry>> {
+    let _access = crate::data::access(folder)?;
     struct Pair {
         base: String,
         raw: Option<PathBuf>,

@@ -6,7 +6,7 @@ import { useShallow } from "zustand/react/shallow"
 import { openFolderDialog } from "@/lib/actions"
 import { dragSource, useDnd, useDropTarget, type DragItem } from "@/lib/dnd"
 import { newCollection, openShoot } from "@/lib/folders"
-import { isIPad, mod, plural, relativeTime } from "@/lib/format"
+import { isIPad, labelColor, mod, plural, relativeTime } from "@/lib/format"
 import {
   baseName,
   descendantIds,
@@ -23,7 +23,7 @@ import { cn } from "@/lib/utils"
 import { useStore } from "@/store"
 import { useUI } from "@/ui"
 import { FolderIcon } from "@/components/FolderIcon"
-import { collectionMenu, ContextEntries, folderMenu } from "@/components/LibraryMenus"
+import { collectionMenu, ContextEntries, FolderEntries } from "@/components/LibraryMenus"
 import { byTitle, topLevelShoots } from "@/components/Sidebar"
 import { Button } from "@/components/ui/button"
 import { ContextMenu, ContextMenuTrigger } from "@/components/ui/context-menu"
@@ -283,7 +283,7 @@ export function FolderItems({
     return (
       <div className="min-h-0 flex-1 overflow-y-auto" onKeyDown={keyNav}>
         <div role="table" aria-label="Folders" className="min-w-[560px] px-2 pb-4">
-          <div role="row" className="sticky top-0 z-10 grid h-8 items-center gap-3 bg-background px-2 text-[11px] font-medium text-muted-foreground uppercase tracking-wide" style={{ gridTemplateColumns: LIST_COLUMNS }}>
+          <div role="row" className="sticky top-0 z-10 grid h-8 items-center gap-3 bg-background px-2 text-caption font-medium text-muted-foreground uppercase tracking-wide" style={{ gridTemplateColumns: LIST_COLUMNS }}>
             <span role="columnheader" className="col-span-2">Name</span>
             <span role="columnheader" className="text-right">Photos</span>
             <span role="columnheader" className="text-right">Docs</span>
@@ -316,7 +316,7 @@ function ItemMenu({ item, origin, collectionId, children }: { item: CardItem; or
   return (
     <ContextMenu>
       <ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
-      <ContextEntries entries={item.kind === "folder" ? folderMenu(item.path, { origin, collectionId }) : collectionMenu(item.id)} />
+      {item.kind === "folder" ? <FolderEntries path={item.path} context={{ origin, collectionId }} /> : <ContextEntries entries={collectionMenu(item.id)} />}
     </ContextMenu>
   )
 }
@@ -373,6 +373,7 @@ function statusLine(item: CardItem, stats?: FolderStats) {
 
 function GridCard({ item, stats, selected, current, onSelect, onOpen, collectionId, ref, className, ...rest }: ItemProps) {
   const dnd = useCardDnd(item, collectionId)
+  const folderLabel = useLibrary((s) => item.kind === "folder" ? s.folderLabels[item.path.replace(/[\\/]+$/, "")] : undefined)
   const missing = !!stats && !stats.exists
   const problem = missing || !!stats?.error
   return (
@@ -383,7 +384,8 @@ function GridCard({ item, stats, selected, current, onSelect, onOpen, collection
       data-card={itemKey(item)}
       data-drop-id={dnd.dropId}
       aria-current={current || undefined}
-      aria-selected={selected}
+      data-selected={selected}
+      aria-description={selected ? "Selected" : undefined}
       title={item.kind === "folder" ? (stats?.error ?? item.path) : item.title}
       onPointerDown={(e) => {
         rest.onPointerDown?.(e) // the context menu's long press
@@ -405,10 +407,10 @@ function GridCard({ item, stats, selected, current, onSelect, onOpen, collection
       onFocus={onSelect}
       onDoubleClick={onOpen}
       className={cn(
-        "group/card flex min-w-0 flex-col items-center gap-2 rounded-xl px-3 pt-4 pb-3 text-center outline-none transition-[background-color,box-shadow] duration-150",
-        "hover:bg-white/[0.04] focus-visible:ring-2 focus-visible:ring-ring/60",
+        "group/card flex min-w-0 flex-col items-center gap-2 rounded-xl px-3 pt-4 pb-3 text-center outline-none transition-[background-color,box-shadow] duration-fast",
+        "hover:bg-surface-hover focus-visible:ring-2 focus-visible:ring-ring",
         selected && "bg-accent hover:bg-accent",
-        dnd.over && "bg-primary/12 shadow-[inset_0_0_0_1px_var(--primary)]",
+        dnd.over && "bg-primary/12 shadow-edge-hover",
         className,
       )}
     >
@@ -426,8 +428,8 @@ function GridCard({ item, stats, selected, current, onSelect, onOpen, collection
         )}
       </span>
       <span className="flex w-full min-w-0 flex-col gap-0.5">
-        <span className="truncate text-[13px] font-medium">{item.title}</span>
-        <span className="truncate text-[11px] text-muted-foreground">{statusLine(item, stats)}</span>
+        <span className="flex min-w-0 items-center justify-center gap-1.5 text-control font-medium"><span className="truncate">{item.title}</span>{folderLabel && <span className="size-2 shrink-0 rounded-full" style={{ backgroundColor: labelColor(folderLabel) }} role="img" aria-label={`${folderLabel} label`} />}</span>
+        <span className="truncate text-caption text-muted-foreground">{statusLine(item, stats)}</span>
       </span>
     </button>
   )
@@ -440,6 +442,7 @@ const LIST_COLUMNS = "24px minmax(0,1fr) 72px 48px 96px"
 
 function ListRow({ item, stats, selected, current, onSelect, onOpen, collectionId, ref, className, ...rest }: ItemProps) {
   const dnd = useCardDnd(item, collectionId)
+  const folderLabel = useLibrary((s) => item.kind === "folder" ? s.folderLabels[item.path.replace(/[\\/]+$/, "")] : undefined)
   const missing = !!stats && !stats.exists
   const opened = item.kind === "folder" && item.openedAt ? relativeTime(item.openedAt) : "—"
   return (
@@ -447,10 +450,12 @@ function ListRow({ item, stats, selected, current, onSelect, onOpen, collectionI
       {...rest}
       ref={ref}
       role="row"
+      aria-selected={selected}
       data-card={itemKey(item)}
       data-drop-id={dnd.dropId}
       aria-current={current || undefined}
-      aria-selected={selected}
+      data-selected={selected}
+      aria-description={selected ? "Selected" : undefined}
       title={item.kind === "folder" ? (stats?.error ?? item.path) : item.title}
       onPointerDown={(e) => {
         rest.onPointerDown?.(e) // the context menu's long press
@@ -472,8 +477,8 @@ function ListRow({ item, stats, selected, current, onSelect, onOpen, collectionI
       onFocus={onSelect}
       onDoubleClick={onOpen}
       className={cn(
-        "group/card grid h-10 w-full items-center gap-3 rounded-md px-2 text-left text-[13px] outline-none transition-[background-color] duration-100",
-        "hover:bg-white/[0.04] focus-visible:ring-2 focus-visible:ring-ring/60",
+        "group/card grid h-10 w-full items-center gap-3 rounded-md px-2 text-left text-control outline-none transition-[background-color] duration-fast",
+        "hover:bg-surface-hover focus-visible:ring-2 focus-visible:ring-ring",
         selected && "bg-accent hover:bg-accent",
         dnd.over && "bg-primary/12",
         dnd.dragging && "opacity-40",
@@ -483,8 +488,8 @@ function ListRow({ item, stats, selected, current, onSelect, onOpen, collectionI
     >
       <FolderIcon size={24} kind={item.kind} selected={selected || current} dropTarget={dnd.over} missing={missing} />
       <span role="cell" className="flex min-w-0 flex-col">
-        <span className={cn("truncate font-medium", missing && "text-muted-foreground")}>{item.title}</span>
-        {missing && <span className="truncate text-[11px] text-(--label-yellow)">Folder not found · right-click to locate it</span>}
+        <span className={cn("flex min-w-0 items-center gap-1.5 font-medium", missing && "text-muted-foreground")}><span className="truncate">{item.title}</span>{folderLabel && <span className="size-2 shrink-0 rounded-full" style={{ backgroundColor: labelColor(folderLabel) }} role="img" aria-label={`${folderLabel} label`} />}</span>
+        {missing && <span className="truncate text-caption text-(--label-yellow)">Folder not found · right-click to locate it</span>}
       </span>
       <span role="cell" className="text-right text-muted-foreground tabular-nums">
         {item.kind === "collection" ? plural(item.count, "shoot") : stats ? stats.totalPhotos.toLocaleString() : ""}

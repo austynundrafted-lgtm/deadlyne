@@ -35,7 +35,9 @@ pub struct OpenedPath {
 }
 
 pub fn queue_opened(app: &AppHandle, paths: impl IntoIterator<Item = String>) {
-    let paths: Vec<String> = paths.into_iter().filter(|p| Path::new(p).exists()).collect();
+    // Store launches can arrive before the folder's persisted grant has been restored. Do not
+    // discard those paths based on an access-denied existence check; the UI authorizes them.
+    let paths: Vec<String> = paths.into_iter().filter(|p| cfg!(feature = "mac-app-store") || Path::new(p).exists()).collect();
     if paths.is_empty() {
         return;
     }
@@ -47,7 +49,10 @@ pub fn queue_opened(app: &AppHandle, paths: impl IntoIterator<Item = String>) {
 #[tauri::command]
 pub fn take_opened_paths(app: AppHandle) -> Vec<OpenedPath> {
     let paths = std::mem::take(&mut *app.state::<Opened>().0.lock().unwrap_or_else(|e| e.into_inner()));
-    paths.into_iter().map(|path| OpenedPath { is_dir: Path::new(&path).is_dir(), path }).collect()
+    paths.into_iter().map(|path| {
+        let _access = crate::data::access(Path::new(&path)).ok();
+        OpenedPath { is_dir: Path::new(&path).is_dir(), path }
+    }).collect()
 }
 
 // MARK: - Dock progress and notifications
@@ -100,13 +105,18 @@ pub fn finished(app: &AppHandle, title: &str, body: &str) {
     progress_done(app);
     #[cfg(desktop)]
     {
-        use tauri_plugin_notification::NotificationExt;
         let Some(window) = app.get_webview_window("main") else { return };
         if window.is_focused().unwrap_or(true) {
             return;
         }
         let _ = window.request_user_attention(Some(tauri::UserAttentionType::Informational));
-        let _ = app.notification().builder().title(title).body(body).show();
+        #[cfg(all(target_os = "macos", feature = "mac-app-store"))]
+        crate::mac_store::notify(title, body);
+        #[cfg(feature = "desktop-notifications")]
+        {
+            use tauri_plugin_notification::NotificationExt;
+            let _ = app.notification().builder().title(title).body(body).show();
+        }
     }
     #[cfg(not(desktop))]
     let _ = (title, body);
@@ -127,6 +137,10 @@ pub fn count(n: usize, word: &str) -> String {
 
 /// Opens a web page in the default browser.
 pub fn open_url(url: &str) {
+    #[cfg(all(target_os = "macos", feature = "mac-app-store"))]
+    { crate::mac_store::open_url(url); return; }
+    #[cfg(not(all(target_os = "macos", feature = "mac-app-store")))]
+    {
     use std::process::Command;
     #[cfg(target_os = "macos")]
     let result = Command::new("open").arg(url).spawn();
@@ -135,6 +149,7 @@ pub fn open_url(url: &str) {
     #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     let result = Command::new("xdg-open").arg(url).spawn();
     let _ = result;
+    }
 }
 
 // MARK: - Menu bar
@@ -285,6 +300,7 @@ mod menu {
                 &about,
                 &b.sep()?,
                 &b.item("settings", "Settings…", Some("CmdOrCtrl+,"))?,
+                #[cfg(feature = "self-update")]
                 &b.item("check-updates", "Check for Updates…", None)?,
                 &b.sep()?,
                 &PredefinedMenuItem::services(app, None)?,
@@ -451,6 +467,8 @@ mod menu {
 
         app.on_menu_event(|app, event| {
             let id: &str = event.id().as_ref();
+            #[cfg(feature = "mac-app-store")]
+            if id == "select-all" && crate::mac_store::select_all_in_picker(app) { return; }
             match id {
                 "github" => open_url(REPO),
                 "issue" => open_url(&format!("{REPO}/issues/new")),

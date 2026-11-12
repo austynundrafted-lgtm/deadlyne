@@ -124,8 +124,9 @@ export function saveCulling(photos: Photo[]) {
 /** Small upright JPEG for the contact sheet, served by Rust over the `thumb` scheme. */
 export const thumbUrl = (p: PhotoEntry) => convertFileSrc(p.id, "thumb")
 
-/** The largest embedded JPEG, untouched (apply `meta.orientation` when showing it). */
-export const previewUrl = (p: PhotoEntry) => convertFileSrc(p.id, "preview")
+/** Full embedded JPEG pixels; Rust neutralizes EXIF auto-rotation so the loupe applies
+ * `meta.orientation` exactly once. Version the URL to bypass older auto-rotated cache entries. */
+export const previewUrl = (p: PhotoEntry) => `${convertFileSrc(p.id, "preview")}?v=2`
 
 // MARK: - Files
 
@@ -209,7 +210,6 @@ export interface IngestSummary {
   firstFolder: string | null
   cancelled: boolean
   ejected: boolean
-  unlocked: Badge[]
 }
 
 export const memoryCards = () => invoke<Card[]>("memory_cards")
@@ -217,26 +217,6 @@ export const inspectSource = (path: string) => invoke<SourceInfo>("inspect_sourc
 export const freeSpace = (path: string) => invoke<number | null>("free_space", { path })
 export const startIngest = (options: IngestOptions) => invoke("start_ingest", { options })
 export const cancelIngest = () => invoke("cancel_ingest")
-
-// MARK: - Badges
-
-export interface Badge {
-  id: string
-  track: "photos" | "shoots"
-  threshold: number
-  name: string
-  tier: number
-}
-export interface AchievementSummary {
-  photos: number
-  shoots: number
-  month: { photos: number; shoots: number }
-  badges: Badge[]
-  earned: Record<string, number>
-}
-
-export const achievements = () => invoke<AchievementSummary>("achievements")
-export const recordFolderOpened = (folder: string, photos: number) => invoke<Badge[]>("record_folder_opened", { folder, photos })
 
 export function formatBytes(n: number): string {
   if (n < 1024) return `${n} B`

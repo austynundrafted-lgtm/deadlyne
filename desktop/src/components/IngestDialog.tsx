@@ -22,9 +22,10 @@ import { isIPad, plural } from "@/lib/format"
 import { pickFolder } from "@/lib/platform"
 import { getSetting, setSetting } from "@/lib/settings"
 import { cn } from "@/lib/utils"
-import { notifyBadges, useStore } from "@/store"
+import { useStore } from "@/store"
 import { useUI } from "@/ui"
 import { Button } from "@/components/ui/button"
+import { WorkflowPresets } from "@/components/WorkflowPresets"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field"
@@ -89,7 +90,7 @@ let ingestWired = false
 export async function initIngest() {
   if (ingestWired) return
   ingestWired = true
-  useIngest.setState({ prefs: { ...DEFAULT_PREFS, ...(await getSetting<Partial<IngestPrefs>>("ingest", {})) } })
+  await reloadIngestPrefs()
   await listen<IngestProgress>("ingest-progress", (e) => useIngest.setState({ progress: e.payload, started: useIngest.getState().started ?? Date.now() }))
   await listen<IngestSummary>("ingest-done", (e) => {
     const s = e.payload
@@ -99,12 +100,13 @@ export async function initIngest() {
     const message = `${s.cancelled ? "Stopped" : "Ingest done"}: copied ${plural(s.copied, "file")} (${size})${s.skipped ? `, skipped ${s.skipped} already ingested` : ""}${s.ejected ? ". Card ejected." : "."}`
     if (s.errors.length) toast.error("Ingest finished with problems", { description: s.errors.slice(0, 5).join("\n"), duration: Infinity })
     else toast.success(message)
-    notifyBadges(s.unlocked)
     if (s.firstFolder && !s.cancelled) useStore.getState().openFolder(s.firstFolder)
   })
   useIngest.getState().refreshCards()
   window.setInterval(() => useIngest.getState().refreshCards(), 4000)
 }
+
+export async function reloadIngestPrefs() { useIngest.setState({ prefs: { ...DEFAULT_PREFS, ...(await getSetting<Partial<IngestPrefs>>("ingest", {})) } }) }
 
 export function names(prefs: IngestPrefs, seq: number) {
   const now = new Date()
@@ -186,7 +188,7 @@ export function IngestDialog() {
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && close()}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="max-h-dialog overflow-y-auto sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Ingest photos</DialogTitle>
           <DialogDescription>Copies a card into a named folder, never overwrites, then opens it for culling.</DialogDescription>
@@ -196,8 +198,9 @@ export function IngestDialog() {
           <IngestProgressView />
         ) : (
           <FieldGroup className="gap-4">
+            <WorkflowPresets kind="ingest" current={prefs} onApply={setPrefs} active={open && !running} />
             <Field>
-              <FieldLabel>From</FieldLabel>
+              <FieldLabel htmlFor="ingest-source">From</FieldLabel>
               <Select
                 value={source ?? ""}
                 onValueChange={async (v) => {
@@ -209,7 +212,7 @@ export function IngestDialog() {
                   }
                 }}
               >
-                <SelectTrigger className="w-full">
+                <SelectTrigger id="ingest-source" className="w-full">
                   <SelectValue placeholder="No memory card found" />
                 </SelectTrigger>
                 <SelectContent>
@@ -322,14 +325,14 @@ export function IngestDialog() {
 
 export function IngestProgressView({ compact }: { compact?: boolean }) {
   const { progress, started } = useIngest()
-  if (!progress) return <Progress value={null} />
+  if (!progress) return <Progress aria-label="Ingest progress" value={null} />
   const fraction = progress.bytesTotal ? progress.bytesDone / progress.bytesTotal : 0
   const elapsed = started ? (Date.now() - started) / 1000 : 0
   const remaining = fraction > 0.02 && elapsed > 2 ? Math.round((elapsed / fraction) * (1 - fraction)) : null
   const eta = remaining === null ? "" : remaining < 60 ? ` · about ${remaining}s left` : ` · about ${Math.round(remaining / 60)} min left`
   return (
     <div className="flex flex-col gap-2">
-      <Progress value={fraction * 100} />
+      <Progress aria-label="Ingest progress" value={fraction * 100} />
       <p className={cn("text-muted-foreground", compact ? "text-xs" : "text-sm")}>
         {progress.filesDone.toLocaleString()} of {plural(progress.filesTotal, "file")} · {formatBytes(progress.bytesTotal - progress.bytesDone)} to go{eta}
       </p>

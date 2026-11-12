@@ -6,13 +6,13 @@ import { cn } from "@/lib/utils"
 type Size = "xs" | "sm" | "md"
 
 const DIMS: Record<Size, { segments: number; w: number; h: number; gap: number; text: string }> = {
-  xs: { segments: 12, w: 2, h: 8, gap: 1.5, text: "text-[10px]" },
-  sm: { segments: 20, w: 2.5, h: 10, gap: 1.5, text: "text-[11px]" },
+  xs: { segments: 12, w: 2, h: 8, gap: 1.5, text: "text-micro" },
+  sm: { segments: 20, w: 2.5, h: 10, gap: 1.5, text: "text-caption" },
   md: { segments: 24, w: 3, h: 14, gap: 2, text: "text-xs" },
 }
 
 /** The color of segment `t` (0 first, 1 last): ember at the start, brand orange at the end. */
-const ramp = (t: number) => `color-mix(in oklch, var(--primary) ${Math.round(48 + t * 52)}%, #5c2416)`
+const ramp = (t: number) => `color-mix(in oklch, var(--primary) ${Math.round(48 + t * 52)}%, var(--review-ember))`
 
 interface Props {
   viewed: number
@@ -55,11 +55,11 @@ export function ViewProgress({ viewed, total, size = "sm", label = true, classNa
           return (
             <span
               key={i}
-              className="rounded-[1px] transition-[background-color,opacity] duration-300 ease-out motion-reduce:transition-none"
+              className="rounded-pixel transition-[background-color,opacity] duration-slow ease-out motion-reduce:transition-none"
               style={{
                 width: d.w,
                 height: d.h,
-                background: f > 0 ? ramp(d.segments > 1 ? i / (d.segments - 1) : 1) : "oklch(1 0 0 / 0.1)",
+                background: f > 0 ? ramp(d.segments > 1 ? i / (d.segments - 1) : 1) : "var(--review-empty)",
                 // The leading segment fills partway, so small steps still show.
                 opacity: f > 0 ? 0.4 + 0.6 * f : 1,
                 transitionDelay: `${i * 10}ms`,

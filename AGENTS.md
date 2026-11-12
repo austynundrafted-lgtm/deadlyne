@@ -2,25 +2,42 @@
 
 Read this before changing anything. It covers what the app is, who it's for, how the code is organized, the rules that must not be broken, and step-by-step recipes for the most common kinds of additions. `README.md` is the user-facing feature list; this file is the engineering view.
 
-## Current workspace (October 25, 2026)
+## Current workspace
 
+- November 11, 2026: gamification is removed from the shared Tauri app and Swift reference: no badges, achievement dialogs/banners, milestone counters, achievement IPC or tracking during open/ingest/rename/import. Do not reintroduce it. Existing achievement data and original badge artwork remain untouched and unused. Keep functional photo ratings/tags, review navigation and running-job progress. `ProgressBarView.swift` and `NumberFormatting.swift` retain the shared non-gamification helpers formerly housed with badge code.
+
+- November 4, 2026: the desktop UI audit extends the existing `src/index.css` semantic theme; the document sets `.dark` because the app is dark-only. Use `primary-readable` for brand-colored text and `primary-foreground` on solid orange. Control surfaces are separate from the high-contrast `input` boundary token. Import `cn` through `lib/utils.ts`, which recognizes `text-micro`, `text-caption` and `text-control` as sizes. Preserve shared keyboard outlines, reduced-motion rules and viewport-bounded dialogs. `desktop/UI_AUDIT.md` lists changes, verification limits and remaining artwork/layout literals.
+- November 4, 2026: `npm run build:store:check` produces an isolated sandboxed Mac check app; `npm run build:store -- --automatic --team 9DBN5W48YV --build-number N` creates a universal Mac App Store package through Xcode managed signing. Keep Cargo default features off for the store channel; it uses `mac-app-store`, its own capabilities/CSP, no self-updater or legacy notification backend. `mac_store.rs` owns persistent security bookmarks and IO leases; `data.rs` keeps workflow records inside the sandbox. All new native IO must retain a `data::access` lease for its full operation. Settings → Local data imports legacy setup explicitly, merging without credentials or photo changes. Generated profiles, archives, packages and reports stay under ignored `.verification/`; inspect `desktop/MAC_APP_STORE_READINESS.md` before submission. The installed direct-download app is not replaced by this build.
+
+- November 4, 2026: Folder catalog rules are persisted in `library.json` and managed in Settings → Catalog. `lib/catalog-rules.ts` resolves the nearest explicit ancestor; there is no catalog indexer yet. Preserve this distinction and connect rules to a real indexer before claiming scans happen. Folder rename uses `followMovedFolder` to relocate library, recents and review records. Photo moves rescan the source after partial success.
+- November 4, 2026: account-owned ingest/export presets live in `desktop/src/lib/workflow-presets.ts`, `preset-options.ts`, `components/WorkflowPresets.tsx` and the `workflow_presets` Supabase table. Sync only the portable allowlisted choices, never source/destination paths, job names, sequence counters, media, captions, rosters or FTP configuration. Reads work from an account-scoped offline cache; mutations require server acknowledgement and version matching. Sign-out/deletion clear the cache after draining writes; server presets cascade with Auth deletion. Keep `supabase/ACCOUNT_DELETION.md` and the live fixture harness current. The initial Mac App Store release is free; the owner has paid Apple Developer enrollment. `desktop/MAC_APP_STORE_READINESS.md` tracks the remaining submission work.
 - Work in `/Users/austyn/Documents/ChatGPT/Deadlyne`. Source and history were recovered from the archived Desktop repository at commit `63bf02d`; do not develop in or copy generated artifacts from that archive.
-- Prioritize the macOS desktop app in `desktop/`; preserve the existing iPad plugin and project sources for later iPad work. The Swift/AppKit root remains a reference implementation.
+- Work on the macOS desktop and iPad apps in `desktop/`; they share the Tauri/Rust core and React interface. The Swift/AppKit root remains a reference implementation.
+- For iPad, `npm run ipad` runs `scripts/prepare-ipad.mjs` before starting Tauri with Xcode open. It recreates missing `assets/` and `Externals/` folders and generates the Xcode project from `gen/apple/project.yml` when missing or stale. Keep this process alive while building `deadlyne_iOS` in Xcode or XcodeBuildMCP. Use an explicit iPad simulator UDID when the installed runtime differs from Xcode's SDK. The October 26 rebuild ran on iPad Pro 13-inch (M5), iPadOS 27.0 with SDK 27.1.
+- iPad picker commands acknowledge immediately and send their eventual `{ result }` or `{ error }` through the `onResult` Tauri channel (`lib/platform.ts` and `plugins/ipad-files/src/lib.rs`). Do not hold a webview IPC fetch open while the user browses Files: WebKit can time out and retry it, duplicating the picker and losing the selection. Native Swift pickers still keep security-scoped bookmarks.
+- `npm run build:ipad:sim` bundles production assets, keeps `tauri ios build --open` alive and runs Xcode for the generic arm64 simulator destination; output is in `src-tauri/gen/apple/build/simulator/Build/Products/release-iphonesimulator/Deadlyne.app`. Install Rust's `llvm-tools` component for Xcode 27 release Swift bridge linking. iPad uses browser focus/visibility events rather than desktop window-plugin subscriptions. Simulator verification must use scratch photo copies and restore simulator recents, library and viewing records afterward.
+- Cargo pins Tao to upstream commit `f2163508104413ef0609178dcebdd5803b496211` through `[patch.crates-io]`. The crates.io 0.35.3 scene delegate returns a freed configuration and crashes optimized iPad builds at launch; this commit uses `Retained::autorelease_ptr`. Keep the pin and lockfile until the Tauri runtime adopts a fixed Tao release, and verify a release launch when removing it.
 - Restore dependencies with `npm ci`. For a standalone local Mac build, use `npm run build:mac` in `desktop/` (locked Cargo dependencies, app bundle only, no updater signing artifacts). Public releases keep the existing CI workflow.
 - No review progress bars anywhere: folder toolbar, Home's recent shoots, sidebar rows, library cards and list (removed at the user's request, October 29, 2026). The toolbar shows only Continue reviewing while a review is partway; its tooltip carries the viewed count. Show unviewed only lives in Filter, and Reset viewing progress in the folder menu.
 - Keep dependencies, compiled output, `.verification/`, private environment files and signing material out of Git. Preserve lockfiles, real source, artwork and iPad project inputs. Never use a broad ignored-file cleanup that could remove `.env.local` or signing keys.
-- Dev identifiers isolate Tauri settings, but Rust's `Deadlyne/Viewing`, achievements and code-replacement directories are shared. Test only scratch photo copies and clean only the test records you created.
+- Dev identifiers isolate Tauri settings, but Rust's `Deadlyne/Viewing` and code-replacement directories are shared. Test only scratch photo copies and clean only the test records you created.
+- File writes for copy, ingest, document copies and export use `fileops::copy_new` / `write_new`: exclusive creation, length verification for copies, and removal of partial output on an error. Mac/iPad same-drive moves use `renameatx_np(RENAME_EXCL)`; other file moves use an exclusive link or verified copy before removing the source. Preserve document-package moves. Export reserves one collision suffix for the full RAW/JPG/sidecar group. `{original}` is a stem; add each file's extension exactly once.
+- `clearFilters` resets every photo filter, including persisted RAW/JPG scope. All Show all/Clear filters entry points call it. Search clears with its button or Escape; a second Escape leaves the field. Release CI runs `npm test` and `cargo test --locked` on each desktop platform before packaging.
+- Loupe orientation belongs to one layer: `images::preview` neutralizes EXIF orientation in the served JPEG response, preserving compressed pixels, other metadata and the source file. The loupe uses the original photo's `meta.orientation` exactly once, and holds the upright thumbnail until metadata and full decode are ready. Do not rely on CSS `image-orientation: none` to disable browser auto-rotation. Keep the preview URL contract version (`?v=2`) to bypass older cached responses; mirrored EXIF 5/7 use rotation plus `scaleY(-1)`.
+- Loupe previews use `lib/preview-cache.ts` to retain decoded image elements for the current photo and its immediate neighbours. Prioritize the current decode, reuse pending work, cancel distant requests during rapid navigation and clear on close. Keep image bytes in the native schemes. Footer controls and `Kbd` never wrap or shrink key labels; show shortcut hints only when the loupe container itself is at least 1000px wide. Keep filenames under grid thumbnails and in image alt text/deletion confirmations, but omit them from the loupe footer and photo status bar to avoid duplicated long export names.
+- All explicit delete/remove actions require confirmation before mutation, including virtual library entries, linked documents, rosters/code rows, FTP servers/history and profile removal. `lib/prompts.ts` owns one pending decision; repeated requests fail closed and stale answers are ignored. `Prompts.tsx` focuses Cancel; alert actions ignore repeated Enter/Space. Photo deletion is gated in `store.trash`, which snapshots photos and RAW/JPG scope and abandons approval if the folder changes. Keep internal cleanup after approved trash separate from user-facing confirmations. Account deletion retains its independent password-and-receipt flow.
 
 > **Two codebases.**
 > - **`desktop/` is the future:** Deadlyne for macOS **and Windows**, built with Tauri 2. Rust in `desktop/src-tauri` does files, RAW previews, EXIF, sidecars and thumbnails; the interface in `desktop/src` is React + Tailwind + **shadcn/ui only**, designed "less is more" (reusable components, fewest steps). It updates itself from GitHub Releases. Read [desktop/README.md](desktop/README.md) for its layout, commands and release process.
-> - **The Swift/AppKit app at the repo root** (sections 3–6 below) is the reference implementation. Port features from it into `desktop/` in the order the photographer uses them: captions + code replacements, then ingest, copy/move, search, badges. Keep sidecar and file formats identical, so both apps (and Lightroom) read each other's work.
+> - **The Swift/AppKit app at the repo root** (sections 3–6 below) is the reference implementation. Port features from it into `desktop/` in the order the photographer uses them: captions + code replacements, then ingest, copy/move and search. Keep sidecar and file formats identical, so both apps (and Lightroom) read each other's work.
 > - Rules in section 2 apply to both apps.
 > - Desktop specifics:
 >   - Sign-in: `src/lib/auth.ts` + `components/AuthGate.tsx`; backend SQL and setup in `desktop/supabase/`. Config comes from `VITE_SUPABASE_URL` / `VITE_SUPABASE_PUBLISHABLE_KEY` (`.env.local` locally, repository variables in CI). Keep offline use working: a confirmed sign-in lasts `OFFLINE_GRACE_DAYS` without network.
+>   - Account deletion (shared Mac/iPad): `lib/account-deletion.ts`, `AccountDeletionDialog.tsx`, Settings → Account. Server implementation is `supabase/functions/delete-account/`; completion is proved by a DB trigger in the receipt migration, in the same transaction as hard Auth deletion and profile cascade. Manual JWT validation + current password are mandatory; `verify_jwt=false` allows receipt-only status lookup after Auth is gone. Never restore the old client-executable `delete_own_account` bypass. Keep receipt proof until local credential/profile cleanup succeeds, and never infer completion from a timeout, missing profile, sign-out or missing receipt. No photography/library/code/FTP file operations belong in deletion. Other devices validate Auth on reconnect/focus/visibility and every minute while visible; preserve bounded offline grace. Read `desktop/supabase/ACCOUNT_DELETION.md` before extending accounts, providers, storage or billing.
 >   - Export: `src-tauri/src/export.rs` + `lib/export.ts` + `components/ExportDialog.tsx`. The interface decides names (`exportName`, tokens `{shoot} {seq} {original} {date} {time} {camera}`) and Rust copies or resizes. A resized JPG is re-encoded upright from the full-size decode, then the original's EXIF (orientation set to 1, pixel size patched), XMP, ICC and Photoshop/IIM segments are carried over, so captions never need re-embedding. Files go out in parallel on rayon; name collisions get `-1`, `-2`… under one lock. Never add an overwrite option.
 >   - FTP: `src-tauri/src/ftp.rs` + `lib/ftp.ts`. Passwords go only to the keychain (`keyring`). FTPS uses rustls so data connections resume the TLS session; don't switch back to native-tls. Never make "Replace" the default when a remote file exists.
 >   - New IPTC fields: add them to `iptc.rs` (`Field`, `Captions`), `IIM_MAP` in `jpeg_meta.rs` if IIM has a dataset (plus its length in `IIM_LIMITS` in `lib/api.ts`), and `CAPTION_FIELDS` / `FIELD_LABELS` / `emptyCaptions` in `lib/api.ts`, then place the input in `CaptionPanel.tsx`.
->   - Library and review progress: `src-tauri/src/library.rs` + `lib/library.ts`, `lib/viewing.ts`, `lib/folders.ts`. Collections, pins, favorites, archive and linked documents are virtual (`library.json` via the store plugin) and must never move files; disk changes (new folder, rename, Move to Trash, copying documents in) are explicit actions that never overwrite. Viewed photos are kept per folder in `<data dir>/Deadlyne/Viewing/<md5 of path>.json`, keyed by lowercase file stem, and progress is always viewed ∩ photos on disk now. Keep "viewed" separate from tags, ratings and captions. When testing, clean `Viewing/` and the `library.json` entries for scratch folders along with recents and achievements.
+>   - Library and review progress: `src-tauri/src/library.rs` + `lib/library.ts`, `lib/viewing.ts`, `lib/folders.ts`. Collections, pins, favorites, archive and linked documents are virtual (`library.json` via the store plugin) and must never move files; disk changes (new folder, rename, Move to Trash, copying documents in) are explicit actions that never overwrite. Viewed photos are kept per folder in `<data dir>/Deadlyne/Viewing/<md5 of path>.json`, keyed by lowercase file stem, and progress is always viewed ∩ photos on disk now. Keep "viewed" separate from tags, ratings and captions. When testing, clean `Viewing/` and the `library.json` entries for scratch folders along with recents.
 >   - Never pass image bytes through JavaScript; use the `thumb://` / `preview://` schemes in `images.rs`.
 >   - Keep heavy work in Rust on rayon or `spawn_blocking`.
 >   - Add UI only from shadcn (`npx shadcn@latest add …`).
@@ -68,21 +85,21 @@ Deadlyne **never decodes RAW sensor data**. Every RAW file contains JPEGs the ca
    - JPEG caption embedding rewrites **metadata segments only**, so the image data stays byte-identical.
 3. **Stay compatible with Adobe and Photo Mechanic.** Ratings and labels go in `xmp:Rating` and `xmp:Label`. Captions use standard IPTC-in-XMP properties plus legacy IPTC-IIM in JPGs. Lookup files use Photo Mechanic's tab-delimited format. Old sidecars may contain `lensdesk:Tagged` and must still be read.
 4. **The user's real shoots are read-only for testing.** Their shoot folders are real client work. Test on **copies** in a scratch folder.
-5. **Don't pollute the user's stats.** Opening a folder in Deadlyne adds it to Home's recent shoots and to the badge counts. After testing with a scratch folder, remove it from UserDefaults: the `recentShoots` entry, plus `achievements` → `folders`, `photos`, `shoots` and `months`. Also reset `lastFolder`. Back up first with `defaults export app.deadlyne.Deadlyne backup.plist`.
+5. **Keep testing out of the user's library.** Opening a folder adds it to Home's recent shoots. Test on scratch copies, back up settings first, remove only scratch recent/library/viewing records afterward and restore `lastFolder`.
 6. **The user runs the app themselves.** Don't quit or relaunch a running Deadlyne without saying so.
 7. **Wording and accounts.** Say "ingested" for cards and "sent" for FTP, never "uploaded".
    - The **Swift app** has no accounts: the profile is optional and stays on the Mac.
-   - **Desktop** is gated behind a Supabase sign-in (asked for by the user on 2026-09-15). Supabase stores only the account status and the photographer profile (name, credit, copyright). Photos, captions, rosters and FTP passwords never leave the computer. Don't add other cloud features unless asked.
+   - **Desktop** is gated behind a Supabase sign-in (asked for by the user on 2026-09-15). Supabase stores account status, the photographer profile (name, credit, copyright) and portable ingest/export presets (authorized November 4, 2026). Photos, captions, rosters and FTP passwords are not stored in the account cloud. Don't add other cloud features unless asked.
    - Never put a Supabase service_role/secret key in the app or the repo. Only the publishable key ships, and row level security enforces access.
 8. **Home should feel like a pro tool, not a SaaS dashboard.** The path from launch to images stays dominant.
-9. **Badge ids are permanent** (`photos-100`, `shoots-1`…). Earned badges are stored by id, and the user draws the art as `Resources/Badges/<id>.png`. Never replace their art or rename ids.
+9. **No gamification.** Preserve archived badge artwork and historical data, but do not load, count, award, migrate or display achievements.
 
 ---
 
 ## 3. Build, run, verify
 
 - **Stack:** Swift 6 toolchain in Swift 5 language mode, AppKit (no SwiftUI), SwiftPM, macOS 14+. The dev Mac runs macOS 26 (Tahoe).
-- **Build:** `./scripts/build.sh` compiles in release, assembles `build/Deadlyne.app`, writes `Info.plist`, copies the icon and badge art, and code-signs.
+- **Build:** `./scripts/build.sh` compiles in release, assembles `build/Deadlyne.app`, writes `Info.plist`, copies the icon, and code-signs.
 - **Run:** `open build/Deadlyne.app`, or `open build/Deadlyne.app --args /path/to/folder` to skip Home and open a folder.
 - **Quick compile check:** `swift build -c release`.
 - **Bundle ID:** `app.deadlyne.Deadlyne`. It was `app.lensdesk.LensDesk`; `LegacyMigration` copies the old settings once.
@@ -117,7 +134,7 @@ Sources/Deadlyne/
     RecentShoots.swift      Home's recent-shoots list (UserDefaults)
     ShootName.swift         "Boys_Varsity-Fairborn-vs-Tecumseh_082126" → readable title
     Profile.swift           optional local profile + avatar; credit/copyright fill
-    Achievements.swift      badge ladders and photo/shoot counting
+    NumberFormatting.swift  decimal grouping for counts and job progress
   UI/
     RootViewController      hosts the 3 workspaces; toolbar delegate; menu routing for Home
     WorkspaceTabBar         Affinity-style title-bar tabs (Workspace enum: home, photos, codes)
@@ -128,9 +145,10 @@ Sources/Deadlyne/
     CaptionPanel            IPTC fields panel (right side of Photos); live code expansion hook
     CodesViewController     Codes workspace: lookup file list, roster table/text editor, inspector
     IngestWindowController  ingest window
-    ProfileWindowController, AchievementsWindowController, BadgeViews
+    ProfileWindowController, ProgressBarView
 scripts/build.sh, scripts/make_icon.swift
-Resources/AppIcon-source.png (1024² artwork → icns), Resources/Badges/*.png + README.md
+Resources/AppIcon-source.png (1024² artwork → icns)
+Resources/Badges/ (archived original artwork; unused and not bundled)
 ```
 
 ### Window and workspaces
@@ -164,10 +182,9 @@ Resources/AppIcon-source.png (1024² artwork → icns), Resources/Badges/*.png +
 | JPG captions | embedded in the JPG (XMP + optional IPTC-IIM) |
 | Lookup files | `~/Library/Application Support/Deadlyne/Code Replacements/` |
 | Avatar | `~/Library/Application Support/Deadlyne/Avatar.png` |
-| Badge art override (no rebuild) | `~/Library/Application Support/Deadlyne/Badges/<id>.png` |
 | Settings | UserDefaults `app.deadlyne.Deadlyne`, keys below |
 
-UserDefaults keys: `recentShoots`, `achievements`, `profile`, `profilePromptDismissed`, `lastFolder`, `fileScope`, `sortByName`, `autoAdvance`, `captionPanel`, `thumbSize`, `jpegCaptionMode`, `ingestDestination`, `ingestFolder`, `ingestJob`, `ingestRename`, `ingestRenameOn`, `ingestSkip`, `ingestEject`, `homeShowAllShortcuts`, `codeDelimiter`, `codeExpandWhileTyping`, `codeListsDisabled`, `codeListsSeeded`, `codeColumnNames`, `codesEditorMode`, `codesSelectedList`, `windowFrame.<w>x<h>`, `windowLastScreen`, `migratedFromLensDesk`.
+UserDefaults keys: `recentShoots`, `profile`, `profilePromptDismissed`, `lastFolder`, `fileScope`, `sortByName`, `autoAdvance`, `captionPanel`, `thumbSize`, `jpegCaptionMode`, `ingestDestination`, `ingestFolder`, `ingestJob`, `ingestRename`, `ingestRenameOn`, `ingestSkip`, `ingestEject`, `homeShowAllShortcuts`, `codeDelimiter`, `codeExpandWhileTyping`, `codeListsDisabled`, `codeListsSeeded`, `codeColumnNames`, `codesEditorMode`, `codesSelectedList`, `windowFrame.<w>x<h>`, `windowLastScreen`, `migratedFromLensDesk`.
 
 ---
 
@@ -243,9 +260,6 @@ Add the token to `CaptionVariables.all` and its value in `expand(_:for:)` (`Core
 ### Add a Home section
 In `HomeViewController.loadView`, build the view and `add(view, after: spacing)` it in the right place in the job order. Refresh it in `refresh()`. Use `HomeStyle` and `HomeComponents` pieces. Respect `applyBreakpoints` for narrow windows.
 
-### Add a badge
-Append to the ladders in `Badges` (`Core/Achievements.swift`) with a **new, permanent** id. Add a row to `Resources/Badges/README.md`. The art is optional because placeholders draw automatically.
-
 ### Add a setting
 Store it in UserDefaults with a clear camelCase key, and add the key to the list in §4. If the old LensDesk app could have had it, `LegacyMigration` already copies all old keys.
 
@@ -263,4 +277,4 @@ Store it in UserDefaults with a clear camelCase key, and add the key to the list
   - export a merged Photo Mechanic file
 - **Delivery:** FTP/FTPS sending and Export (resize, rename, to a folder) shipped in desktop. Still open: SFTP, resizing JPGs on the way to FTP (reuse `export::resize_jpeg`), exporting JPGs from RAW-only shoots using the embedded preview plus the sidecar's captions, a "sent" badge on photos, a setting to accept a self-signed FTPS certificate, and porting the new IPTC wire fields to the Swift app.
 
-When you finish a feature: build with `./scripts/build.sh`, verify it in the running app on scratch copies, clean up any test entries in stats, update `README.md` (user-facing) and this file (engineering), and tell the user plainly what you verified and what you didn't.
+When you finish a feature: build with `./scripts/build.sh`, verify it in the running app on scratch copies, clean up scratch recent/library/viewing records, update `README.md` (user-facing) and this file (engineering), and tell the user plainly what you verified and what you didn't.

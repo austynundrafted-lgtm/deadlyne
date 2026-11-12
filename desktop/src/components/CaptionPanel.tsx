@@ -123,9 +123,9 @@ function Section({ id, title, children }: { id: string; title: string; children:
       }}
       className="flex flex-col gap-3"
     >
-      <CollapsibleTrigger className="-mx-2 flex items-center justify-between rounded-md px-2 py-1.5 text-xs font-medium tracking-wide text-muted-foreground uppercase transition-[background-color,color] duration-100 outline-none hover:bg-accent/50 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50">
+      <CollapsibleTrigger className="-mx-2 flex items-center justify-between rounded-md px-2 py-1.5 text-xs font-medium tracking-wide text-muted-foreground uppercase transition-[background-color,color] duration-fast outline-none hover:bg-accent/50 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring">
         {title}
-        <ChevronDown className={cn("size-4 transition-[rotate] duration-200", open && "rotate-180")} />
+        <ChevronDown className={cn("size-4 transition-[rotate] duration-normal", open && "rotate-180")} />
       </CollapsibleTrigger>
       <CollapsibleContent className="flex flex-col gap-3">{children}</CollapsibleContent>
     </Collapsible>
@@ -236,7 +236,7 @@ function CodeStatus() {
   const active = lists.filter((l) => !disabled.includes(l.fileName))
   return (
     <button
-      className="m-2 mt-0 flex h-8 shrink-0 items-center gap-2 rounded-md px-2 text-left text-xs text-muted-foreground transition-[background-color,color] duration-100 outline-none hover:bg-accent/50 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50"
+      className="m-2 mt-0 flex h-8 shrink-0 items-center gap-2 rounded-md px-2 text-left text-xs text-muted-foreground transition-[background-color,color] duration-fast outline-none hover:bg-accent/50 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
       onClick={() => useStore.getState().setWorkspace("codes")}
       title="Manage lookup files in Codes"
     >

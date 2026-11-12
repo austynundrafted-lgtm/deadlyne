@@ -11,6 +11,7 @@
     "linux"
   ],
   "permissions": [
-    "updater:default"
+    "updater:default",
+    "process:allow-restart"
   ]
 }

@@ -13,6 +13,17 @@ The active working copy is `/Users/austyn/Documents/ChatGPT/Deadlyne`, recovered
 
 From `desktop/`, use `npm ci` to restore the locked dependencies, `npm run app` for live development, or `npm run build:mac` for a standalone Mac app. The Mac app is written to `desktop/src-tauri/target/release/bundle/macos/Deadlyne.app`. Local builds do not require the release updater signing key. See the desktop README for private sign-in configuration and safe cleanup commands.
 
+For iPad, `npm run build:ipad:sim` builds a standalone simulator app; `npm run ipad` restores the generated Xcode project and starts live development. Run the `deadlyne_iOS` scheme on an iPad simulator in Xcode and keep the terminal running for live development. The macOS bundle and iPad simulator build were rebuilt successfully on October 26, 2026.
+
+The Tauri Mac and iPad apps share account management: **Settings → Account → Delete Account** permanently removes the Supabase login and synced photographer profile after verifying the current password. Photos, sidecars, captions, rosters and local workflow settings remain. An internet connection is required; interrupted requests have a recoverable confirmation status. See the [deletion and retention guide](desktop/supabase/ACCOUNT_DELETION.md). The original Swift app below remains account-free.
+
+The desktop release-readiness pass adds safer copy/move/ingest writes and cleans up failed export files. Export names keep one extension, and RAW/JPG/sidecar groups share a collision number. Search has a clear button, Show all resets every photo filter, and wider toolbars label Export and Captions. Mac and Windows release builds now run the automated tests before packaging.
+
+The desktop loupe keeps portrait and mirrored images upright when moving between photos: the thumbnail and full-resolution preview now share one rotation, without altering the original files.
+
+The desktop interface uses shared dark-theme tokens for readable action colors and keyboard focus. Dialogs scroll in shorter windows, and the Codes toolbar wraps in smaller Mac windows. See the [UI audit](desktop/UI_AUDIT.md) for verification and remaining styles.
+Its controls and shortcut hints stay on one line as the photo pane narrows. Nearby full-size images are decoded ahead in a small cache to reduce the wait between frames.
+
 ## Why Photo Mechanic (and Deadlyne) are fast
 
 Photo Mechanic doesn't use a secret RAW decoder. It **skips RAW decoding completely.**
@@ -49,10 +60,9 @@ Measured on this Mac (M-series, 18 cores) with a 2,192-frame Canon R3 football s
   - **Live area.** Appears only when something is happening. A connected card shows its camera, photo count and size, where it will copy to, and a warning if the destination doesn't have room. While an ingest runs, you see files copied, GB remaining and a time estimate, with Stop and Show buttons.
   - **Recent shoots.** One row per shoot, with a readable name (`Boys_Varsity-Fairborn-vs-Tecumseh_082126` shows as "Fairborn vs. Tecumseh · Boys Varsity · Aug 21, 2026"), culling progress, selects, five-star count and when you last opened it. Right-click a row to pin it to the top, reveal it or remove it. The ··· menu shows all shoots or clears the list (pinned shoots stay).
   - **Ingest setup.** Destination (with free space), job folder, file names and after-copy behavior. Click Destination to change it right there.
-  - A one-line **stats strip** (this month's photos and shoots, next badge) and the essential **keyboard shortcuts**, with View all.
+  - Essential **keyboard shortcuts**, with View all.
   ⇧⌘H (or the house button) switches between Home and the photos without reloading the folder.
 - **Optional profile (⌘,).** Add your name, credit line, copyright notice and a photo. The profile is stored only on this Mac, with no account. **Caption → Fill Credits from Profile** (⌥⌘P), or the button in the caption panel, writes Photographer, Credit and Copyright into the selected photos. In the copyright notice, `{year}` becomes each photo's capture year. You never need a profile to use Deadlyne.
-- **Badges and progress.** Deadlyne counts every photo you ingest from a card, plus every photo in a folder the first time you open it. A RAW+JPG pair is one photo, and reopening a shoot or re-ingesting a card never counts twice. You earn milestone badges on two tracks: photos ingested (100 up to 1,000,000) and shoots (1 up to 250). Home shows this month's count and the next badge in one line. Clicking it opens the full **Achievements** window (also in the Deadlyne menu). A banner pops up when you unlock a badge. Badge artwork goes in `Resources/Badges/`; see the README there for the spec and ids. Badges without artwork use placeholder medallions.
 - **Contact sheet.** Thousands of thumbnails, warmed in the background in display order. Visible cells always load first.
 - **RAW+JPEG pairing.** `MCD_0001.CR3` and `MCD_0001.JPG` show as one photo and are copied, moved and trashed together.
 - **Loupe preview.** Space or Return opens it; ←/→ flip through photos. Neighbours are pre-decoded so the next frame is instant. Click or press `Z` for a 100% focus check, then drag to pan.
@@ -81,7 +91,8 @@ Measured on this Mac (M-series, 18 cores) with a 2,192-frame Canon R3 football s
 - **Search** (⌘F) filters by filename, caption, headline, keywords or any other caption field.
 - **Files: RAW + JPG / RAW Only / JPG Only** (⌥⌘4/5/6). Shows pairs, or only photos that have that file type. Copy, move, drag, open and trash then act **only on that file type**. For example, JPG Only followed by Copy Tagged sends a client just the JPGs.
 - **Copy/Move tagged.** Sends RAW, JPEG and sidecar together (or just the chosen file type) and never overwrites.
-- **Move to Trash** is always recoverable.
+- **Move to Trash** is always recoverable. In the desktop app, deleting photos or removing saved items asks “Are you sure?” first, with Cancel selected. Photo confirmations show the filenames, count and RAW/JPG scope.
+- **Uncluttered photo viewing (desktop):** filenames appear under grid thumbnails, without repeating in the loupe controls or status bar.
 - **Ingest.** Detects memory cards (any volume with `DCIM`) and copies into dated or job-named folders with template renaming. It verifies file sizes, skips photos already ingested and can eject the card when done.
 - **Drag out.** Drag thumbnails straight into Photoshop, Lightroom, email and so on.
 - Reveal in Finder, Open in Default App, Open Recent, and drag a folder onto the window to open it.

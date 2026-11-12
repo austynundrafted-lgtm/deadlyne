@@ -1,6 +1,7 @@
 // The right-click (and ⋯) menus for shoots, folders and collections. Each menu is described once
 // as a list of entries and drawn as either a context menu or a dropdown.
 import { revealLabel, trashAction } from "@/lib/format"
+import { LABELS } from "@/lib/api"
 import {
   deleteCollection,
   locateFolder,
@@ -9,15 +10,21 @@ import {
   openShoot,
   pickFiles,
   removeFromLibrary,
+  removeFromCollection,
+  refreshFolder,
   renameCollection,
   renameOnDisk,
   resetProgress,
   resumeShoot,
   trashFolder,
+  transferSelectionHere,
 } from "@/lib/folders"
 import { reveal } from "@/lib/api"
 import { isWithin, samePath, statsFor, useLibrary, type LibrarySection } from "@/lib/library"
 import { useStore } from "@/store"
+import { catalogPath, effectiveCatalogRule } from "@/lib/catalog-rules"
+import { useUI } from "@/ui"
+import { confirm } from "@/lib/prompts"
 import {
   ContextMenuContent,
   ContextMenuItem,
@@ -98,8 +105,24 @@ export function DropdownEntries({ entries, className = "w-60", align = "end" }: 
   )
 }
 
+type FolderMenuContext = { origin?: LibrarySection; collectionId?: string; open?: boolean }
+
+/** Subscribe separately so selection and rule changes update menus without rebuilding folder rows. */
+export function FolderEntries({ path, context, dropdown = false }: { path: string; context?: FolderMenuContext; dropdown?: boolean }) {
+  useStore((s) => s.loupe ? !!s.focus : s.selected.size > 0)
+  useStore((s) => s.folder)
+  useStore((s) => s.busy)
+  useLibrary((s) => s.shoots)
+  useLibrary((s) => s.collections)
+  useLibrary((s) => s.folderLabels)
+  useLibrary((s) => s.catalogRules)
+  useLibrary((s) => s.stats)
+  const entries = folderMenu(path, context)
+  return dropdown ? <DropdownEntries entries={entries} /> : <ContextEntries entries={entries} />
+}
+
 /** Everything you can do to a shoot or one of its folders. `collection` adds "Remove from…". */
-export function folderMenu(path: string, ctx: { origin?: LibrarySection; collectionId?: string; open?: boolean } = {}): MenuEntry[] {
+export function folderMenu(path: string, ctx: FolderMenuContext = {}): MenuEntry[] {
   const lib = useLibrary.getState()
   const shoot = lib.shoots.find((s) => samePath(s.path, path))
   const stats = statsFor(lib.stats, path)
@@ -109,7 +132,7 @@ export function folderMenu(path: string, ctx: { origin?: LibrarySection; collect
   if (missing) {
     return tidy([
       { label: "Locate folder…", onSelect: () => locateFolder(path) },
-      collection && { label: `Remove from “${collection.name}”`, onSelect: () => lib.removeFromCollection(collection.id, path) },
+      collection && { label: `Remove from “${collection.name}”…`, onSelect: () => removeFromCollection(collection.id, path) },
       shoot && { label: "Remove from Deadlyne", onSelect: () => removeFromLibrary(path) },
     ])
   }
@@ -117,9 +140,18 @@ export function folderMenu(path: string, ctx: { origin?: LibrarySection; collect
   const partial = !!stats && stats.totalViewed > 0 && stats.totalViewed < stats.totalPhotos
   const isOpen = useStore.getState().folder && samePath(useStore.getState().folder!, path)
   const topLevel = !lib.shoots.some((s) => !samePath(s.path, path) && isWithin(path, s.path))
+  const state = useStore.getState()
+  const canTransfer = !!state.folder && !state.busy && !samePath(state.folder, path) && (state.loupe ? !!state.focus : state.selected.size > 0)
+  const explicitRule = lib.catalogRules[catalogPath(path)]
+  const effectiveRule = effectiveCatalogRule(path, lib.catalogRules)
   const collections = lib.collections.slice().sort((a, b) => a.name.localeCompare(b.name))
 
   return tidy([
+    { label: "Color label", sub: [
+      { label: "None", onSelect: () => lib.setFolderLabel(path, null) },
+      ...LABELS.map((label) => ({ label: `${lib.folderLabels[path.replace(/[\\/]+$/, "")] === label ? "✓ " : ""}${label}`, onSelect: () => lib.setFolderLabel(path, label) })),
+    ] },
+    "separator",
     !ctx.open && { label: "Open", onSelect: () => openShoot(path, ctx.origin) },
     partial && { label: "Continue reviewing", onSelect: () => resumeShoot(path, ctx.origin) },
     { label: revealLabel, onSelect: () => reveal(path) },
@@ -138,17 +170,30 @@ export function folderMenu(path: string, ctx: { origin?: LibrarySection; collect
         { label: "New collection…", onSelect: () => newCollection(null, [path]) },
       ]),
     },
-    collection && { label: `Remove from “${collection.name}”`, onSelect: () => lib.removeFromCollection(collection.id, path) },
+    collection && { label: `Remove from “${collection.name}”…`, onSelect: () => removeFromCollection(collection.id, path) },
     "separator",
     { label: "Add files…", onSelect: () => (isOpen ? pickFiles(path) : openShoot(path, ctx.origin).then(() => pickFiles(path))) },
     { label: "New folder inside…", onSelect: () => newFolder(path) },
+    { label: "Copy selected photos here", disabled: !canTransfer, onSelect: () => transferSelectionHere(path, false) },
+    { label: "Move selected photos here", disabled: !canTransfer, onSelect: () => transferSelectionHere(path, true) },
+    { label: "Catalog scanning rules", sub: [
+      { label: `${effectiveRule?.rule === "include" ? "✓ " : ""}Include when scanning`, onSelect: () => lib.setCatalogRule(path, "include") },
+      { label: `${effectiveRule?.rule === "exclude" ? "✓ " : ""}Exclude when scanning`, onSelect: () => lib.setCatalogRule(path, "exclude") },
+      { label: "Clear this folder’s rule…", disabled: !explicitRule, onSelect: async () => {
+        if (await confirm({ title: "Remove this catalog rule?", description: `The rule for “${path}” will be removed. Photos remain untouched.`, action: "Remove rule", destructive: true })) useLibrary.getState().setCatalogRule(path, null)
+      } },
+      { label: "Manage rules in Settings…", onSelect: () => useUI.setState({ profile: true, profileTab: "catalog" }) },
+    ] },
     { label: "Rename on disk…", onSelect: () => renameOnDisk(path) },
+    { label: "Refresh", onSelect: () => refreshFolder(path) },
     "separator",
     shoot && topLevel && { label: shoot.archived ? "Move out of Archive" : "Archive", onSelect: () => lib.updateShoot(path, { archived: !shoot.archived }) },
     { label: "Reset viewing progress…", disabled: !stats?.totalViewed, onSelect: () => resetProgress(path) },
     "separator",
     shoot && { label: "Remove from Deadlyne", onSelect: () => removeFromLibrary(path) },
     { label: `${trashAction}…`, destructive: true, onSelect: () => trashFolder(path) },
+    "separator",
+    { label: "Preferences…", onSelect: () => useUI.getState().open("profile") },
   ])
 }
 

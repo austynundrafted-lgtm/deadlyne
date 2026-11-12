@@ -59,9 +59,9 @@ export function orientationTransform(o: number): { transform: string; swapsAxes:
     case 2: return { transform: "scaleX(-1)", swapsAxes: false }
     case 3: return { transform: "rotate(180deg)", swapsAxes: false }
     case 4: return { transform: "scaleY(-1)", swapsAxes: false }
-    case 5: return { transform: "rotate(90deg) scaleX(-1)", swapsAxes: true }
+    case 5: return { transform: "rotate(90deg) scaleY(-1)", swapsAxes: true }
     case 6: return { transform: "rotate(90deg)", swapsAxes: true }
-    case 7: return { transform: "rotate(-90deg) scaleX(-1)", swapsAxes: true }
+    case 7: return { transform: "rotate(-90deg) scaleY(-1)", swapsAxes: true }
     case 8: return { transform: "rotate(-90deg)", swapsAxes: true }
     default: return { transform: "none", swapsAxes: false }
   }

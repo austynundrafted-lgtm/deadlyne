@@ -31,7 +31,7 @@ import { baseName, folderTitle, isWithin, parentPath, rootShootOf, SECTION_TITLE
 import { cn } from "@/lib/utils"
 import { continueReviewing, useOpenFolderProgress } from "@/lib/viewing"
 import { useStore, type FolderDoc, type FolderTab } from "@/store"
-import { ContextEntries, DropdownEntries, folderMenu, type MenuEntry } from "@/components/LibraryMenus"
+import { ContextEntries, FolderEntries, type MenuEntry } from "@/components/LibraryMenus"
 import { FolderItems, subfolderItem, useViewMode, ViewModeToggle } from "@/components/LibraryView"
 import { viewedSummary } from "@/components/ViewProgress"
 import { Badge } from "@/components/ui/badge"
@@ -89,9 +89,9 @@ export function FolderBar() {
 
   return (
     <div className="@container/bar flex h-10 shrink-0 items-center gap-2 border-b bg-background px-3">
-      <nav aria-label="Folder path" className="flex min-w-0 flex-1 items-center gap-0.5 text-[13px]">
+      <nav aria-label="Folder path" className="flex min-w-0 flex-1 items-center gap-0.5 text-control">
         <button
-          className="shrink-0 rounded-sm px-1 text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50"
+          className="shrink-0 rounded-sm px-1 text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
           onClick={() => useStore.getState().showSection(origin)}
         >
           {sectionLabel(origin)}
@@ -108,7 +108,7 @@ export function FolderBar() {
                 </span>
               ) : (
                 <button
-                  className="truncate rounded-sm px-1 text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50"
+                  className="truncate rounded-sm px-1 text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
                   title={p}
                   onClick={() => useStore.getState().openFolder(p)}
                 >
@@ -137,7 +137,7 @@ export function FolderBar() {
               className="gap-1.5 text-muted-foreground data-[state=on]:bg-accent data-[state=on]:text-foreground"
             >
               {t.label}
-              <span className="hidden text-[11px] text-muted-foreground tabular-nums @xl/bar:inline">{t.count.toLocaleString()}</span>
+              <span className="hidden text-caption text-muted-foreground tabular-nums @xl/bar:inline">{t.count.toLocaleString()}</span>
             </ToggleGroupItem>
           ))}
       </ToggleGroup>
@@ -171,7 +171,7 @@ export function FolderBar() {
             <MoreHorizontal />
           </Button>
         </DropdownMenuTrigger>
-        <DropdownEntries entries={folderMenu(folder, { open: true, origin })} />
+        <FolderEntries path={folder} context={{ open: true, origin }} dropdown />
       </DropdownMenu>
       {search && folderTab !== "photos" && <span className="sr-only">Filtered by “{search}”</span>}
     </div>
@@ -375,7 +375,8 @@ export function DocumentsView() {
     const selected = d.path === selectedDoc
     const common = {
       "data-doc": d.path,
-      "aria-selected": selected,
+      "data-selected": selected,
+      "aria-description": selected ? "Selected" : undefined,
       title: d.path,
       onFocus: () => select(d.path),
       onPointerDown: (e: React.PointerEvent) => e.button === 0 && select(d.path),
@@ -391,8 +392,9 @@ export function DocumentsView() {
             <button
               {...common}
               role="row"
+              aria-selected={selected}
               className={cn(
-                "grid h-10 w-full items-center gap-3 rounded-md px-2 text-left text-[13px] outline-none transition-[background-color] duration-100 hover:bg-white/[0.04] focus-visible:ring-2 focus-visible:ring-ring/60",
+                "grid h-10 w-full items-center gap-3 rounded-md px-2 text-left text-control outline-none transition-[background-color] duration-fast hover:bg-surface-hover focus-visible:ring-2 focus-visible:ring-ring",
                 selected && "bg-accent hover:bg-accent",
               )}
               style={{ gridTemplateColumns: DOC_COLUMNS }}
@@ -413,7 +415,7 @@ export function DocumentsView() {
               {...common}
               role="listitem"
               className={cn(
-                "flex min-w-0 flex-col items-center gap-2 rounded-xl px-3 pt-4 pb-3 text-center outline-none transition-[background-color] duration-150 hover:bg-white/[0.04] focus-visible:ring-2 focus-visible:ring-ring/60",
+                "flex min-w-0 flex-col items-center gap-2 rounded-xl px-3 pt-4 pb-3 text-center outline-none transition-[background-color] duration-fast hover:bg-surface-hover focus-visible:ring-2 focus-visible:ring-ring",
                 selected && "bg-accent hover:bg-accent",
               )}
             >
@@ -426,8 +428,8 @@ export function DocumentsView() {
                 )}
               </span>
               <span className="flex w-full min-w-0 flex-col gap-0.5">
-                <span className="truncate text-[13px] font-medium">{d.name}</span>
-                <span className={cn("truncate text-[11px]", d.exists ? "text-muted-foreground" : "text-(--label-yellow)")}>{docDetail(d)}</span>
+                <span className="truncate text-control font-medium">{d.name}</span>
+                <span className={cn("truncate text-caption", d.exists ? "text-muted-foreground" : "text-(--label-yellow)")}>{docDetail(d)}</span>
               </span>
             </button>
           )}
@@ -443,7 +445,7 @@ export function DocumentsView() {
         <p className="p-6 text-center text-sm text-muted-foreground">No documents match “{search}”.</p>
       ) : mode === "list" ? (
         <div role="table" aria-label="Documents" className="min-w-[520px] px-2 pb-4">
-          <div role="row" className="sticky top-0 z-10 grid h-8 items-center gap-3 bg-background px-2 text-[11px] font-medium tracking-wide text-muted-foreground uppercase" style={{ gridTemplateColumns: DOC_COLUMNS }}>
+          <div role="row" className="sticky top-0 z-10 grid h-8 items-center gap-3 bg-background px-2 text-caption font-medium tracking-wide text-muted-foreground uppercase" style={{ gridTemplateColumns: DOC_COLUMNS }}>
             <span role="columnheader" className="col-span-2">Name</span>
             <span role="columnheader">Kind</span>
             <span role="columnheader" className="text-right">Size</span>
@@ -489,7 +491,7 @@ export function DocumentInspector() {
       <ScrollArea className="min-h-0 flex-1">
         <div className="flex flex-col gap-5 p-4">
           <button
-            className="flex h-40 items-center justify-center rounded-lg bg-black/25 shadow-edge outline-none transition-[box-shadow] duration-100 hover:shadow-edge-hover focus-visible:ring-2 focus-visible:ring-ring/60 disabled:cursor-default"
+            className="flex h-40 items-center justify-center rounded-lg bg-preview-canvas shadow-edge outline-none transition-[box-shadow] duration-fast hover:shadow-edge-hover focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default"
             onClick={() => quickLook(doc)}
             disabled={!doc.exists}
             aria-label="Quick Look"

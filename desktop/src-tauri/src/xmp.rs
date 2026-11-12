@@ -24,6 +24,7 @@ pub struct Culling {
 
 /// Culling and captions from one read of a sidecar.
 pub fn read_all(sidecar: &Path) -> Option<(Culling, Captions)> {
+    let _access = crate::data::access(sidecar).ok()?;
     let text = std::fs::read_to_string(sidecar).ok()?;
     Some((read_culling(&text), read_captions(&text)))
 }
@@ -73,6 +74,7 @@ pub fn read_captions(text: &str) -> Captions {
 /// Updates culling and/or caption fields in a sidecar, leaving everything else untouched.
 /// A new sidecar is created only when there's something worth writing.
 pub fn update(sidecar: &Path, ext: &str, culling: Option<&Culling>, captions: Option<(&Captions, &[Field])>) -> std::io::Result<()> {
+    let _access = crate::data::access(sidecar)?;
     let mut text = match std::fs::read_to_string(sidecar) {
         Ok(t) => t,
         Err(_) => {
@@ -104,6 +106,7 @@ pub fn update(sidecar: &Path, ext: &str, culling: Option<&Culling>, captions: Op
 
 /// Writes beside the original, then swaps, so a crash never leaves half a file.
 pub fn write_atomic(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
+    let _access = crate::data::access(path)?;
     let name = path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
     let tmp = path.with_file_name(format!(".{name}.deadlyne-tmp"));
     std::fs::write(&tmp, bytes)?;

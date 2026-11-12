@@ -1,6 +1,6 @@
 // The one bar at the top: workspace tabs on the left, the current shoot's controls on the right.
 // On macOS it sits in the title bar beside the window buttons (titleBarStyle "Overlay").
-import { Filter, FolderOpen, FolderOutput, House, Images, MessageSquareText, MoreHorizontal, Search, TextCursorInput } from "lucide-react"
+import { Filter, FolderOpen, FolderOutput, House, Images, MessageSquareText, MoreHorizontal, Search, TextCursorInput, X } from "lucide-react"
 import { useShallow } from "zustand/react/shallow"
 import logo from "@/assets/logo.png"
 import { FILE_SCOPES, LABELS, type FileScope } from "@/lib/api"
@@ -47,26 +47,28 @@ export function TitleBar() {
   return (
     <header
       data-tauri-drag-region
-      className="flex h-12 shrink-0 items-center gap-3 border-b bg-bar pr-3"
-      style={{ paddingLeft: isMac ? 92 : 12 }}
+      className={cn("flex h-titlebar shrink-0 items-center gap-3 border-b bg-bar pr-3 pl-(--titlebar-inset)", isMac && "mac-titlebar")}
     >
       <img src={logo} alt="" className="pointer-events-none size-6" draggable={false} />
 
       <Tabs value={workspace} onValueChange={(v) => setWorkspace(v as Workspace)}>
-        <TabsList className="h-9 bg-black/40 p-1">
+        <TabsList className="h-9 bg-tab-track p-1">
           {WORKSPACES.map(({ value, label, icon: Icon, key }) => (
             <Tooltip key={value}>
               <TooltipTrigger asChild>
                 <TabsTrigger
                   value={value}
-                  className="h-7 gap-1.5 rounded-sm px-3 aria-selected:border-transparent aria-selected:bg-(--tab) aria-selected:text-(--tab-fg) aria-selected:shadow-sm aria-selected:hover:text-(--tab-fg)"
+                  id={`workspace-tab-${value}`}
+                  aria-controls={`workspace-${value}`}
+                  aria-label={label}
+                  className="h-7 gap-1.5 rounded-sm px-3 aria-selected:border-transparent aria-selected:bg-(--tab) aria-selected:text-(--tab-fg) aria-selected:shadow-sm aria-selected:hover:text-(--tab-fg) dark:aria-selected:text-(--tab-fg) dark:aria-selected:hover:text-(--tab-fg) dark:aria-selected:bg-(--tab) dark:aria-selected:border-transparent"
                   style={{
                     ["--tab" as string]: `var(--workspace-${value})`,
-                    ["--tab-fg" as string]: value === "home" ? "#fff" : "#111",
+                    ["--tab-fg" as string]: "var(--workspace-foreground)",
                   }}
                 >
                   <Icon />
-                  {label}
+                  <span className={cn(culling && "hidden min-[1100px]:inline")}>{label}</span>
                 </TabsTrigger>
               </TooltipTrigger>
               <TooltipContent>
@@ -142,7 +144,7 @@ function PhotoFilters() {
           <Button variant="ghost" size="sm" aria-label="Filter by rating or label">
             <Filter data-icon="inline-start" />
             Filter
-            {extra > 0 && <Badge className="h-4 min-w-4 px-1 text-[10px]">{extra}</Badge>}
+            {extra > 0 && <Badge className="h-4 min-w-4 px-1 text-micro">{extra}</Badge>}
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-48">
@@ -189,7 +191,7 @@ function PhotoFilters() {
           {extra > 0 && (
             <>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onSelect={() => { clearFilters(); setFilter({ fileScope: "both" }) }}>Clear filters</DropdownMenuItem>
+              <DropdownMenuItem onSelect={clearFilters}>Clear filters</DropdownMenuItem>
             </>
           )}
         </DropdownMenuContent>
@@ -202,19 +204,39 @@ function PhotoFilters() {
 function PhotoSearch({ placeholder }: { placeholder: string }) {
   const { search, setFilter } = useStore(useShallow((s) => ({ search: s.search, setFilter: s.setFilter })))
   return (
-    <div className="relative w-44 shrink">
+    <div className="relative min-w-24 w-44 shrink">
       <Search className="pointer-events-none absolute top-1/2 left-2 size-3.5 -translate-y-1/2 text-muted-foreground" />
       <Input
         id="photo-search"
         value={search}
         onChange={(e) => setFilter({ search: e.target.value })}
         onKeyDown={(e) => {
-          if (e.key === "Escape" || e.key === "Enter") e.currentTarget.blur()
+          if (e.key === "Escape") {
+            e.preventDefault()
+            e.stopPropagation()
+            if (search) setFilter({ search: "" })
+            else e.currentTarget.blur()
+          } else if (e.key === "Enter") e.currentTarget.blur()
         }}
         placeholder={`${placeholder}  ${mod}F`}
-        className="h-7 pl-7 text-sm"
-        aria-label="Search file names, captions and keywords"
+        className="h-7 pr-7 pl-7 text-sm"
+        aria-label={placeholder === "Search" ? "Search file names, captions and keywords" : placeholder}
       />
+      {search && (
+        <Button
+          variant="ghost"
+          size="icon-xs"
+          static
+          className="absolute top-1/2 right-0.5 size-6 -translate-y-1/2"
+          aria-label="Clear search"
+          onClick={() => {
+            setFilter({ search: "" })
+            document.getElementById("photo-search")?.focus()
+          }}
+        >
+          <X className="size-3.5" />
+        </Button>
+      )}
     </div>
   )
 }
@@ -297,8 +319,9 @@ function ExportButton() {
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <Button variant="ghost" size="icon-sm" aria-label="Export" onClick={() => openExport()}>
+        <Button variant="ghost" size="sm" className="shrink-0" aria-label="Export photos" onClick={() => openExport()}>
           <FolderOutput />
+          <span className="hidden min-[1280px]:inline">Export</span>
         </Button>
       </TooltipTrigger>
       <TooltipContent>
@@ -315,13 +338,14 @@ function CaptionToggle() {
       <TooltipTrigger asChild>
         <Button
           variant="ghost"
-          size="icon-sm"
+          size="sm"
           aria-pressed={captionPanel}
           aria-label="Captions"
-          className={cn(captionPanel && "bg-(--workspace-photos)/15 text-(--workspace-photos)")}
+          className={cn("shrink-0", captionPanel && "bg-(--workspace-photos)/15 text-(--workspace-photos)")}
           onClick={() => setCaptionPanel(!captionPanel)}
         >
           <MessageSquareText />
+          <span className="hidden min-[1280px]:inline">Captions</span>
         </Button>
       </TooltipTrigger>
       <TooltipContent>

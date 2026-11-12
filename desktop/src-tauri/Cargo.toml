@@ -10,6 +10,12 @@ edition = "2021"
 name = "deadlyne_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
+[features]
+default = ["self-update", "desktop-notifications"]
+self-update = ["dep:tauri-plugin-updater", "dep:tauri-plugin-process"]
+desktop-notifications = ["dep:tauri-plugin-notification"]
+mac-app-store = []
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
@@ -17,7 +23,6 @@ tauri-build = { version = "2", features = [] }
 tauri = { version = "2", features = [] }
 tauri-plugin-dialog = "2"
 tauri-plugin-store = "2"
-tauri-plugin-process = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 rayon = "1"
@@ -36,10 +41,20 @@ rustls-platform-verifier = "0.7"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 plist = "1"
+objc2 = "0.6"
+objc2-foundation = { version = "0.3", features = ["NSURL", "NSData", "NSArray", "NSString", "NSError", "NSFileManager", "NSPathUtilities"] }
+objc2-app-kit = { version = "0.3", features = ["NSOpenPanel", "NSSavePanel", "NSWorkspace", "NSApplication", "NSWindow", "block2"] }
+block2 = "0.6"
+objc2-quick-look-ui = "0.3"
+objc2-user-notifications = "0.3"
+
+[target.'cfg(any(target_os = "macos", target_os = "ios"))'.dependencies]
+libc = "0.2"
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
-tauri-plugin-updater = "2"
-tauri-plugin-notification = "2"
+tauri-plugin-updater = { version = "2", optional = true }
+tauri-plugin-process = { version = "2", optional = true }
+tauri-plugin-notification = { version = "2", optional = true }
 tauri-plugin-window-state = "2"
 trash = "5"
 
@@ -59,3 +74,9 @@ strip = true
 # Image decoding is unbearably slow unoptimized, even while developing.
 [profile.dev.package."*"]
 opt-level = 3
+
+# Tao 0.35.3 returns a freed UISceneConfiguration on iOS release launches.
+# Pin the upstream ownership fix until Tauri uses a release that includes it.
+# https://github.com/tauri-apps/tao/pull/1245
+[patch.crates-io]
+tao = { git = "https://github.com/tauri-apps/tao", rev = "f2163508104413ef0609178dcebdd5803b496211" }

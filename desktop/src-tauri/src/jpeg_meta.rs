@@ -100,6 +100,7 @@ pub fn read_captions(path: &Path) -> Captions {
 
 /// Metadata always precedes the scan; a JPEG's first megabyte holds all of it.
 fn read_head(path: &Path) -> std::io::Result<Vec<u8>> {
+    let _access = crate::data::access(path)?;
     use std::io::Read;
     let mut buf = Vec::with_capacity(1 << 20);
     std::fs::File::open(path)?.take(1 << 20).read_to_end(&mut buf)?;
@@ -139,6 +140,7 @@ fn iim_captions(sets: &[Dataset]) -> Captions {
 /// `captions`. With `Xmp`, Deadlyne's datasets are removed from any IIM block so older readers
 /// never see a stale caption.
 pub fn embed(path: &Path, captions: &Captions, fields: &[Field], mode: JpegMode, date_created: Option<(String, String)>) -> Result<(), String> {
+    let _access = crate::data::access(path).map_err(|e| e.to_string())?;
     let old = std::fs::read(path).map_err(|e| e.to_string())?;
     let (segs, scan) = layout(&old)?;
 

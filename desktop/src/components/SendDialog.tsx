@@ -226,7 +226,7 @@ function JobRow({ job }: { job: SendJob }) {
           </Button>
         )}
       </div>
-      {job.status === "sending" && <Progress value={fraction * 100} className="h-1" />}
+      {job.status === "sending" && <Progress aria-label={`Sending photos to ${to}`} value={fraction * 100} className="h-1" />}
       <p className={cn("text-xs break-words", job.status === "failed" ? "text-destructive" : "text-muted-foreground")} title={job.summary?.errors.join("\n")}>
         {detail}
       </p>

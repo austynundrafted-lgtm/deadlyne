@@ -18,12 +18,6 @@ fi
 [ -f Resources/AppIcon.icns ] || { echo "Missing $ICON_SRC (square 1024×1024 artwork)"; exit 1; }
 cp Resources/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
 
-# Badge artwork (optional): Resources/Badges/<id>.png — see Resources/Badges/README.md.
-if compgen -G "Resources/Badges/*.png" > /dev/null; then
-  mkdir -p "$APP/Contents/Resources/Badges"
-  cp Resources/Badges/*.png "$APP/Contents/Resources/Badges/"
-fi
-
 cat > "$APP/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">

@@ -21,7 +21,7 @@ import {
 import { useShallow } from "zustand/react/shallow"
 import { dragSource, useDnd, useDropTarget, type DragItem } from "@/lib/dnd"
 import { newCollection, openShoot, useTree } from "@/lib/folders"
-import { alt, mod } from "@/lib/format"
+import { alt, labelColor, mod } from "@/lib/format"
 import {
   baseName,
   descendantIds,
@@ -38,7 +38,7 @@ import {
 import { pref, setPref } from "@/lib/settings"
 import { cn } from "@/lib/utils"
 import { useStore } from "@/store"
-import { collectionMenu, ContextEntries, folderMenu } from "@/components/LibraryMenus"
+import { collectionMenu, ContextEntries, FolderEntries } from "@/components/LibraryMenus"
 import { Button } from "@/components/ui/button"
 import { ContextMenu, ContextMenuTrigger } from "@/components/ui/context-menu"
 import { Kbd } from "@/components/ui/kbd"
@@ -203,7 +203,7 @@ export function Sidebar() {
             open={expanded.collections !== false}
             onToggle={() => toggle("collections")}
             action={
-              <Button variant="ghost" size="icon-xs" aria-label="New collection" onClick={() => newCollection()}>
+              <Button variant="ghost" size="icon-xs" role="treeitem" aria-level={1} data-tree-row aria-label="New collection" onClick={() => newCollection()}>
                 <Plus />
               </Button>
             }
@@ -211,7 +211,10 @@ export function Sidebar() {
           >
             {collections.filter((c) => !c.parent).length === 0 ? (
               <button
-                className="mx-1 rounded-md px-2 py-1.5 text-left text-xs text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50"
+                role="treeitem"
+                aria-level={1}
+                data-tree-row
+                className="mx-1 rounded-md px-2 py-1.5 text-left text-xs text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
                 onClick={() => newCollection()}
               >
                 Group shoots by season, team or client. Files stay where they are.
@@ -280,24 +283,24 @@ function Group({
       {title && (
         <div
           data-drop-id={dropId}
-          className={cn("group/header flex h-7 items-center rounded-md pr-1 transition-[background-color] duration-100", drop === "over" && "bg-primary/15")}
+          className={cn("group/header flex h-7 items-center rounded-md pr-1 transition-[background-color] duration-fast", drop === "over" && "bg-primary/15")}
         >
           <button
             data-tree-row
             role="treeitem"
-            aria-level={0}
+            aria-level={1}
             aria-expanded={open}
             onClick={onToggle}
             ref={(el) => {
               if (!el || !onToggle) return
               el.ontreetoggle = onToggle
             }}
-            className="flex h-full flex-1 items-center gap-1 rounded-md px-2 text-left text-[11px] font-semibold tracking-wide text-muted-foreground uppercase outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50"
+            className="flex h-full flex-1 items-center gap-1 rounded-md px-2 text-left text-caption font-semibold tracking-wide text-muted-foreground uppercase outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
           >
             {title}
-            <ChevronRight className={cn("size-3 opacity-0 transition-[rotate,opacity] duration-150 group-hover/header:opacity-100", open && "rotate-90")} />
+            <ChevronRight className={cn("size-3 opacity-0 transition-[rotate,opacity] duration-fast group-hover/header:opacity-100", open && "rotate-90")} />
           </button>
-          {action && <span className="opacity-0 transition-opacity duration-100 group-hover/header:opacity-100 focus-within:opacity-100 pointer-coarse:opacity-100">{action}</span>}
+          {action && <span className="opacity-0 transition-opacity duration-fast group-hover/header:opacity-100 focus-within:opacity-100 pointer-coarse:opacity-100">{action}</span>}
         </div>
       )}
       {open && children}
@@ -313,7 +316,7 @@ declare global {
 }
 
 const ROW =
-  "group/row relative flex h-7 w-full min-w-0 items-center gap-2 rounded-md pr-2 text-left text-[13px] outline-none transition-[background-color,color] duration-100 hover:bg-white/5 focus-visible:ring-2 focus-visible:ring-ring/50"
+  "group/row relative flex h-7 w-full min-w-0 items-center gap-2 rounded-md pr-2 text-left text-control outline-none transition-[background-color,color] duration-fast hover:bg-surface-hover focus-visible:ring-2 focus-visible:ring-ring"
 const ROW_ACTIVE = "bg-accent text-foreground hover:bg-accent"
 
 function SectionRow({
@@ -345,12 +348,12 @@ function SectionRow({
       className={cn(ROW, "pl-2", active && ROW_ACTIVE, state === "over" && "bg-primary/15 text-foreground")}
       onClick={() => useStore.getState().showSection(section)}
     >
-      <Icon className={cn("size-4 shrink-0", active ? "text-primary" : "text-muted-foreground")} />
+      <Icon className={cn("size-4 shrink-0", active ? "text-primary-readable" : "text-muted-foreground")} />
       <span className="min-w-0 flex-1 truncate">{label}</span>
       {state === "over" ? (
-        <span className="text-[11px] text-primary">{drop!.label}</span>
+        <span className="text-caption text-primary-readable">{drop!.label}</span>
       ) : (
-        count !== undefined && <span className="text-[11px] text-muted-foreground tabular-nums">{count.toLocaleString()}</span>
+        count !== undefined && <span className="text-caption text-muted-foreground tabular-nums">{count.toLocaleString()}</span>
       )}
     </button>
   )
@@ -363,8 +366,8 @@ function PinnedGroup({ pinned, folder, origin }: { pinned: LibraryShoot[]; folde
   })
   const stats = useLibrary((s) => s.stats)
   return (
-    <div role="group" data-drop-id="pinned" className={cn("flex flex-col gap-px rounded-md transition-[background-color] duration-100", state === "over" && "bg-primary/15")}>
-      <div className="flex h-7 items-center px-2 text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">
+    <div role="group" data-drop-id="pinned" className={cn("flex flex-col gap-px rounded-md transition-[background-color] duration-fast", state === "over" && "bg-primary/15")}>
+      <div className="flex h-7 items-center px-2 text-caption font-semibold tracking-wide text-muted-foreground uppercase">
         Pinned
       </div>
       {pinned.map((s) => (
@@ -426,9 +429,9 @@ function CollectionRow({
             style={{ paddingLeft: 8 + (level - 1) * 14 }}
           >
             <Disclosure open={open} visible={hasChildren} onToggle={() => toggle(key)} />
-            <Library className={cn("size-4 shrink-0", active ? "text-primary" : "text-muted-foreground")} />
+            <Library className={cn("size-4 shrink-0", active ? "text-primary-readable" : "text-muted-foreground")} />
             <span className="min-w-0 flex-1 truncate">{c.name}</span>
-            <span className="text-[11px] text-muted-foreground tabular-nums">{c.shoots.length || ""}</span>
+            <span className="text-caption text-muted-foreground tabular-nums">{c.shoots.length || ""}</span>
           </button>
         </ContextMenuTrigger>
         <ContextEntries entries={collectionMenu(c.id)} />
@@ -469,7 +472,7 @@ function Disclosure({ open, visible, onToggle }: { open: boolean; visible: boole
         onToggle()
       }}
     >
-      <ChevronRight className={cn("size-3 transition-[rotate] duration-150", open && "rotate-90")} />
+      <ChevronRight className={cn("size-3 transition-[rotate] duration-fast", open && "rotate-90")} />
     </span>
   )
 }
@@ -513,6 +516,7 @@ function FolderRow({
   const Icon = missing ? TriangleAlert : icon ?? (active ? FolderOpen : Folder)
   // Shoots read as titles wherever they appear; their subfolders keep their real names.
   const isShoot = useLibrary((s) => s.shoots.some((x) => samePath(x.path, path)))
+  const folderLabel = useLibrary((s) => s.folderLabels[path.replace(/[\\/]+$/, "")])
   const label = isShoot ? folderTitle(path) : baseName(path)
   const total = stats?.totalPhotos ?? 0
 
@@ -536,12 +540,13 @@ function FolderRow({
             style={{ paddingLeft: 8 + (level - 1) * 14 }}
           >
             <Disclosure open={open} visible={expandable} onToggle={() => toggle?.(key)} />
-            <Icon className={cn("size-4 shrink-0", missing ? "text-(--label-yellow)" : active || containsOpen ? "text-primary" : "text-muted-foreground")} />
+            <Icon className={cn("size-4 shrink-0", missing ? "text-(--label-yellow)" : active || containsOpen ? "text-primary-readable" : "text-muted-foreground")} />
             <span className={cn("min-w-0 flex-1 truncate", missing && "text-muted-foreground")}>{label}</span>
-            {total > 0 && <span className="shrink-0 text-[11px] text-muted-foreground tabular-nums">{total.toLocaleString()}</span>}
+            {folderLabel && <span className="size-2 shrink-0 rounded-full" style={{ backgroundColor: labelColor(folderLabel) }} role="img" aria-label={`${folderLabel} label`} />}
+            {total > 0 && <span className="shrink-0 text-caption text-muted-foreground tabular-nums">{total.toLocaleString()}</span>}
           </button>
         </ContextMenuTrigger>
-        <ContextEntries entries={folderMenu(path, { origin, collectionId })} />
+        <FolderEntries path={path} context={{ origin, collectionId }} />
       </ContextMenu>
       {open && expandable && (
         <div role="group" className="flex flex-col gap-px">
@@ -585,7 +590,7 @@ function Rail({ pinned, narrow, onExpand }: { pinned: LibraryShoot[]; narrow: bo
             size="icon"
             aria-label={label}
             aria-current={active || undefined}
-            className={cn("size-9 text-muted-foreground", active && "bg-accent text-primary hover:text-primary")}
+            className={cn("size-9 text-muted-foreground", active && "bg-accent text-primary-readable hover:text-primary-readable")}
             onClick={onClick}
           >
             <Icon className="size-[18px]" />

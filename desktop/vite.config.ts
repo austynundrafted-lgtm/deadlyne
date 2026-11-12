@@ -10,7 +10,10 @@ const host = process.env.TAURI_DEV_HOST;
 export default defineConfig(() => ({
   plugins: [react(), tailwindcss()],
   resolve: {
-    alias: { "@": path.resolve(import.meta.dirname, "./src") },
+    alias: [
+      ...(process.env.VITE_APP_CHANNEL === "mac-app-store" ? [{ find: "@/lib/updates", replacement: path.resolve(import.meta.dirname, "./src/lib/updates.store.ts") }] : []),
+      { find: "@", replacement: path.resolve(import.meta.dirname, "./src") },
+    ],
   },
   // Tauri: keep Rust errors visible, use a fixed port, and don't watch src-tauri.
   clearScreen: false,

@@ -6,6 +6,7 @@ import { Check, ChevronLeft, ChevronRight, FastForward, Star, X, ZoomIn } from "
 import { useShallow } from "zustand/react/shallow"
 import { previewUrl, thumbUrl } from "@/lib/api"
 import { isIPad, labelColor, mod, orientationTransform } from "@/lib/format"
+import { PreviewCache } from "@/lib/preview-cache"
 import { cn } from "@/lib/utils"
 import { useStore, useVisiblePhotos } from "@/store"
 import { Badge } from "@/components/ui/badge"
@@ -51,28 +52,38 @@ export function Loupe() {
     return () => ro.disconnect()
   }, [])
 
-  const [full, setFull] = useState<{ id: string; w: number; h: number } | null>(null)
+  const [previews] = useState(() => new PreviewCache())
+  const [, refreshPreview] = useState(0)
+  const previous = list[index - 1]
+  const next = list[index + 1]
 
-  // Decode the full preview off-screen, then show it; warm the neighbours.
+  // Finish the current photo before decoding neighbours. Reuse their pending/ready decodes
+  // when an arrow reaches them, rather than starting another Image.decode at every step.
   useEffect(() => {
-    if (!photo) return
+    if (!photo) { previews.clear(); return }
     let cancelled = false
-    const img = new Image()
-    img.style.imageOrientation = "none"
-    img.src = previewUrl(photo)
-    img
-      .decode()
-      .then(() => !cancelled && setFull({ id: photo.id, w: img.naturalWidth, h: img.naturalHeight }))
+    const current = previewUrl(photo)
+    const neighbours = [next, previous].filter((p) => !!p).map(previewUrl)
+    previews.retain([current, ...neighbours])
+    previews.load(current)
+      .then(() => {
+        if (cancelled) return
+        refreshPreview((n) => n + 1)
+        for (const url of neighbours) void previews.load(url).catch(() => {})
+      })
       .catch(() => {})
-    for (const n of [list[index + 1], list[index - 1]]) if (n) new Image().src = previewUrl(n)
     return () => {
       cancelled = true
     }
-  }, [photo?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [photo?.id, next?.id, previous?.id, previews]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => () => previews.clear(), [previews])
 
   if (!photo) return null
 
-  const showingFull = full?.id === photo.id
+  const full = previews.peek(previewUrl(photo))
+  // The thumbnail is already upright. Keep it until both the full image and its orientation
+  // are ready, so a fast decode cannot briefly display sensor-oriented pixels as landscape.
+  const showingFull = !!full && !!photo.meta
   const { transform, swapsAxes } = orientationTransform(showingFull ? (photo.meta?.orientation ?? 1) : 1)
 
   // Fit the (possibly rotated) image inside the box, or show it at 100% (one photo pixel per
@@ -101,7 +112,6 @@ export function Loupe() {
       height: full.h * scale,
       maxWidth: "none", // Tailwind's base style caps images at the view width, which would squash 100%
       transform: `translate(-50%, -50%)${transform === "none" ? "" : ` ${transform}`}`,
-      imageOrientation: "none",
     }
   }
 
@@ -186,7 +196,7 @@ export function Loupe() {
   }
 
   return (
-    <div className="absolute inset-0 z-20 flex flex-col bg-background">
+    <div className="@container/loupe absolute inset-0 z-20 flex flex-col bg-background">
       <div
         ref={boxRef}
         className={cn(
@@ -222,19 +232,18 @@ export function Loupe() {
         </Button>
       </div>
 
-      <div className="flex h-10 shrink-0 items-center gap-3 border-t bg-bar px-3 text-xs">
-        <span className="min-w-0 truncate font-medium">{photo.name}</span>
+      <div className="flex h-10 shrink-0 items-center gap-3 border-t bg-bar px-3 text-xs whitespace-nowrap">
         <span className="shrink-0 whitespace-nowrap text-muted-foreground tabular-nums">
           {index + 1} / {list.length.toLocaleString()}
         </span>
         {/* On iPad the tag and star buttons show these already. */}
         {photo.tagged && !isIPad && (
-          <Badge className="bg-(--workspace-photos) text-black">
+          <Badge className="bg-(--workspace-photos) text-workspace-foreground">
             <Check /> Tagged
           </Badge>
         )}
         {photo.rating > 0 && !isIPad && (
-          <span className="flex">
+          <span className="flex shrink-0">
             {Array.from({ length: photo.rating }, (_, i) => (
               <Star key={i} className="size-3.5 fill-(--workspace-photos) text-(--workspace-photos)" />
             ))}
@@ -246,11 +255,11 @@ export function Loupe() {
             {photo.label}
           </Badge>
         )}
-        <span className="flex-1" />
+        <span className="min-w-0 flex-1" aria-hidden="true" />
         {isIPad ? (
           <TouchControls tagged={photo.tagged} rating={photo.rating} />
         ) : (
-          <span className="hidden items-center gap-1 text-muted-foreground lg:flex">
+          <span className="hidden shrink-0 items-center gap-1 whitespace-nowrap text-muted-foreground @[1000px]/loupe:flex">
             <Kbd>←</Kbd>
             <Kbd>→</Kbd> flip · <Kbd>T</Kbd> tag · <Kbd>1–5</Kbd> rate · <Kbd>Esc</Kbd> grid
           </span>
@@ -261,10 +270,11 @@ export function Loupe() {
               variant="ghost"
               size="xs"
               aria-pressed={autoAdvance}
+              aria-label="Auto-advance"
               className={cn("text-muted-foreground", autoAdvance && "bg-(--workspace-photos)/15 text-(--workspace-photos) hover:bg-(--workspace-photos)/25 hover:text-(--workspace-photos)")}
               onClick={() => setAutoAdvance(!autoAdvance)}
             >
-              <FastForward data-icon="inline-start" /> Auto-advance
+              <FastForward data-icon="inline-start" /> <span className="hidden @[640px]/loupe:inline">Auto-advance</span>
             </Button>
           </TooltipTrigger>
           <TooltipContent>
@@ -296,7 +306,7 @@ export function Loupe() {
 function TouchControls({ tagged, rating }: { tagged: boolean; rating: number }) {
   const { move, cull } = useStore(useShallow((s) => ({ move: s.move, cull: s.cull })))
   return (
-    <span className="flex items-center gap-1">
+    <span className="flex shrink-0 items-center gap-1 whitespace-nowrap">
       <Button variant="ghost" size="icon-sm" static aria-label="Previous photo" onClick={() => move(-1)}>
         <ChevronLeft />
       </Button>
@@ -308,7 +318,7 @@ function TouchControls({ tagged, rating }: { tagged: boolean; rating: number }) 
         size="sm"
         static
         aria-pressed={tagged}
-        className={cn(tagged ? "bg-(--workspace-photos) text-black hover:bg-(--workspace-photos)/80 hover:text-black" : "text-muted-foreground")}
+        className={cn(tagged ? "bg-(--workspace-photos) text-workspace-foreground hover:bg-(--workspace-photos)/80 hover:text-workspace-foreground" : "text-muted-foreground")}
         onClick={() => cull(() => ({ tagged: !tagged }))}
       >
         <Check data-icon="inline-start" /> {tagged ? "Tagged" : "Tag"}
@@ -323,7 +333,7 @@ function TouchControls({ tagged, rating }: { tagged: boolean; rating: number }) 
             aria-label={`${n} star${n > 1 ? "s" : ""}`}
             onClick={() => cull(() => ({ rating: n === rating ? 0 : n }))}
           >
-            <Star className={cn(n <= rating ? "fill-(--workspace-photos) text-(--workspace-photos)" : "text-muted-foreground/50")} />
+            <Star className={cn(n <= rating ? "fill-(--workspace-photos) text-(--workspace-photos)" : "text-muted-foreground")} />
           </Button>
         ))}
       </span>

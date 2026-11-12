@@ -161,7 +161,7 @@ function Grid() {
 
   return (
     <div ref={scrollRef} className="absolute inset-0 overflow-y-auto outline-none" tabIndex={-1}>
-      {!detailsReady && <Progress className="absolute inset-x-0 top-0 z-10 h-0.5 rounded-none" value={null} />}
+      {!detailsReady && <Progress aria-label="Loading photo details" className="absolute inset-x-0 top-0 z-10 h-0.5 rounded-none" value={null} />}
       {list.length === 0 && !hasPhotos ? (
         <Empty className="h-full">
           <EmptyHeader>
@@ -346,11 +346,11 @@ const PhotoCard = memo(function PhotoCard({ photo: p, width, selected, focused, 
         if (!(e.target as HTMLElement).closest("button")) onOpen()
       }}
     >
-      <div className="relative min-h-0 flex-1 bg-black/30">
+      <div className="relative min-h-0 flex-1 bg-photo-canvas">
         {!failed && (
           <img
             src={thumbUrl(p)}
-            alt=""
+            alt={p.name}
             draggable={false}
             decoding="async"
             className="size-full object-contain"
@@ -359,27 +359,27 @@ const PhotoCard = memo(function PhotoCard({ photo: p, width, selected, focused, 
         )}
         {resume && <ResumeMarker />}
       </div>
-      <div className="flex h-[30px] shrink-0 items-center gap-1 px-1.5 text-xs">
+      <div className="flex h-photo-footer shrink-0 items-center gap-1 px-1.5 text-xs">
         <Button
           variant="ghost"
           size="icon-xs"
           static
           aria-label={p.tagged ? "Untag" : "Tag"}
           aria-pressed={p.tagged}
-          className={cn("rounded-sm", p.tagged ? "bg-(--workspace-photos) text-black hover:bg-(--workspace-photos)/80 hover:text-black" : "text-muted-foreground")}
+          className={cn("rounded-sm", p.tagged ? "bg-(--workspace-photos) text-workspace-foreground hover:bg-(--workspace-photos)/80 hover:text-workspace-foreground" : "text-muted-foreground")}
           onPointerDown={(e) => e.stopPropagation()}
           onClick={onToggleTag}
         >
-          <Check className={cn(!p.tagged && "opacity-40")} />
+          <Check className={cn(!p.tagged && "text-muted-foreground")} />
         </Button>
-        {p.label && <span className="size-2.5 shrink-0 rounded-full" style={{ background: labelColor(p.label) }} aria-label={`${p.label} label`} />}
+        {p.label && <span className="size-2.5 shrink-0 rounded-full" style={{ background: labelColor(p.label) }} role="img" aria-label={`${p.label} label`} />}
         <span className="min-w-0 flex-1 truncate font-medium text-foreground/90">{p.name}</span>
         {(p.captions.caption || p.captions.headline) && (
           <MessageSquareText className="size-3.5 shrink-0 text-muted-foreground" aria-label="Has a caption" />
         )}
-        {width > 260 && <span className="text-[10px] text-muted-foreground">{p.kind}</span>}
+        {width > 260 && <span className="text-micro text-muted-foreground">{p.kind}</span>}
         {/* Less is more: stars show once rated, or while pointing at the photo. */}
-        <div className={cn(p.rating === 0 && !selected && "opacity-0 group-hover/card:opacity-100 pointer-coarse:opacity-100")}>
+        <div className={cn(p.rating === 0 && !selected && "opacity-0 group-hover/card:opacity-100 focus-within:opacity-100 pointer-coarse:opacity-100")}>
           <Stars rating={p.rating} onRate={onRate} />
         </div>
       </div>
@@ -391,10 +391,10 @@ const PhotoCard = memo(function PhotoCard({ photo: p, width, selected, focused, 
 function ResumeMarker() {
   return (
     <div
-      className="pointer-events-none absolute inset-0 animate-[resume-marker_6s_ease-out_forwards] rounded-t-md shadow-[inset_0_0_0_2px_var(--primary),inset_0_0_24px_oklch(0.65_0.24_35/0.45)] motion-reduce:animate-none"
+      className="pointer-events-none absolute inset-0 animate-[resume-marker_6s_ease-out_forwards] rounded-t-md shadow-resume motion-reduce:animate-none"
       aria-hidden
     >
-      <span className="absolute top-2 left-2 flex items-center gap-1 rounded-full bg-primary px-2 py-0.5 text-[11px] font-semibold text-primary-foreground shadow-sm">
+      <span className="absolute top-2 left-2 flex items-center gap-1 rounded-full bg-primary px-2 py-0.5 text-caption font-semibold text-primary-foreground shadow-sm">
         <Play className="size-2.5 fill-current" /> Resume here
       </span>
     </div>
@@ -412,10 +412,11 @@ function Stars({ rating, onRate }: { rating: number; onRate: (n: number) => void
           static
           className="size-4 rounded-none p-0 hover:bg-transparent"
           aria-label={`${n} star${n > 1 ? "s" : ""}`}
+          aria-pressed={rating === n}
           onClick={() => onRate(n)}
         >
           <Star
-            className={cn("size-3", n <= rating ? "fill-(--workspace-photos) text-(--workspace-photos)" : "text-muted-foreground/40")}
+            className={cn("size-3", n <= rating ? "fill-(--workspace-photos) text-(--workspace-photos)" : "text-muted-foreground")}
           />
         </Button>
       ))}
@@ -445,7 +446,7 @@ function StatusBar() {
     : selectedCount > 1
       ? `${selectedCount.toLocaleString()} selected`
       : focused
-        ? [focused.name, focused.meta?.camera, focused.meta?.lens, exposureLine(focused.meta), captureTime(focused.meta)]
+        ? [focused.meta?.camera, focused.meta?.lens, exposureLine(focused.meta), captureTime(focused.meta)]
             .filter(Boolean)
             .join("   ·   ")
         : ""
@@ -454,8 +455,8 @@ function StatusBar() {
     <footer className="flex h-7 shrink-0 items-center gap-4 border-t bg-bar px-3 text-xs text-muted-foreground">
       <span className="min-w-0 flex-1 truncate">{left}</span>
       {unviewedOnly && (
-        <span className="flex shrink-0 items-center gap-1 rounded-full bg-primary/15 py-0.5 pr-0.5 pl-2 text-[11px] text-foreground">
-          <Eye className="size-3 text-primary" /> Unviewed only
+        <span className="flex shrink-0 items-center gap-1 rounded-full bg-primary/15 py-0.5 pr-0.5 pl-2 text-caption text-foreground">
+          <Eye className="size-3 text-primary-readable" /> Unviewed only
           <Button
             variant="ghost"
             size="icon-xs"
@@ -480,10 +481,7 @@ function StatusBar() {
         {shown < photos.length ? (
           <>
             {shown.toLocaleString()} of {plural(photos.length, "photo")}
-            <Button variant="ghost" size="xs" className="-my-1 h-5 px-1.5 text-xs text-(--workspace-photos) hover:text-(--workspace-photos)" onClick={() => {
-              useStore.getState().clearFilters()
-              useStore.getState().setFilter({ fileScope: "both" })
-            }}>
+            <Button variant="ghost" size="xs" className="-my-1 h-5 px-1.5 text-xs text-(--workspace-photos) hover:text-(--workspace-photos)" onClick={() => useStore.getState().clearFilters()}>
               Show all
             </Button>
           </>

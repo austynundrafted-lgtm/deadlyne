@@ -1,0 +1,8 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "mac-app-store",
+  "description": "Mac App Store window: native file permissions, local settings and window controls; no updater or process restart",
+  "windows": ["main"],
+  "platforms": ["macOS"],
+  "permissions": ["core:default", "core:window:allow-start-dragging", "store:default"]
+}

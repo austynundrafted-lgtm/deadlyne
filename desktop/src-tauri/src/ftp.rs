@@ -405,6 +405,7 @@ fn remote_name(ftp: &mut FtpStream, name: &str, rule: IfExists) -> Result<Option
 
 /// Sends every file in `job`, reporting progress through `emit`. Separate from Tauri for tests.
 pub fn run(job: &SendJob, password: &str, mut emit: impl FnMut(&Progress)) -> Summary {
+    let _access: Vec<_> = job.files.iter().map(|file| crate::data::access(Path::new(file)).ok()).collect();
     let mut summary = Summary { job_id: job.id.clone(), ..Default::default() };
     let files: Vec<(&str, u64)> = job
         .files

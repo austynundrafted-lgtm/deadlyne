@@ -1,7 +1,9 @@
 // App state. One store, plain actions; components select only what they render.
 import { useMemo } from "react"
 import { invoke } from "@tauri-apps/api/core"
+import { listen } from "@tauri-apps/api/event"
 import { create } from "zustand"
+import { authorizeFolder } from "@/lib/platform"
 import { useShallow } from "zustand/react/shallow"
 import { toast } from "sonner"
 import {
@@ -10,14 +12,12 @@ import {
   emptyCaptions,
   filesFor,
   loadDetails,
-  recordFolderOpened,
   saveCaptions,
   saveCulling,
   scanFolder,
   splitKeywords,
   transferPhotos,
   trashPhotos,
-  type Badge,
   type CaptionField,
   type Captions,
   type Culling,
@@ -26,13 +26,15 @@ import {
   type Label,
   type Photo,
 } from "@/lib/api"
-import { fetchRemoteProfile, pushRemoteProfile } from "@/lib/auth"
+import { fetchRemoteProfile, pushRemoteProfile, useAuth } from "@/lib/auth"
 import { expandCodes } from "@/lib/codes"
 import { docsInfo, folderContents, samePath, useLibrary, type DocEntry, type LibrarySection, type SubFolder } from "@/lib/library"
 import { noteRecentShoot } from "@/lib/recents"
 import { DEFAULT_COPYRIGHT, getSetting, pref, setPref, setSetting, type Profile } from "@/lib/settings"
 import { expandVariables } from "@/lib/variables"
 import { photoKey, useViewing } from "@/lib/viewing"
+import { confirm } from "@/lib/prompts"
+import { plural, trashAction, trashName } from "@/lib/format"
 
 export type Workspace = "home" | "photos" | "codes"
 export type TagFilter = "all" | "tagged" | "untagged"
@@ -172,14 +174,6 @@ export function targetPhotos(s: Pick<State, "loupe" | "focus" | "photos" | "sele
   return s.photos.filter((p) => s.selected.has(p.id))
 }
 
-export function notifyBadges(badges: Badge[]) {
-  if (!badges.length) return
-  const names = badges.map((b) => b.name).join(", ")
-  toast.success(badges.length === 1 ? `Badge unlocked: ${names}` : `Badges unlocked: ${names}`, {
-    description: "See all your badges on Home.",
-  })
-}
-
 function reportFailures(failed: string[], what: string) {
   if (failed.length) toast.error(`Some ${what} couldn’t be saved`, { description: failed.slice(0, 4).join("\n") })
 }
@@ -257,6 +251,8 @@ export const useStore = create<State>((set, get) => ({
 
   openFolder: async (path, opts) => {
     const gen = ++openGeneration
+    try { if (!await authorizeFolder(path) || gen !== openGeneration) return }
+    catch (error) { toast.error("Couldn’t open the folder", { description: String(error) }); return }
     const reopening = !!get().folder && samePath(get().folder!, path)
     set({ loading: true, workspace: "photos", loupe: false, librarySection: null, ...(opts?.origin ? { origin: opts.origin } : {}) })
     try {
@@ -279,7 +275,6 @@ export const useStore = create<State>((set, get) => ({
       })
       noteRecentShoot(folder, photos.length)
       useLibrary.getState().noteOpened(folder)
-      recordFolderOpened(folder, photos.length).then(notifyBadges)
 
       // Capture times, camera info, existing ratings and captions arrive a moment later.
       const details = await loadDetails(entries)
@@ -335,7 +330,10 @@ export const useStore = create<State>((set, get) => ({
     if (f.fileScope) setPref("fileScope", f.fileScope)
     set(f)
   },
-  clearFilters: () => set({ tagFilter: "all", minRating: 0, labelFilter: null, search: "", unviewedOnly: false, unviewedSnapshot: null }),
+  clearFilters: () => {
+    setPref("fileScope", "both")
+    set({ tagFilter: "all", minRating: 0, labelFilter: null, search: "", fileScope: "both", unviewedOnly: false, unviewedSnapshot: null })
+  },
 
   click: (id, { shift, toggle }) => {
     const s = get()
@@ -488,13 +486,17 @@ export const useStore = create<State>((set, get) => ({
 
   transfer: async (photos, destination, moveFiles) => {
     const { fileScope, folder } = get()
-    if (!photos.length) return
+    if (!photos.length || get().busy) return
     if (folder && destination.replace(/[\\/]+$/, "") === folder.replace(/[\\/]+$/, "")) {
       toast.error("Choose a different folder", { description: "The photos are already in this folder." })
       return
     }
     set({ busy: `${moveFiles ? "Moving" : "Copying"} ${photos.length} photo${photos.length === 1 ? "" : "s"}…` })
+    let unlisten: (() => void) | undefined
     try {
+      unlisten = await listen<[number, number]>("transfer-progress", ({ payload: [done, total] }) => {
+        set({ busy: `${moveFiles ? "Moving" : "Copying"} photos… ${done} of ${total}` })
+      })
       const r = await transferPhotos(photos, fileScope, destination, moveFiles)
       // Moved photos stay viewed in their new folder.
       if (moveFiles && fileScope === "both" && r.completed.length && folder) {
@@ -503,31 +505,50 @@ export const useStore = create<State>((set, get) => ({
           .catch(() => {})
           .finally(() => useLibrary.getState().refreshStats())
       }
-      if (moveFiles && fileScope !== "both") {
-        await get().openFolder(folder!) // one half of each pair stays: re-read the folder
-      } else if (moveFiles && r.completed.length) {
-        const gone = new Set(r.completed)
-        set((s) => ({
-          photos: s.photos.filter((p) => !gone.has(p.id)),
-          selected: new Set([...s.selected].filter((id) => !gone.has(id))),
-          loupe: false,
-        }))
+      // A group may partially move even when it is not in `completed`. Re-read disk so
+      // surviving RAW/JPEG halves and selections never point at files that already moved.
+      if (moveFiles && folder && samePath(get().folder ?? "", folder)) {
+        const previous = new Set(get().selected)
+        const previousFocus = get().focus
+        await get().openFolder(folder, { tab: get().folderTab, select: previousFocus ?? undefined })
+        if (samePath(get().folder ?? "", folder)) {
+          const valid = new Set(get().photos.map((p) => p.id))
+          const selected = new Set([...previous].filter((id) => valid.has(id)))
+          if (selected.size) set({ selected, anchor: selected.has(previousFocus ?? "") ? previousFocus : [...selected][0], focus: selected.has(previousFocus ?? "") ? previousFocus : [...selected][0], pristine: false })
+        }
       }
       const done = `${moveFiles ? "Moved" : "Copied"} ${r.files} file${r.files === 1 ? "" : "s"}`
       const extra = r.skipped ? ` · ${r.skipped} already there, skipped` : ""
-      if (r.errors.length) toast.error(`${done}, with problems`, { description: r.errors.slice(0, 4).join("\n") })
+      if (r.errors.length) toast.error(`${done}${extra}, with problems`, { description: r.errors.slice(0, 4).join("\n") })
       else toast.success(done + extra)
+    } catch (error) {
+      toast.error(`Couldn’t ${moveFiles ? "move" : "copy"} the photos`, { description: String(error) })
+      if (moveFiles && folder && samePath(get().folder ?? "", folder)) await get().openFolder(folder)
     } finally {
+      unlisten?.()
       set({ busy: null })
     }
   },
 
   trash: async (photos) => {
-    const { fileScope, folder } = get()
-    if (!photos.length) return
+    const { fileScope, folder, busy } = get()
+    if (!photos.length || busy) return
+    // Freeze the names, paths and file scope before asking; selection changes cannot redirect
+    // the approved action to another photo or the other half of a RAW+JPG pair.
+    const targets = photos.filter((p) => filesFor(p, fileScope).length).map((p) => ({ ...p }))
+    if (!targets.length) return
+    const names = targets.slice(0, 3).map((p) => `“${p.name}”`).join(", ") + (targets.length > 3 ? "…" : "")
+    const scope = fileScope === "both" ? "The photo and sidecar files" : fileScope === "raw" ? "Only the RAW files and sidecars" : "Only the JPG files"
+    if (!await confirm({
+      title: targets.length === 1 ? "Are you sure you want to delete this photo?" : `Are you sure you want to delete ${plural(targets.length, "photo")}?`,
+      description: `${names}. ${scope} will move to ${trashName}. You can restore them from there.`,
+      action: trashAction,
+      destructive: true,
+    })) return
+    if (get().busy || get().folder !== folder) return
     set({ busy: "Moving to the Trash…", loupe: false })
     try {
-      const r = await trashPhotos(photos, fileScope)
+      const r = await trashPhotos(targets, fileScope)
       if (fileScope !== "both") {
         await get().openFolder(folder!) // one half of each pair stays: re-read the folder
       } else {
@@ -545,6 +566,8 @@ export const useStore = create<State>((set, get) => ({
       }
       if (r.errors.length) toast.error("Some files couldn’t be moved to the Trash", { description: r.errors.slice(0, 4).join("\n") })
       else toast.success(`Moved ${r.files} file${r.files === 1 ? "" : "s"} to the Trash`)
+    } catch (error) {
+      toast.error("Couldn’t move the photos to the Trash", { description: String(error) })
     } finally {
       set({ busy: null })
     }
@@ -553,14 +576,17 @@ export const useStore = create<State>((set, get) => ({
 
 /** Loads settings kept in the store file (called once at launch). */
 export async function loadSettings() {
+  const accountId = useAuth.getState().account?.id
   const [jpegMode, profile] = await Promise.all([
     getSetting<JpegMode>("jpegCaptionMode", "xmpAndIim"),
     getSetting<Profile | null>("profile", null),
   ])
+  if (useAuth.getState().account?.id !== accountId || useAuth.getState().accountOperation) return
   useStore.setState({ jpegMode, profile })
   // The account keeps the profile too, so a new computer starts with it filled in.
   fetchRemoteProfile()
     .then((remote) => {
+      if (useAuth.getState().account?.id !== accountId || useAuth.getState().accountOperation) return
       if (remote && !useStore.getState().profile) {
         useStore.setState({ profile: remote })
         setSetting("profile", remote)

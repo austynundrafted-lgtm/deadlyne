@@ -48,7 +48,7 @@ export function AddFilesDialog() {
             <DialogDescription>They appear under Documents, apart from the photos.</DialogDescription>
           </DialogHeader>
 
-          <ul className="flex max-h-28 flex-col gap-1 overflow-y-auto rounded-lg bg-black/20 p-2 text-xs">
+          <ul className="flex max-h-28 flex-col gap-1 overflow-y-auto rounded-lg bg-surface-inset p-2 text-xs">
             {pending.paths.map((p) => (
               <li key={p} className="flex items-center gap-2 truncate text-muted-foreground" title={p}>
                 <FileText className="size-3.5 shrink-0" />
@@ -66,11 +66,11 @@ export function AddFilesDialog() {
                 aria-checked={mode === value}
                 onClick={() => setMode(value)}
                 className={cn(
-                  "flex items-start gap-3 rounded-lg p-3 text-left shadow-edge outline-none transition-[background-color,box-shadow] duration-100 hover:shadow-edge-hover focus-visible:ring-3 focus-visible:ring-ring/50",
+                  "flex items-start gap-3 rounded-lg p-3 text-left shadow-edge outline-none transition-[background-color,box-shadow] duration-fast hover:shadow-edge-hover focus-visible:ring-3 focus-visible:ring-ring",
                   mode === value ? "bg-primary/12" : "bg-card/40 hover:bg-card",
                 )}
               >
-                <Icon className={cn("mt-0.5 size-4 shrink-0", mode === value ? "text-primary" : "text-muted-foreground")} />
+                <Icon className={cn("mt-0.5 size-4 shrink-0", mode === value ? "text-primary-readable" : "text-muted-foreground")} />
                 <span className="flex flex-col gap-0.5">
                   <span className="text-sm font-medium">{title}</span>
                   <span className="text-xs text-muted-foreground">{body}</span>

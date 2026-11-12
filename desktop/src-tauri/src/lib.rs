@@ -3,7 +3,6 @@
 //! (`../src`) talks to it through the commands registered below and the `thumb://` and
 //! `preview://` image schemes. `native.rs` is the menu bar, Finder and Dock integration.
 
-mod achievements;
 mod captions;
 mod codes;
 mod exif;
@@ -18,6 +17,11 @@ mod jobs;
 mod jpeg_meta;
 mod library;
 mod native;
+mod data;
+mod legacy_import;
+mod store_bridge;
+#[cfg(all(target_os = "macos", feature = "mac-app-store"))]
+mod mac_store;
 mod raw;
 mod xmp;
 
@@ -26,15 +30,12 @@ pub fn run() {
     let builder = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_store::Builder::new().build())
-        .plugin(tauri_plugin_process::init())
         .manage(native::Opened::default());
 
     #[cfg(desktop)]
     let builder = {
         use tauri_plugin_window_state::StateFlags;
         builder
-            .plugin(tauri_plugin_updater::Builder::new().build())
-            .plugin(tauri_plugin_notification::init())
             // The window comes back where it was left, on the display it was left on.
             .plugin(
                 tauri_plugin_window_state::Builder::new()
@@ -42,11 +43,16 @@ pub fn run() {
                     .build(),
             )
     };
+    #[cfg(all(desktop, feature = "desktop-notifications"))]
+    let builder = builder.plugin(tauri_plugin_notification::init());
+    #[cfg(all(desktop, feature = "self-update"))]
+    let builder = builder.plugin(tauri_plugin_process::init()).plugin(tauri_plugin_updater::Builder::new().build());
     #[cfg(target_os = "ios")]
     let builder = builder.plugin(tauri_plugin_ipad_files::init());
 
     let app = builder
         .setup(|app| {
+            data::setup(app.handle())?;
             native::setup(app.handle());
             Ok(())
         })
@@ -63,11 +69,11 @@ pub fn run() {
             export::export_photos, export::export_cancel,
             ingest::memory_cards, ingest::inspect_source, ingest::free_space, ingest::start_ingest, ingest::cancel_ingest,
             ftp::ftp_set_password, ftp::ftp_has_password, ftp::ftp_test, ftp::ftp_send, ftp::ftp_cancel,
-            achievements::achievements, achievements::record_folder_opened,
             library::viewing_load, library::viewing_mark, library::viewing_reset, library::viewing_transfer, library::viewing_relocate,
             library::folder_stats, library::folder_contents, library::docs_info, library::add_documents, library::move_documents,
             library::create_folder, library::rename_path, library::trash_path, library::quick_look,
-            native::take_opened_paths, native::menu_state, native::menu_recents])
+            native::take_opened_paths, native::menu_state, native::menu_recents,
+            store_bridge::store_pick, store_bridge::store_restore_access, store_bridge::store_authorize, store_bridge::store_import_data])
         .build(tauri::generate_context!())
         .expect("error while building Deadlyne");
 
