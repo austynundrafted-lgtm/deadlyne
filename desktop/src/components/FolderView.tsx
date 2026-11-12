@@ -91,7 +91,7 @@ export function FolderBar() {
     <div className="@container/bar flex h-10 shrink-0 items-center gap-2 border-b bg-background px-3">
       <nav aria-label="Folder path" className="flex min-w-0 flex-1 items-center gap-0.5 text-control">
         <button
-          className="shrink-0 rounded-sm px-1 text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+          className="shrink-0 rounded-sm px-1 text-muted-foreground outline-none hover:text-foreground"
           onClick={() => useStore.getState().showSection(origin)}
         >
           {sectionLabel(origin)}
@@ -108,7 +108,7 @@ export function FolderBar() {
                 </span>
               ) : (
                 <button
-                  className="truncate rounded-sm px-1 text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+                  className="truncate rounded-sm px-1 text-muted-foreground outline-none hover:text-foreground"
                   title={p}
                   onClick={() => useStore.getState().openFolder(p)}
                 >
@@ -394,7 +394,7 @@ export function DocumentsView() {
               role="row"
               aria-selected={selected}
               className={cn(
-                "grid h-10 w-full items-center gap-3 rounded-md px-2 text-left text-control outline-none transition-[background-color] duration-fast hover:bg-surface-hover focus-visible:ring-2 focus-visible:ring-ring",
+                "grid h-10 w-full items-center gap-3 rounded-md px-2 text-left text-control outline-none transition-[background-color] duration-fast hover:bg-surface-hover focus-inset",
                 selected && "bg-accent hover:bg-accent",
               )}
               style={{ gridTemplateColumns: DOC_COLUMNS }}
@@ -417,7 +417,7 @@ export function DocumentsView() {
               // A list item takes its name from `title` (the path) unless it's given one.
               aria-label={`${d.name}, ${docDetail(d)}${d.linkId ? ", linked" : ""}`}
               className={cn(
-                "flex min-w-0 flex-col items-center gap-2 rounded-xl px-3 pt-4 pb-3 text-center outline-none transition-[background-color] duration-fast hover:bg-surface-hover focus-visible:ring-2 focus-visible:ring-ring",
+                "flex min-w-0 flex-col items-center gap-2 rounded-xl px-3 pt-4 pb-3 text-center outline-none transition-[background-color] duration-fast hover:bg-surface-hover focus-inset",
                 selected && "bg-accent hover:bg-accent",
               )}
             >
@@ -493,7 +493,7 @@ export function DocumentInspector() {
       <ScrollArea className="min-h-0 flex-1">
         <div className="flex flex-col gap-5 p-4">
           <button
-            className="flex h-40 items-center justify-center rounded-lg bg-preview-canvas shadow-edge outline-none transition-[box-shadow] duration-fast hover:shadow-edge-hover focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default"
+            className="flex h-40 items-center justify-center rounded-lg bg-preview-canvas shadow-edge outline-none transition-[box-shadow] duration-fast hover:shadow-edge-hover disabled:cursor-default"
             onClick={() => quickLook(doc)}
             disabled={!doc.exists}
             aria-label="Quick Look"

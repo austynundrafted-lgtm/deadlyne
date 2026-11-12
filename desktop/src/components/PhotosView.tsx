@@ -323,7 +323,7 @@ const PhotoCard = memo(function PhotoCard({ photo: p, width, selected, focused, 
       data-view-key={photoKey(p)}
       className={cn(
         "group/card relative flex shrink-0 flex-col overflow-hidden rounded-md bg-card shadow-edge",
-        selected && "bg-accent ring-2 ring-(--workspace-photos)",
+        selected ? "bg-accent ring-2 ring-(--workspace-photos)" : "hover:shadow-edge-hover",
         focused && selected && "ring-3",
         className,
       )}
@@ -359,14 +359,14 @@ const PhotoCard = memo(function PhotoCard({ photo: p, width, selected, focused, 
         )}
         {resume && <ResumeMarker />}
       </div>
-      <div className="flex h-photo-footer shrink-0 items-center gap-1 px-1.5 text-xs">
+      <div className="flex h-photo-footer shrink-0 items-center gap-1 px-1.5 text-xs shadow-[inset_0_1px_0_var(--edge-light-faint)]">
         <Button
           variant="ghost"
           size="icon-xs"
           static
           aria-label={p.tagged ? "Untag" : "Tag"}
           aria-pressed={p.tagged}
-          className={cn("rounded-sm", p.tagged ? "bg-(--workspace-photos) text-workspace-foreground hover:bg-(--workspace-photos)/80 hover:text-workspace-foreground" : "text-muted-foreground")}
+          className={cn("rounded-sm", p.tagged ? "border-[color-mix(in_oklab,var(--workspace-photos)_58%,black)] bg-(--workspace-photos) text-workspace-foreground sheen-cap shadow-[inset_0_1px_0_var(--edge-light-cap)] hover:bg-(--workspace-photos)/85 hover:text-workspace-foreground" : "text-muted-foreground")}
           onPointerDown={(e) => e.stopPropagation()}
           onClick={onToggleTag}
         >
@@ -452,10 +452,10 @@ function StatusBar() {
         : ""
 
   return (
-    <footer className="flex h-7 shrink-0 items-center gap-4 border-t bg-bar px-3 text-xs text-muted-foreground">
+    <footer className="flex h-7 shrink-0 items-center gap-4 border-t surface-bar px-3 text-xs text-muted-foreground">
       <span className="min-w-0 flex-1 truncate">{left}</span>
       {unviewedOnly && (
-        <span className="flex shrink-0 items-center gap-1 rounded-full bg-primary/15 py-0.5 pr-0.5 pl-2 text-caption text-foreground">
+        <span className="flex shrink-0 items-center gap-1 rounded-full bg-primary/15 py-0.5 pr-0.5 pl-2 text-caption text-foreground shadow-[inset_0_0_0_1px_var(--focus-soft)]">
           <Eye className="size-3 text-primary-readable" /> Unviewed only
           <Button
             variant="ghost"

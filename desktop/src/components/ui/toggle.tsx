@@ -4,12 +4,14 @@ import { cn } from "@/lib/utils"
 import { Toggle as TogglePrimitive } from "radix-ui"
 
 const toggleVariants = cva(
-  "group/toggle inline-flex items-center justify-center gap-1 rounded-lg text-sm font-medium whitespace-nowrap transition-[color,background-color,box-shadow] outline-none hover:bg-muted hover:text-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 aria-pressed:bg-muted data-[state=on]:bg-muted dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+  // Off: quiet text that gives a little when held. On: a raised segment; set a tone on it
+  // (tone-photos, tone-codes) to light it in a workspace color. Its size never changes.
+  "group/toggle inline-flex items-center justify-center gap-1 rounded-lg border border-transparent bg-clip-padding text-sm font-medium whitespace-nowrap text-muted-foreground transition-[color,background-color,border-color,box-shadow] duration-fast outline-none hover:text-foreground not-chosen:hover:bg-surface-hover not-chosen:active:bg-surface-inset not-chosen:active:shadow-pressed disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive chosen:border-cut chosen:bg-control-surface chosen:text-[color:var(--tone,var(--foreground))] chosen:sheen-segment chosen:shadow-raised [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
   {
     variants: {
       variant: {
-        default: "bg-transparent",
-        outline: "border border-input bg-transparent hover:bg-muted",
+        default: "",
+        outline: "",
       },
       size: {
         default:

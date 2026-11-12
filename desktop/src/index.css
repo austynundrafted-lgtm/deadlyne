@@ -3,6 +3,13 @@
 @import "shadcn/tailwind.css";
 
 @custom-variant dark (&:is(.dark *));
+/* The chosen segment of a segmented control or tab strip. A tooltip wrapped around a segment
+   overwrites its data-state, so the ARIA state counts too. */
+@custom-variant chosen {
+  &:where([data-state="on"], [data-state="active"], [aria-checked="true"], [aria-pressed="true"], [aria-selected="true"]) {
+    @slot;
+  }
+}
 
 @theme inline {
     /* Keep the existing Tailwind spacing scale as the app's single spacing system. */
@@ -28,11 +35,13 @@
     --color-surface-inset: var(--surface-inset);
     --color-photo-canvas: var(--photo-canvas);
     --color-preview-canvas: var(--preview-canvas);
-    --color-tab-track: var(--tab-track);
     --color-overlay: var(--overlay);
     --color-control-thumb: var(--control-thumb);
     --color-control-surface: var(--control-surface);
     --color-control-surface-hover: var(--control-surface-hover);
+    --color-well: var(--well);
+    --color-cut: var(--edge-cut);
+    --color-hairline: var(--edge-hairline);
     --font-heading: var(--font-sans);
     --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
     --font-mono: ui-monospace, "SF Mono", "Cascadia Mono", Consolas, monospace;
@@ -76,10 +85,28 @@
     --radius-2xl: calc(var(--radius) * 1.8);
     --radius-3xl: calc(var(--radius) * 2.2);
     --radius-4xl: calc(var(--radius) * 2.6);
-    /* Depth without a hard border: one faint white ring, since layered shadows vanish on dark. */
-    --shadow-edge: 0 0 0 1px oklch(1 0 0 / 0.08);
-    --shadow-edge-hover: 0 0 0 1px oklch(1 0 0 / 0.13);
-    --shadow-floating: 0 8px 24px var(--floating-shadow), 0 0 0 1px var(--edge-highlight);
+    /* Elevation, lowest to highest. Each is a whole box-shadow, so a state swaps one for another
+       and nothing changes size. Light falls from above (see the tactile tokens in :root).
+       edge      a flat plate's outline: thumbnails, cards and rows that are not controls
+       plate     a row or card you can open: outline, upper-edge light, faint contact shadow
+       raised    a neutral control: buttons, chosen segments, menu triggers
+       cap       the same in a solid color: primary buttons, the current workspace tab
+       pressed   a control held down, or holding a menu open
+       well      cut into the surface: segmented tracks, switch and slider tracks
+       field     a well you type into; its lower lip is the high-contrast input boundary
+       floating  above the window: dialogs, menus, popovers, tooltips */
+    --shadow-edge: 0 0 0 1px var(--edge-hairline);
+    --shadow-edge-hover: 0 0 0 1px var(--edge-hairline-hover);
+    --shadow-plate: inset 0 1px 0 var(--edge-light-faint), 0 0 0 1px var(--edge-hairline), 0 1px 2px var(--contact-faint);
+    --shadow-plate-hover: inset 0 1px 0 var(--edge-light), 0 0 0 1px var(--edge-hairline-hover), 0 1px 3px var(--contact);
+    --shadow-raised: inset 0 1px 0 var(--edge-light), 0 1px 2px var(--contact);
+    --shadow-cap: inset 0 1px 0 var(--edge-light-cap), inset 0 -1px 0 var(--edge-shade-cap), 0 1px 2px var(--contact);
+    --shadow-pressed: inset 0 1px 2px var(--well-shade), inset 0 0 0 1px var(--edge-shade-cap);
+    --shadow-well: inset 0 1px 2px var(--well-shade), 0 1px 0 var(--edge-light-faint);
+    --shadow-field: inset 0 1px 2px var(--well-shade), 0 1px 0 var(--input);
+    --shadow-field-focus: inset 0 1px 2px var(--well-shade), inset 0 0 0 1px var(--focus-soft);
+    --shadow-thumb: inset 0 1px 0 rgb(255 255 255 / 0.7), 0 0 0 1px var(--edge-cut), 0 1px 2px var(--contact);
+    --shadow-floating: inset 0 1px 0 var(--edge-light), inset 0 0 0 1px var(--edge-light-faint), 0 0 0 1px var(--edge-cut), 0 2px 6px var(--contact-faint), 0 16px 40px -6px var(--floating-shadow);
     --shadow-resume: inset 0 0 0 2px var(--primary), inset 0 0 24px var(--resume-glow);
 }
 
@@ -105,7 +132,8 @@
     --accent: #333333;
     --accent-foreground: #f0f0f0;
     --destructive: #ff7366;
-    --border: #333333;
+    /* Separators between regions, rows and cells are cut lines, darker than the surfaces they divide. */
+    --border: rgb(0 0 0 / 0.55);
     --input: #707070;
     --ring: #ff6b2b;
     --chart-1: #ff3d00;
@@ -120,7 +148,7 @@
     --sidebar-primary-foreground: var(--primary-foreground);
     --sidebar-accent: #2e2e2e;
     --sidebar-accent-foreground: #f0f0f0;
-    --sidebar-border: #333333;
+    --sidebar-border: var(--border);
     --sidebar-ring: #ff6b2b;
 
     /* Deadlyne-specific */
@@ -131,22 +159,49 @@
     --surface-inset: rgb(0 0 0 / 0.2);
     --photo-canvas: rgb(0 0 0 / 0.3);
     --preview-canvas: rgb(0 0 0 / 0.25);
-    --tab-track: rgb(0 0 0 / 0.4);
     --overlay: rgb(0 0 0 / 0.4);
     --control-thumb: var(--foreground);
     --control-surface: #2b2b2b;
     --control-surface-hover: #343434;
-    --floating-shadow: rgb(0 0 0 / 0.4);
-    --edge-highlight: rgb(255 255 255 / 0.1);
+    --floating-shadow: rgb(0 0 0 / 0.55);
     --resume-glow: oklch(0.65 0.24 35 / 0.45);
     --review-ember: #5c2416;
     --review-empty: rgb(255 255 255 / 0.1);
+
+    /* Tactile system. Light falls from above: a raised control catches it along its upper edge
+       and drops a short contact shadow; a well is cut into its surface, shaded under its upper
+       edge and lit along its lower lip. Depth marks what can be pressed or typed into; photos,
+       tables and lists stay flat. Surfaces, darkest to lightest:
+         0 canvas    --background            behind photos and tables
+         1 structure --panel, --bar          sidebars, inspectors, toolbars
+         2 controls  --control-surface (raised), --well (recessed)
+         3 floating  --popover               dialogs, menus, popovers
+         4 chosen    --primary, --workspace-* on a cap, or as a tint and ink on a raised segment */
+    --well: #161616;
+    --well-shade: rgb(0 0 0 / 0.5);
+    --edge-cut: var(--border);
+    --edge-hairline: rgb(255 255 255 / 0.08);
+    --edge-hairline-hover: rgb(255 255 255 / 0.14);
+    --edge-light: rgb(255 255 255 / 0.09);
+    --edge-light-faint: rgb(255 255 255 / 0.05);
+    --edge-light-cap: rgb(255 255 255 / 0.32);
+    --edge-shade-cap: rgb(0 0 0 / 0.14);
+    --contact: rgb(0 0 0 / 0.45);
+    --contact-faint: rgb(0 0 0 / 0.25);
+    /* Lighting laid over a control's own color, so every color keeps its token value at mid-height. */
+    --sheen-raised: linear-gradient(to bottom, rgb(255 255 255 / 0.05), rgb(255 255 255 / 0) 55%, rgb(0 0 0 / 0.06));
+    --sheen-cap: linear-gradient(to bottom, rgb(255 255 255 / 0.12), rgb(255 255 255 / 0) 55%, rgb(0 0 0 / 0.08));
+    --sheen-pressed: linear-gradient(to bottom, rgb(0 0 0 / 0.2), rgb(0 0 0 / 0.06) 55%, rgb(0 0 0 / 0.02));
+    --sheen-bar: linear-gradient(to bottom, rgb(255 255 255 / 0.025), rgb(0 0 0 / 0.035));
+
+    /* Focus. Controls you press get one ring, clear of their edge, for the keyboard only. Fields you
+       type into show it on their own edge instead: a hairline and a soft inner line, never a glow. */
     --focus-width: 2px;
     --focus-offset: 2px;
-    --duration-fast: 150ms;
-    --duration-normal: 200ms;
-    --duration-slow: 300ms;
-    --press-scale: 0.96;
+    --focus-soft: color-mix(in oklab, var(--ring) 40%, transparent);
+    --duration-fast: 120ms;
+    --duration-normal: 160ms;
+    --duration-slow: 240ms;
     --titlebar-inset: calc(var(--spacing) * 3);
     --workspace-home: #ff3d00;
     --workspace-photos: #ffbd4d;
@@ -161,21 +216,59 @@
 /* Leave room for macOS traffic lights without duplicating pixel values in components. */
 .mac-titlebar { --titlebar-inset: calc(var(--spacing) * 23); }
 
-/* Native controls, editable table cells and custom rows all get a full-strength keyboard
-   outline. Kept outside layers so outline-none on a primitive cannot hide it. */
-:where(button, a[href], input, textarea, select, [role="button"], [tabindex]:not([tabindex="-1"])):focus-visible {
+/* Keyboard focus on anything you press (buttons, tabs, rows, switches): one crisp ring, clear of
+   the control's own edge. It never shows for a click. Kept outside layers so outline-none on a
+   primitive cannot hide it; the rules below are unlayered too, so they can adjust it. */
+:where(button, a[href], input, select, summary, [role="button"], [tabindex]:not([tabindex="-1"])):focus-visible {
   outline: var(--focus-width) solid var(--ring);
   outline-offset: var(--focus-offset);
 }
 
-/* Editors and clipped thumbnail footers need their outline inside the hit area. */
-:where([data-cell], [data-slot="textarea"], .group\/card button):focus-visible {
+/* Anything you type into, and the menus that sit beside fields in a form, shows focus on its own
+   edge: a hairline in the accent color drawn where the border already is. Nothing grows, glows or
+   moves, whether the field was clicked or reached with Tab. */
+:where(
+  input:not([type="checkbox"], [type="radio"], [type="range"], [type="file"], [type="button"], [type="submit"], [type="reset"]),
+  textarea,
+  [contenteditable]:not([contenteditable="false"]),
+  [data-slot="select-trigger"]
+):focus-visible {
+  outline: 1px solid var(--ring);
+  outline-offset: -1px;
+}
+:where(input, textarea, [data-slot="select-trigger"])[aria-invalid="true"]:focus-visible {
+  outline-color: var(--destructive);
+}
+
+/* Rows in lists and trees, and buttons on a clipped thumbnail footer, keep the ring inside
+   themselves, where a scrolling container cannot cut it off. */
+:where(.focus-inset, .group\/card button):focus-visible {
   outline-offset: calc(-1 * var(--focus-width));
 }
 
 @utility duration-fast { transition-duration: var(--duration-fast); }
 @utility duration-normal { transition-duration: var(--duration-normal); }
 @utility duration-slow { transition-duration: var(--duration-slow); }
+/* Lighting for the face of a control; pair with the matching shadow (see --shadow-* above). */
+@utility sheen-raised { background-image: var(--sheen-raised); }
+@utility sheen-cap { background-image: var(--sheen-cap); }
+@utility sheen-pressed { background-image: var(--sheen-pressed); }
+@utility sheen-none { background-image: none; }
+/* Toolbars, table headers and status bars: structure, not controls. */
+@utility surface-bar {
+  background-color: var(--bar);
+  background-image: var(--sheen-bar);
+  box-shadow: inset 0 1px 0 var(--edge-light-faint);
+}
+/* A chosen segment keeps its neutral raised face and takes its color as a tint: set --tone on it
+   (tone-photos, tone-codes, tone-home) and use text-(--tone) for the ink. No tone, no tint. */
+@utility sheen-segment {
+  --tone-tint: color-mix(in oklab, var(--tone, transparent) 14%, transparent);
+  background-image: linear-gradient(var(--tone-tint), var(--tone-tint)), var(--sheen-raised);
+}
+@utility tone-home { --tone: var(--workspace-home); }
+@utility tone-photos { --tone: var(--workspace-photos); }
+@utility tone-codes { --tone: var(--workspace-codes); }
 @utility max-h-dialog { max-height: calc(100dvh - 2 * var(--spacing-dialog-gutter)); }
 @utility max-w-dialog { max-width: calc(100vw - 2 * var(--spacing-dialog-gutter)); }
 /* The narrow-window library flyout hangs just under the title bar and stops just short of the window's bottom edge. */
@@ -190,7 +283,6 @@
     transition-delay: 0ms !important;
     scroll-behavior: auto !important;
   }
-  [data-slot="button"]:active { scale: 1; }
 }
 
 @layer base {
@@ -203,6 +295,36 @@
   html {
     @apply font-sans;
     }
+}
+
+/* Toasts are floating surfaces like menus, and their action is a raised control like any other
+   button. The selectors match the toast library's own, one attribute stronger. */
+[data-sonner-toaster] [data-sonner-toast][data-styled="true"] {
+  border-color: transparent;
+  box-shadow: var(--shadow-floating);
+}
+[data-sonner-toaster] [data-sonner-toast][data-styled="true"] [data-button] {
+  /* The library's own size, so a message wraps exactly as it did before. */
+  height: calc(var(--spacing) * 6);
+  padding-inline: calc(var(--spacing) * 2);
+  border: 1px solid var(--edge-cut);
+  border-radius: var(--radius-sm);
+  background-color: var(--control-surface);
+  background-image: var(--sheen-raised);
+  background-clip: padding-box;
+  box-shadow: var(--shadow-raised);
+  color: var(--foreground);
+  font-size: 0.75rem;
+  font-weight: 500;
+  transition: background-color var(--duration-fast) ease-out, box-shadow var(--duration-fast) ease-out;
+}
+[data-sonner-toaster] [data-sonner-toast][data-styled="true"] [data-button]:hover {
+  background-color: var(--control-surface-hover);
+}
+[data-sonner-toaster] [data-sonner-toast][data-styled="true"] [data-button]:active {
+  background-color: var(--control-surface);
+  background-image: var(--sheen-pressed);
+  box-shadow: var(--shadow-pressed);
 }
 
 /* Progress with no value (still working, amount unknown): a short bar sweeping across. */

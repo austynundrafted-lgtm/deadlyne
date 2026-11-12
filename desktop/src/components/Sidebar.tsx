@@ -254,7 +254,7 @@ function LibraryPanel({ onCollapse }: { onCollapse: () => void }) {
                 role="treeitem"
                 aria-level={1}
                 data-tree-row
-                className="mx-1 rounded-md px-2 py-1.5 text-left text-xs text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+                className="mx-1 rounded-md px-2 py-1.5 text-left text-xs text-muted-foreground outline-none hover:text-foreground focus-inset"
                 onClick={() => newCollection()}
               >
                 Group shoots by season, team or client. Files stay where they are.
@@ -335,7 +335,7 @@ function Group({
               if (!el || !onToggle) return
               el.ontreetoggle = onToggle
             }}
-            className="flex h-full flex-1 items-center gap-1 rounded-md px-2 text-left text-caption font-semibold tracking-wide text-muted-foreground uppercase outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+            className="flex h-full flex-1 items-center gap-1 rounded-md px-2 text-left text-caption font-semibold tracking-wide text-muted-foreground uppercase outline-none hover:text-foreground focus-inset"
           >
             {title}
             <ChevronRight className={cn("size-3 opacity-0 transition-[rotate,opacity] duration-fast group-hover/header:opacity-100 group-focus-within/header:opacity-100 pointer-coarse:opacity-100", open && "rotate-90")} />
@@ -356,7 +356,7 @@ declare global {
 }
 
 const ROW =
-  "group/row relative flex h-7 w-full min-w-0 items-center gap-2 rounded-md pr-2 text-left text-control outline-none transition-[background-color,color] duration-fast hover:bg-surface-hover focus-visible:ring-2 focus-visible:ring-ring"
+  "group/row relative flex h-7 w-full min-w-0 items-center gap-2 rounded-md pr-2 text-left text-control outline-none transition-[background-color,color] duration-fast hover:bg-surface-hover focus-inset"
 const ROW_ACTIVE = "bg-accent text-foreground hover:bg-accent"
 
 function SectionRow({

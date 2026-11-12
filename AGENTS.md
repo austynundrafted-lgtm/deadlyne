@@ -4,6 +4,16 @@ Read this before changing anything. It covers what the app is, who it's for, how
 
 ## Current workspace
 
+- November 12, 2026: the desktop interface has a tactile visual system (`desktop/UI_AUDIT.md`, third section). It refines the shared tokens and shadcn components; layout, sizes, colors, copy and shortcuts are unchanged. Rules it leaves behind:
+  - **Depth marks what you can press or type into; photos, tables and lists stay flat.** `src/index.css` documents the surface levels and one box-shadow token per elevation: `shadow-edge` (flat plate), `shadow-plate` (a row or card you can open), `shadow-raised` (neutral control), `shadow-cap` (solid-color control), `shadow-pressed`, `shadow-well` (tracks), `shadow-field` (inputs), `shadow-floating` (dialogs, menus, popovers, tooltips, toasts). Pair them with the `sheen-*` utilities, which light a face without changing its color token. Don't hand-roll shadows or gradients in a component.
+  - **A control's edge is a 1px `border-cut` on `bg-clip-padding`,** always present, so no state changes a size. Separators (`--border`) are the same cut line, darker than the surfaces they divide; use `border-hairline` or `shadow-edge` where a light outline is needed, and `surface-bar` for toolbars, table headers and status bars.
+  - **Pressed means sunk, never scaled.** `Button` swaps to `sheen-pressed` + `shadow-pressed` while held and while it holds a menu or popover open (`aria-expanded`). `static` skips the pressed face for controls hit over and over.
+  - **Segmented controls are one thing.** `ToggleGroup` and `TabsList` are recessed tracks (2px inset, concentric corners) and the chosen segment is raised. Style that state with the `chosen:` variant, never `data-[state=on]:` or `data-active:`: a tooltip wrapped around a segment overwrites its `data-state`. Light a chosen segment with `TONE.photos` / `TONE.codes` (`lib/utils.ts`). Only the workspace tabs use a solid cap in `--workspace-*`.
+  - **Focus has two forms and nothing else.** Anything pressed gets the shared 2px ring from `index.css`, for the keyboard only; rows and cards in scrolling lists add `focus-inset`. Anything typed into (inputs, textareas, table cells, select triggers) shows a 1px accent hairline on its own edge plus `shadow-field-focus`, for a click too. Never add `focus-visible:ring-*` to a component: it stacks on the shared ring, which is what made the oversized orange outline.
+  - `--input` is still the high-contrast boundary: the lower lip of every field and the box of an empty checkbox. Keep it at 3:1 against panels.
+  - `cn` treats the `shadow-*`, `sheen-*` and `tone-*` names as groups, so a later class replaces an earlier one; add a new token's name there too.
+  - A test window covered by other windows pauses WebKit transitions as well as animations, so the previously chosen tab stays lit. Uncover the window, or switch transitions off for the check and put them back.
+
 - November 11, 2026: gamification is removed from the shared Tauri app and Swift reference: no badges, achievement dialogs/banners, milestone counters, achievement IPC or tracking during open/ingest/rename/import. Do not reintroduce it. Existing achievement data and original badge artwork remain untouched and unused. Keep functional photo ratings/tags, review navigation and running-job progress. `ProgressBarView.swift` and `NumberFormatting.swift` retain the shared non-gamification helpers formerly housed with badge code.
 
 - November 11, 2026: a usability pass on the desktop interface (`desktop/UI_AUDIT.md`, second section). Rules it leaves behind:
@@ -50,13 +60,13 @@ Read this before changing anything. It covers what the app is, who it's for, how
 >   - Keep heavy work in Rust on rayon or `spawn_blocking`.
 >   - Add UI only from shadcn (`npx shadcn@latest add …`).
 >   - UI polish rules:
->     - For depth, use `shadow-edge` / `shadow-edge-hover` (defined in `index.css`), not borders.
+>     - For depth, use the elevation tokens in `index.css` (`shadow-edge`, `shadow-plate`, `shadow-raised`, `shadow-cap`, `shadow-pressed`, `shadow-well`, `shadow-field`, `shadow-floating`) with the matching `sheen-*` utility. The only border is a control's 1px `border-cut`.
 >     - Name the exact transition properties; never use `transition-all`.
->     - `Button` shrinks to 0.96 when pressed. Pass `static` for controls hit over and over, like the grid's tag and stars.
+>     - `Button` sinks when pressed and never scales. Pass `static` for controls hit over and over, like the grid's tag and stars.
 >     - Nested corners are concentric (outer radius = inner radius + padding).
 >     - Swap state icons with `IconSwap`.
 >     - Keep culling feedback instant.
-    - Show the selected item with a fill (`bg-accent`, or the workspace color at /15), never a stroke on one side.
+    - Show a selected row or card with a fill (`bg-accent`), and a chosen segment as the raised one in its track (`chosen:`, tinted with `TONE.*`). Never a stroke on one side.
     - Tailwind's base style caps `<img>` at `max-width: 100%`; set `maxWidth: "none"` on anything drawn larger than its box (the loupe at 100%).
 >   - Keep keyboard shortcuts the same as the Mac app.
 >   - Mac shell: `src-tauri/src/native.rs` builds the menu bar (macOS only) out of command ids that `src/lib/commands.ts` runs; `src/lib/menu.ts` keeps it enabled/checked and fills Open Recent. The interface still handles every key itself: a key it handles never reaches the menu, and one it leaves alone (while typing, say) falls through to the menu item. To add a ⌘ shortcut: the command in `commands.ts`, the key in `hotkeys.ts`, the item in `native.rs` with the same id, its rule in `Menus::apply` (plus any new `MenuState` field on both sides), and the row in `ShortcutsDialog.tsx`. Never give a bare culling key (T, 0–9, Space, Z) a menu accelerator: it would fire while typing a caption.

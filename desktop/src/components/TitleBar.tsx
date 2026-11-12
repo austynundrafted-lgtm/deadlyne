@@ -5,7 +5,7 @@ import { useShallow } from "zustand/react/shallow"
 import logo from "@/assets/logo.png"
 import { FILE_SCOPES, LABELS, type FileScope } from "@/lib/api"
 import { isMac, labelColor, mod, openLabel, revealLabel, trashAction } from "@/lib/format"
-import { cn } from "@/lib/utils"
+import { cn, TONE } from "@/lib/utils"
 import { useStore, type Workspace } from "@/store"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -47,12 +47,12 @@ export function TitleBar() {
   return (
     <header
       data-tauri-drag-region
-      className={cn("flex h-titlebar shrink-0 items-center gap-3 border-b bg-bar pr-3 pl-(--titlebar-inset)", isMac && "mac-titlebar")}
+      className={cn("flex h-titlebar shrink-0 items-center gap-3 border-b surface-bar pr-3 pl-(--titlebar-inset)", isMac && "mac-titlebar")}
     >
       <img src={logo} alt="" className="pointer-events-none size-6" draggable={false} />
 
       <Tabs value={workspace} onValueChange={(v) => setWorkspace(v as Workspace)}>
-        <TabsList className="h-9 bg-tab-track p-1" aria-label="Workspaces">
+        <TabsList aria-label="Workspaces">
           {WORKSPACES.map(({ value, label, icon: Icon, key }) => (
             <Tooltip key={value}>
               <TooltipTrigger asChild>
@@ -61,7 +61,7 @@ export function TitleBar() {
                   id={`workspace-tab-${value}`}
                   aria-controls={`workspace-${value}`}
                   aria-label={label}
-                  className="h-7 gap-1.5 rounded-sm px-3 aria-selected:border-transparent aria-selected:bg-(--tab) aria-selected:text-(--tab-fg) aria-selected:shadow-sm aria-selected:hover:text-(--tab-fg) dark:aria-selected:text-(--tab-fg) dark:aria-selected:hover:text-(--tab-fg) dark:aria-selected:bg-(--tab) dark:aria-selected:border-transparent"
+                  className="gap-1.5 px-3 chosen:border-[color-mix(in_oklab,var(--tab)_58%,black)] chosen:bg-(--tab) chosen:text-(--tab-fg) chosen:sheen-cap chosen:shadow-cap chosen:hover:text-(--tab-fg)"
                   style={{
                     ["--tab" as string]: `var(--workspace-${value})`,
                     ["--tab-fg" as string]: "var(--workspace-foreground)",
@@ -113,7 +113,7 @@ export function TitleBar() {
 }
 
 /** The chosen filter is lit in the Photos workspace color. */
-const ACTIVE = "text-muted-foreground data-[state=on]:bg-(--workspace-photos)/15 data-[state=on]:text-(--workspace-photos)"
+const ACTIVE = TONE.photos
 
 /** All / Tagged / Untagged, plus one menu for rating and label — instead of five controls. */
 function PhotoFilters() {
@@ -352,7 +352,7 @@ function CaptionToggle() {
           size="sm"
           aria-pressed={captionPanel}
           aria-label="Captions"
-          className={cn("shrink-0", captionPanel && "bg-(--workspace-photos)/15 text-(--workspace-photos)")}
+          className={cn("shrink-0", captionPanel && "bg-(--workspace-photos)/12 text-(--workspace-photos) shadow-pressed hover:bg-(--workspace-photos)/16 hover:text-(--workspace-photos)")}
           onClick={() => setCaptionPanel(!captionPanel)}
         >
           <MessageSquareText />

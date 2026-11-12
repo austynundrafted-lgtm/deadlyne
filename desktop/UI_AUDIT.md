@@ -145,3 +145,49 @@ A second pass over the same Tauri/React app, against a general UI/UX standards c
 - **Two “New collection” buttons** in the sidebar (the header’s + and the Collections row’s +); the header one could be read as “add to library”.
 - **Long export file names** truncate from the end in the grid, hiding the frame number; middle truncation would keep it.
 - The Windows build shares these changes but was not run.
+
+# Tactile visual system — November 12, 2026
+
+A visual refinement of the same Tauri/React app: dark graphite surfaces, raised controls with a lit upper edge, recessed fields and tracks, and one restrained focus treatment. It is not a redesign. Layout, control sizes, colors, typography, copy, shortcuts and behavior are unchanged; the change lives in `src/index.css` and the shared shadcn components, with small class changes on the screens that styled something by hand.
+
+## What changed
+
+- **Focus (the reason for the pass).** Every field stacked a 3px ring on top of a 2px outline set 2px out, so clicking into a caption field drew a thick orange band. Fields now show a 1px hairline in the existing ring color on their own edge, with a faint inner line; nothing grows or glows, and their size does not change. Buttons, tabs, switches, rows and cards keep one 2px ring, for the keyboard only. The per-component `focus-visible:ring-*` classes are gone; rows and cards in scrolling lists keep their ring inside themselves (`focus-inset`).
+- **Surface hierarchy.** `index.css` names five levels (canvas, structure, controls, floating, chosen) and one shadow token per elevation: `edge`, `plate`, `raised`, `cap`, `pressed`, `well`, `field`, `floating`. Lighting is an overlay (`sheen-*`), so every color keeps its token value.
+- **Workspace tabs.** One recessed track; the current workspace is a raised cap in its own color (Home orange, Photos amber, Codes green) with a lit upper edge and a darker rim. The track is 32px and the tabs 28px, as before.
+- **Buttons.** Primary buttons are caps in the brand orange; secondary and outline buttons are raised neutral; ghost buttons stay quiet and tint under the pointer. Pressing sinks a button (darker toward the top, shaded inside) instead of shrinking it to 96%, and a button stays sunk while its menu or popover is open.
+- **Segmented controls.** All/Tagged/Untagged, Photos/Folders/Documents, Table/Text, the grid/list switch, the Settings sections and the dialogs' Photos and Files rows are the same control: a recessed track with the chosen segment raised. Photos and Codes segments are tinted and lettered in their workspace color; the rest are neutral. Each track is exactly as tall as the buttons it replaced, and a segment can still be hit across that full height.
+- **Fields.** Inputs, textareas and one-time-code slots are wells: a darker fill, shaded under the upper edge, with the `--input` color as a lower lip. Select triggers are raised menu buttons that sink while open.
+- **Switches, checkboxes, sliders, progress.** Recessed tracks and a lit thumb; checked boxes and switches are brand-orange caps.
+- **Dialogs, menus, popovers, tooltips, toasts.** One floating elevation. Dialog footers are set into the surface under an etched line. Tooltips are dark like the menus (they were light). A toast's action is a raised button at the toast library's own size, so messages wrap as before.
+- **Separators.** `--border` is now a cut line, darker than the surfaces it divides, for bars, panels, table rules and menu separators. The scrollbar thumb and outline badges, which need to be seen, no longer use it.
+- **Photos.** The grid is unchanged apart from a brighter outline under the pointer, a hairline above the filename bar, and the tagged check and the loupe's Tagged badge becoming small amber caps. Selection is still the 2px amber ring (3px on the focused photo).
+- **Codes.** The table stays flat: thin rules, a faint band under the pointer, and a 1px accent hairline on the cell being edited.
+- **Motion.** Durations are 120, 160 and 240ms (were 150, 200 and 300). Reduced motion still switches all of it off.
+
+## Decisions worth knowing
+
+- **The brand orange is still `#ff3d00`.** The brief names `#F64426`; the token in `index.css` (and the Swift app's accent) is `#ff3d00`, and the brief also says the codebase's tokens are the source of truth, so nothing was changed. If `#F64426` is the intended value it is a small token change (`--primary`, `--workspace-home`, `--sidebar-primary`, `--chart-1`), with the 4.5:1 check on its dark ink repeated.
+- **Fields keep a 3:1 boundary.** A low-contrast border all round would have matched the brief's wording but dropped the input boundary below 3:1, undoing the November 4 change. The lower lip keeps the `--input` color, 3:1 or better on every surface a field sits on (3.3:1 on panels); the other three sides are the dark cut line. That a 3:1 lower edge satisfies WCAG 1.4.11 for a text field is this pass's reading of the criterion's text-input examples, not a tested result.
+- **Text rendering was left alone.** Switching to grayscale antialiasing would thin every label in the app; that is a typography change, not a refinement.
+
+## Verification
+
+- `npx tsc --noEmit`, `npm run build`: passed (the same bundle-size and mixed-import warnings as before). `npm test`: 89 tests in 16 files passed.
+- The mocked browser harness (`.verification/ux-pass/`, Chromium, every native command mocked, invented shoots), looked at in magnified captures:
+  - Home, Photos (toolbar, grid, caption panel, status bar, loupe, documents, library), Codes (sidebar, table, a cell being edited, inspector), the Settings, Export, Ingest, Send, FTP servers, Add files and Shortcuts dialogs, the Filter menu, a photo's context menu, the Delimiter list, a toast, the sign-in screen and the narrow-window library flyout.
+  - Focus, read from computed styles and seen in captures: a clicked Headline field has a 1px solid outline in `#ff6b2b` at −1px and is 32px tall focused or not; a Codes cell the same outline; Open a shoot and the Photos tab, reached with Tab, have one 2px ring at 2px; a sidebar row reached with the arrow keys has it inside the row.
+  - The title bar has no overflow, a 12px right margin and a 48px height at 960, 1024, 1100, 1120, 1279, 1280 and 1440px, in every send state, with two filters on.
+  - Heuristic checks on Home, Photos, Codes and the Export, Settings, Ingest and Shortcuts dialogs: no text below 4.5:1 and no horizontal overflow.
+- The dev build in a real Mac window (WebKit and the real Rust backend), with twelve scratch JPEGs, a throwaway home folder and the development-only sign-in bypass, so no real shoot, roster, setting or account was read or written: Home, Photos, Codes, the Ingest dialog (with its disabled Save preset… and Ingest buttons) and the title bar at the 960×600 minimum matched the harness. The real app's data folders had no file changed during the run.
+- Limits of that real-window check:
+  - The test window stayed behind other windows. A covered window pauses WebKit transitions, so they were switched off for the check and restored afterwards. A background window also shows no focus, hover or pressed styling and cannot open menus or popovers, so those states were seen in Chromium only.
+  - At 960×600 the sidebar stayed expanded in the covered window instead of becoming its rail. The rail logic was not touched in this pass and switches in the harness; it was not re-checked in an uncovered window.
+  - Three small adjustments made after that run (slightly softer lighting on colored caps, the tab track's 2px inset, segment hit areas) and the toast styling were seen in the harness only.
+- Not verified: the packaged or notarized Mac app, the Mac App Store build, a real iPad, Windows, VoiceOver, and a signed-in account.
+
+## Left for a decision
+
+- **Touch sizes on iPad** are as they were (see the November 11 list).
+- **Selected rows** in the sidebar, the lookup-file list and the library keep a flat fill. They are lists, not controls.
+- The Swift reference app was not restyled.

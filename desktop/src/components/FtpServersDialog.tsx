@@ -48,7 +48,7 @@ export function FtpServersDialog() {
             {servers.length ? (
               <ItemGroup className="gap-1">
                 {servers.map((s) => (
-                  <Item key={s.id} variant="outline" size="sm" className="cursor-pointer bg-card/40 hover:bg-card hover:shadow-edge-hover" onClick={() => setEditing(s)}>
+                  <Item key={s.id} variant="outline" size="sm" className="cursor-pointer bg-card/40 shadow-plate hover:bg-card hover:shadow-plate-hover" onClick={() => setEditing(s)}>
                     <ItemMedia variant="icon">
                       <Server />
                     </ItemMedia>

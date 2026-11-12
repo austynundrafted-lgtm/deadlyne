@@ -10,7 +10,7 @@ import { reveal } from "@/lib/api"
 import { DELIMITERS, expandLive, resolve, useCodes, type CodeList } from "@/lib/codes"
 import { plural } from "@/lib/format"
 import { confirm } from "@/lib/prompts"
-import { cn } from "@/lib/utils"
+import { cn, TONE } from "@/lib/utils"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -42,7 +42,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 
 /** The chosen editing mode is lit in the Codes workspace color. */
-const MODE = "text-muted-foreground data-[state=on]:bg-(--workspace-codes)/15 data-[state=on]:text-(--workspace-codes)"
+const MODE = TONE.codes
 
 export function CodesView() {
   const { lists, disabled, loaded } = useCodes(useShallow((s) => ({ lists: s.lists, disabled: s.disabled, loaded: s.loaded })))
@@ -138,7 +138,7 @@ function ListRow({ list, active, onSelect }: { list: CodeList; active: boolean; 
           onClick={onSelect}
           aria-current={active || undefined}
           className={cn(
-            "flex cursor-default items-center gap-2.5 rounded-md px-2 py-2 transition-[background-color] duration-fast outline-none hover:bg-accent/50 focus-visible:ring-2 focus-visible:ring-ring data-[state=open]:bg-accent/50",
+            "flex cursor-default items-center gap-2.5 rounded-md px-2 py-2 transition-[background-color] duration-fast outline-none hover:bg-accent/50 data-[state=open]:bg-accent/50",
             active && "bg-accent hover:bg-accent data-[state=open]:bg-accent",
           )}
         >
@@ -240,7 +240,7 @@ function Editor({ list, onRenamed }: { list: CodeList; onRenamed: (fileName: str
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex min-h-titlebar shrink-0 flex-wrap items-center gap-2 border-b bg-bar px-3 py-2">
+      <div className="flex min-h-titlebar shrink-0 flex-wrap items-center gap-2 border-b surface-bar px-3 py-2">
         {renaming !== null ? (
           <form
             className="flex-1"
@@ -318,7 +318,7 @@ function Editor({ list, onRenamed }: { list: CodeList; onRenamed: (fileName: str
       ) : (
         <ScrollArea className="min-h-0 flex-1">
           <table className="w-full table-fixed border-collapse text-sm">
-            <thead className="sticky top-0 z-10 bg-bar text-xs text-muted-foreground">
+            <thead className="sticky top-0 z-10 surface-bar text-xs text-muted-foreground">
               <tr>
                 <th className="w-28 border-r border-b px-3 py-2 text-left font-medium">Code</th>
                 {Array.from({ length: columns }, (_, c) => (
@@ -334,7 +334,7 @@ function Editor({ list, onRenamed }: { list: CodeList; onRenamed: (fileName: str
                 const dup = duplicates.has(code)
                 const other = enabled && code && resolve(row[0].trim())?.list !== list.name
                 return (
-                  <tr key={i} className="group">
+                  <tr key={i} className="group hover:bg-surface-hover">
                     {Array.from({ length: columns + 1 }, (_, c) => (
                       <td key={c} className="border-r border-b p-0">
                         <input
@@ -371,7 +371,7 @@ function Editor({ list, onRenamed }: { list: CodeList; onRenamed: (fileName: str
         </ScrollArea>
       )}
 
-      <div className="flex h-8 shrink-0 items-center border-t bg-bar px-4 text-xs text-muted-foreground">
+      <div className="flex h-8 shrink-0 items-center border-t surface-bar px-4 text-xs text-muted-foreground">
         {duplicates.size > 0 || shadowed > 0 || badCodes.length > 0 ? (
           <span className="truncate text-(--workspace-photos)">
             {[
@@ -469,7 +469,7 @@ function TextEditor({ list }: { list: CodeList }) {
       value={text}
       aria-label={`${list.name} lookup file text`}
       spellCheck={false}
-      className="min-h-0 flex-1 resize-none rounded-none border-0 font-mono text-sm [tab-size:24]"
+      className="min-h-0 flex-1 resize-none rounded-none border-0 bg-transparent font-mono text-sm shadow-none focus-visible:shadow-none [tab-size:24]"
       onKeyDown={(e) => {
         if (e.key === "Tab") {
           e.preventDefault()

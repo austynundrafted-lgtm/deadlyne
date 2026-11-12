@@ -26,6 +26,8 @@ Its controls and shortcut hints stay on one line as the photo pane narrows. Near
 
 The desktop usability pass of November 11, 2026 makes Return run the default action in the Ingest, Export, Send and Add files dialogs, opens the full library sidebar over the photos in narrow windows (⌥⌘S), explains a missing shoot folder and offers to locate it, and keeps every title-bar control on screen at the smallest window size. Details and what was verified are in the [UI audit](desktop/UI_AUDIT.md).
 
+Since November 12, 2026 the desktop interface has a tactile dark look: raised buttons, recessed fields, and Home, Photos and Codes tabs that keep their orange, amber and green as raised caps. Clicking into a caption field now shows a thin accent line on the field itself instead of a thick orange ring. Layout, sizes and shortcuts are the same.
+
 ## Why Photo Mechanic (and Deadlyne) are fast
 
 Photo Mechanic doesn't use a secret RAW decoder. It **skips RAW decoding completely.**

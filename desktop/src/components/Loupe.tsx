@@ -224,7 +224,7 @@ export function Loupe() {
         <Button
           variant="secondary"
           size={isIPad ? "icon-lg" : "icon-sm"}
-          className={cn("absolute top-3 right-3 z-10", isIPad ? "shadow-edge" : "opacity-70 hover:opacity-100")}
+          className={cn("absolute top-3 right-3 z-10", !isIPad && "opacity-70 hover:opacity-100")}
           aria-label="Back to the grid"
           onClick={() => setLoupe(false)}
         >
@@ -232,13 +232,13 @@ export function Loupe() {
         </Button>
       </div>
 
-      <div className="flex h-10 shrink-0 items-center gap-3 border-t bg-bar px-3 text-xs whitespace-nowrap">
+      <div className="flex h-10 shrink-0 items-center gap-3 border-t surface-bar px-3 text-xs whitespace-nowrap">
         <span className="shrink-0 whitespace-nowrap text-muted-foreground tabular-nums">
           {index + 1} / {list.length.toLocaleString()}
         </span>
         {/* On iPad the tag and star buttons show these already. */}
         {photo.tagged && !isIPad && (
-          <Badge className="bg-(--workspace-photos) text-workspace-foreground">
+          <Badge className="border-[color-mix(in_oklab,var(--workspace-photos)_58%,black)] bg-(--workspace-photos) text-workspace-foreground">
             <Check /> Tagged
           </Badge>
         )}

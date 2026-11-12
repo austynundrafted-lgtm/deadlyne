@@ -71,7 +71,7 @@ export function HomeView() {
           <Button size="lg" className="h-auto flex-col items-start gap-1 px-4 py-3 text-left" onClick={() => useUI.getState().open("ingest")}>
             <span className="flex w-full items-center gap-2 text-base">
               <HardDriveDownload className="size-5" /> Ingest
-              <Kbd className="ml-auto bg-primary-foreground/5 text-primary-foreground">⇧{mod}I</Kbd>
+              <Kbd className="ml-auto bg-primary-foreground/10 text-primary-foreground shadow-[inset_0_1px_1px_rgb(0_0_0/0.22),0_1px_0_rgb(255_255_255/0.22)]">⇧{mod}I</Kbd>
             </span>
             <span className="text-xs font-normal">{cards[0] ? `${cards[0].name} is ready` : "Copy a card into a named folder"}</span>
           </Button>
@@ -121,7 +121,7 @@ export function HomeView() {
                   variant="outline"
                   size="sm"
                   role="listitem"
-                  className="group cursor-pointer bg-card/40 hover:bg-card hover:shadow-edge-hover"
+                  className="group cursor-pointer bg-card/40 shadow-plate hover:bg-card hover:shadow-plate-hover"
                   onClick={open}
                   title={s.path}
                 >

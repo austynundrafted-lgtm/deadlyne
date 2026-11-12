@@ -97,8 +97,8 @@ export function AddFilesDialog() {
                   data-mode={value}
                   onClick={() => setMode(value)}
                   className={cn(
-                    "flex items-start gap-3 rounded-lg p-3 text-left shadow-edge outline-none transition-[background-color,box-shadow] duration-fast hover:shadow-edge-hover focus-visible:ring-3 focus-visible:ring-ring",
-                    mode === value ? "bg-primary/12" : "bg-card/40 hover:bg-card",
+                    "flex items-start gap-3 rounded-lg p-3 text-left outline-none transition-[background-color,box-shadow] duration-fast",
+                    mode === value ? "bg-primary/12 shadow-[inset_0_1px_0_var(--edge-light-faint),0_0_0_1px_var(--focus-soft)]" : "bg-card/40 shadow-plate hover:bg-card hover:shadow-plate-hover",
                   )}
                 >
                   <Icon className={cn("mt-0.5 size-4 shrink-0", mode === value ? "text-primary-readable" : "text-muted-foreground")} />

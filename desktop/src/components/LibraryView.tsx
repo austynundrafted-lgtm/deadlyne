@@ -416,7 +416,7 @@ function GridCard({ item, stats, selected, current, onSelect, onOpen, collection
       onDoubleClick={onOpen}
       className={cn(
         "group/card flex min-w-0 flex-col items-center gap-2 rounded-xl px-3 pt-4 pb-3 text-center outline-none transition-[background-color,box-shadow] duration-fast",
-        "hover:bg-surface-hover focus-visible:ring-2 focus-visible:ring-ring",
+        "hover:bg-surface-hover focus-inset",
         selected && "bg-accent hover:bg-accent",
         dnd.over && "bg-primary/12 shadow-edge-hover",
         className,
@@ -486,7 +486,7 @@ function ListRow({ item, stats, selected, current, onSelect, onOpen, collectionI
       onDoubleClick={onOpen}
       className={cn(
         "group/card grid h-10 w-full items-center gap-3 rounded-md px-2 text-left text-control outline-none transition-[background-color] duration-fast",
-        "hover:bg-surface-hover focus-visible:ring-2 focus-visible:ring-ring",
+        "hover:bg-surface-hover focus-inset",
         selected && "bg-accent hover:bg-accent",
         dnd.over && "bg-primary/12",
         dnd.dragging && "opacity-40",
