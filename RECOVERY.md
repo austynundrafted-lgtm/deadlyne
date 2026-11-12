@@ -1,6 +1,6 @@
 # Deadlyne macOS recovery — October 25, 2026
 
-Recovered the original repository and Git history from the archived Desktop copy at `63bf02d` into this workspace. The archive remains untouched. Development continues in `desktop/`, with macOS first and the existing iPad project/plugin sources preserved.
+Recovered the original repository and Git history from the archived Desktop copy at `63bf02d` into `/Users/austyn/Documents/ChatGPT/Deadlyne`. That work was merged back into the original checkout, `/Users/austyn/Desktop/Desktop_082026/Deadlyne`, in PR #15 on October 26, and development continues there. Development continues in `desktop/`, with macOS first and the existing iPad project/plugin sources preserved.
 
 ## Delivered
 
