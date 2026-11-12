@@ -7,6 +7,9 @@ import { LazyStore } from "@tauri-apps/plugin-store"
 import { create } from "zustand"
 import { recentShoots } from "@/lib/recents"
 import { shootName } from "@/lib/shootName"
+import { mergeLibraryData } from "@/lib/legacy-data"
+import type { Label } from "@/lib/api"
+import { catalogPath, type CatalogRule, type CatalogRules } from "@/lib/catalog-rules"
 
 export interface LibraryShoot {
   path: string
@@ -95,11 +98,24 @@ export const progressOf = (s?: FolderStats) => (s && s.totalPhotos ? s.totalView
 
 const file = new LazyStore("library.json")
 
+export async function importLibraryData(incoming: unknown) {
+  await useLibrary.getState().load()
+  const merged = mergeLibraryData(useLibrary.getState(), incoming)
+  clearTimeout(saveTimer)
+  for (const key of ["shoots", "collections", "links"] as const) await file.set(key, merged[key])
+  await file.save()
+  useLibrary.setState(merged)
+  await useLibrary.getState().refreshStats()
+}
+
 interface LibraryState {
   loaded: boolean
   shoots: LibraryShoot[]
   collections: Collection[]
   links: LinkedDoc[]
+  folderLabels: Record<string, Label>
+  catalogRules: CatalogRules
+  setCatalogRule: (path: string, rule: CatalogRule | null) => void
   stats: Record<string, FolderStats>
 
   load: () => Promise<void>
@@ -107,6 +123,7 @@ interface LibraryState {
   noteOpened: (path: string) => void
   addShoots: (paths: string[]) => void
   updateShoot: (path: string, patch: Partial<Omit<LibraryShoot, "path">>) => void
+  setFolderLabel: (path: string, label: Label | null) => void
   /** Forgets a shoot. Its files and its progress record stay; opening it again brings it back. */
   removeShoot: (path: string) => () => void
   /** A folder was renamed or found elsewhere: point everything that referred to it at the new place. */
@@ -132,10 +149,12 @@ let saveTimer: ReturnType<typeof setTimeout> | undefined
 function persist(get: () => LibraryState) {
   clearTimeout(saveTimer)
   saveTimer = setTimeout(async () => {
-    const { shoots, collections, links } = get()
+    const { shoots, collections, links, folderLabels, catalogRules } = get()
     await file.set("shoots", shoots)
     await file.set("collections", collections)
     await file.set("links", links)
+    await file.set("folderLabels", folderLabels)
+    await file.set("catalogRules", catalogRules)
     await file.save()
   }, 300)
 }
@@ -166,10 +185,12 @@ export const useLibrary = create<LibraryState>((set, get) => {
   }
 
   async function loadOnce() {
-    const [shoots, collections, links] = await Promise.all([
+    const [shoots, collections, links, folderLabels, catalogRules] = await Promise.all([
       file.get<LibraryShoot[]>("shoots"),
       file.get<Collection[]>("collections"),
       file.get<LinkedDoc[]>("links"),
+      file.get<Record<string, Label>>("folderLabels"),
+      file.get<CatalogRules>("catalogRules"),
     ])
     let list = shoots ?? []
     // First run: the library starts with the recent shoots Home already knows.
@@ -179,7 +200,7 @@ export const useLibrary = create<LibraryState>((set, get) => {
     // Anything noted before the file finished loading wins.
     const early = get().shoots
     const merged = [...early, ...list.filter((s) => !early.some((e) => samePath(e.path, s.path)))]
-    set({ loaded: true, shoots: merged, collections: collections ?? [], links: links ?? [] })
+    set({ loaded: true, shoots: merged, collections: collections ?? [], links: links ?? [], folderLabels: { ...folderLabels, ...get().folderLabels }, catalogRules: { ...catalogRules, ...get().catalogRules } })
     if (!shoots || early.length) persist(get)
     get().refreshStats()
   }
@@ -189,6 +210,15 @@ export const useLibrary = create<LibraryState>((set, get) => {
     shoots: [],
     collections: [],
     links: [],
+    folderLabels: {},
+    catalogRules: {},
+    setCatalogRule: (path, rule) => mutate((s) => {
+      const catalogRules = { ...s.catalogRules }
+      const key = catalogPath(path)
+      if (rule) catalogRules[key] = rule
+      else delete catalogRules[key]
+      return { catalogRules }
+    }),
     stats: {},
 
     // Once per launch: a second read would merge the stale file back over changes made since.
@@ -223,6 +253,14 @@ export const useLibrary = create<LibraryState>((set, get) => {
       mutate((s) => ({ shoots: s.shoots.map((x) => (samePath(x.path, path) ? { ...x, ...patch } : x)) }))
     },
 
+    setFolderLabel: (path, label) => mutate((s) => {
+      const folderLabels = { ...s.folderLabels }
+      const key = path.replace(/[\\/]+$/, "")
+      if (label) folderLabels[key] = label
+      else delete folderLabels[key]
+      return { folderLabels }
+    }),
+
     removeShoot: (path) => {
       const before = { shoots: get().shoots, collections: get().collections }
       mutate((s) => ({
@@ -238,6 +276,8 @@ export const useLibrary = create<LibraryState>((set, get) => {
         shoots: s.shoots.map((x) => ({ ...x, path: swap(x.path) })),
         collections: s.collections.map((c) => ({ ...c, shoots: c.shoots.map(swap) })),
         links: s.links.map((l) => ({ ...l, folder: swap(l.folder), path: swap(l.path) })),
+        folderLabels: Object.fromEntries(Object.entries(s.folderLabels).map(([path, label]) => [swap(path), label])),
+        catalogRules: Object.fromEntries(Object.entries(s.catalogRules).map(([path, rule]) => [swap(path), rule])),
       }))
       get().refreshStats([to])
     },

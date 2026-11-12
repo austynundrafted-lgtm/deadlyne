@@ -6,8 +6,12 @@ import { targetPhotos, useStore } from "@/store"
 import { useUI } from "@/ui"
 
 export async function openFolderDialog() {
-  const path = await pickFolder("Open a shoot")
-  if (path) await useStore.getState().openFolder(path)
+  try {
+    const path = await pickFolder("Open a shoot")
+    if (path) await useStore.getState().openFolder(path)
+  } catch (error) {
+    toast.error("Couldn’t open the Files browser", { description: String(error) })
+  }
 }
 
 /** Copy or move the tagged photos (or the selection) to a folder the user picks. */
@@ -35,7 +39,8 @@ export function openExport(which?: "tagged" | "selected") {
 }
 
 export function askTrash() {
-  if (targetPhotos(useStore.getState()).length) useUI.getState().open("confirmTrash")
+  const s = useStore.getState()
+  void s.trash(targetPhotos(s))
 }
 
 /** Shows the photo (the first of the selection) in Finder or Explorer. */

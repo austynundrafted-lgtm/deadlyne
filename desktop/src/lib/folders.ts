@@ -14,15 +14,16 @@ import {
   isWithin,
   parentPath,
   samePath,
+  statsFor,
   useLibrary,
   type LibrarySection,
   type SubFolder,
 } from "@/lib/library"
 import { forgetRecentShoot, relocateRecentShoots } from "@/lib/recents"
 import { continueReviewing, useViewing } from "@/lib/viewing"
-import { useStore, type FolderDoc } from "@/store"
+import { targetPhotos, useStore, type FolderDoc } from "@/store"
 import { useUI } from "@/ui"
-import { confirm, promptName } from "@/components/Prompts"
+import { confirm, promptName } from "@/lib/prompts"
 
 // MARK: - Subfolder tree (the sidebar's expanded folders)
 
@@ -54,10 +55,77 @@ function refreshAround(path: string) {
   useLibrary.getState().refreshStats()
 }
 
+/** Refresh an expanded folder and, if it is open, its contact sheet and contents. */
+export async function refreshFolder(path: string) {
+  const s = useStore.getState()
+  if (s.folder && samePath(s.folder, path)) {
+    const selected = new Set(s.selected)
+    const focus = s.focus
+    await s.openFolder(path, { origin: s.origin, tab: s.folderTab, select: focus ?? undefined })
+    const current = useStore.getState()
+    if (current.folder && samePath(current.folder, path)) {
+      const valid = new Set(current.photos.map((photo) => photo.id))
+      const retained = new Set([...selected].filter((id) => valid.has(id)))
+      if (retained.size) {
+        const nextFocus = focus && retained.has(focus) ? focus : [...retained][0]
+        useStore.setState({ selected: retained, focus: nextFocus, anchor: nextFocus, pristine: false })
+      }
+    }
+  }
+  await useTree.getState().load(path)
+  await useLibrary.getState().refreshStats([path])
+}
+
+/** Copy or move the active photo selection into a folder chosen from the library. */
+export async function transferSelectionHere(destination: string, moveFiles: boolean) {
+  const s = useStore.getState()
+  const photos = targetPhotos(s)
+  if (!s.folder || !photos.length) {
+    toast("Select photos first.")
+    return
+  }
+  if (s.busy) return
+  await s.transfer(photos, destination, moveFiles)
+  refreshAround(destination)
+}
+
 // MARK: - Opening
 
-export function openShoot(path: string, origin?: LibrarySection) {
+/**
+ * Opens a shoot from the library, Home or the sidebar. One whose folder has gone missing gets a
+ * plain explanation and a way to find it, instead of a file-system error and a trip to another screen.
+ */
+export async function openShoot(path: string, origin?: LibrarySection) {
+  // One message per folder: asking again replaces it, and it goes away once the folder opens.
+  const message = `missing:${path.replace(/[\\/]+$/, "")}`
+  if (await stillMissing(path)) {
+    toast.error(`Can’t find “${folderTitle(path)}”`, {
+      id: message,
+      description: "The folder may have been moved or renamed, or its drive isn’t connected.",
+      duration: 12000,
+      action: {
+        label: "Locate…",
+        // Opening it was the point: carry on once it's found.
+        onClick: async () => {
+          const found = await locateFolder(path)
+          if (found) await useStore.getState().openFolder(found, { origin })
+        },
+      },
+    })
+    return
+  }
+  toast.dismiss(message)
   return useStore.getState().openFolder(path, { origin })
+}
+
+/** True when the library already shows this folder as missing and a fresh look agrees (its drive may be back). */
+async function stillMissing(path: string) {
+  const lib = useLibrary.getState()
+  const known = statsFor(lib.stats, path)
+  if (!known || known.exists) return false
+  await lib.refreshStats([path])
+  const now = statsFor(useLibrary.getState().stats, path)
+  return !!now && !now.exists
 }
 
 /** Opens a shoot and picks up where the review stopped. */
@@ -90,9 +158,14 @@ export async function renameCollection(id: string) {
   if (name) useLibrary.getState().renameCollection(id, name)
 }
 
-export function deleteCollection(id: string) {
+export async function deleteCollection(id: string) {
   const c = useLibrary.getState().collections.find((x) => x.id === id)
   if (!c) return
+  if (!await confirm({
+    title: "Are you sure you want to delete this collection?",
+    description: `“${c.name}” and its subcollections will be removed. Their shoots and photo files stay on disk.`,
+    action: "Delete collection", destructive: true,
+  })) return
   const undo = useLibrary.getState().deleteCollection(id)
   const s = useStore.getState()
   if (s.librarySection?.kind === "collection" && s.librarySection.id === id) s.showSection({ kind: "all" })
@@ -104,13 +177,37 @@ export function deleteCollection(id: string) {
 
 // MARK: - Shoots in the library
 
-export function removeFromLibrary(path: string) {
+export async function removeFromLibrary(path: string) {
+  if (!await confirm({
+    title: "Are you sure you want to remove this shoot?",
+    description: `“${folderTitle(path)}” will be removed from Deadlyne. Its folder and photos stay on disk.`,
+    action: "Remove from Deadlyne", destructive: true,
+  })) return
   const undo = useLibrary.getState().removeShoot(path)
   forgetRecentShoot(path)
   toast(`Removed “${folderTitle(path)}” from Deadlyne`, {
     description: "The folder and its photos stay on disk. Open it again any time.",
     action: { label: "Undo", onClick: undo },
   })
+}
+
+export async function removeFromCollection(id: string, path: string) {
+  const collection = useLibrary.getState().collections.find((c) => c.id === id)
+  if (!collection || !await confirm({
+    title: "Are you sure you want to remove this shoot from the collection?",
+    description: `“${folderTitle(path)}” will leave “${collection.name}”. Its folder and photos stay on disk.`,
+    action: "Remove from collection", destructive: true,
+  })) return
+  useLibrary.getState().removeFromCollection(id, path)
+}
+
+export async function removeRecentShoot(path: string) {
+  if (!await confirm({
+    title: "Are you sure you want to remove this recent shoot?",
+    description: `“${folderTitle(path)}” will leave Recent shoots. Its folder and photos stay on disk.`,
+    action: "Remove from recents", destructive: true,
+  })) return
+  await forgetRecentShoot(path)
 }
 
 /** A folder now lives somewhere else: its review progress, library entries and recents follow it. */
@@ -120,12 +217,13 @@ export async function followMovedFolder(from: string, to: string) {
   await relocateRecentShoots(from, to)
 }
 
-/** For a shoot whose folder was moved or renamed outside Deadlyne: point it at the new place. */
-export async function locateFolder(path: string) {
+/** For a shoot whose folder was moved or renamed outside Deadlyne: point it at the new place. Resolves to where it is now. */
+export async function locateFolder(path: string): Promise<string | null> {
   const picked = await pickFolder(`Where is “${baseName(path)}” now?`)
-  if (!picked) return
+  if (!picked) return null
   await followMovedFolder(path, picked)
   toast.success(`Found “${baseName(picked)}”`, { description: "Its collections and review progress came along." })
+  return picked
 }
 
 export async function resetProgress(path: string) {
@@ -171,7 +269,7 @@ export async function renameOnDisk(path: string) {
   if (!name || name === baseName(path)) return
   try {
     const renamed = await invoke<string>("rename_path", { path, newName: name })
-    useLibrary.getState().relocate(path, renamed)
+    await followMovedFolder(path, renamed)
     const s = useStore.getState()
     if (s.folder && isWithin(s.folder, path)) await s.openFolder(renamed + s.folder.slice(path.replace(/[\\/]+$/, "").length))
     refreshAround(renamed)
@@ -182,8 +280,8 @@ export async function renameOnDisk(path: string) {
 
 export async function trashFolder(path: string) {
   const ok = await confirm({
-    title: `Move “${baseName(path)}” to ${trashName}?`,
-    description: `The folder and everything in it go to ${trashName}. You can put it back from there.`,
+    title: "Are you sure you want to delete this folder?",
+    description: `“${baseName(path)}” and everything in it will move to ${trashName}. You can restore it from there.`,
     action: "Move to Trash",
     destructive: true,
   })
@@ -278,19 +376,18 @@ export async function moveDoc(doc: FolderDoc) {
 }
 
 export async function removeDoc(doc: FolderDoc) {
+  if (!await confirm({
+    title: doc.linkId ? "Are you sure you want to remove this document link?" : "Are you sure you want to delete this document?",
+    description: doc.linkId ? `The link to “${doc.name}” will be removed from this shoot. The file itself stays where it is.` : `“${doc.name}” will move to ${trashName}. You can restore it from there.`,
+    action: doc.linkId ? "Remove link" : "Move to Trash",
+    destructive: true,
+  })) return
   if (doc.linkId) {
     useLibrary.getState().unlinkDocument(doc.linkId)
     await useStore.getState().refreshContents()
     toast(`Removed the link to “${doc.name}”`, { description: "The file itself wasn’t touched." })
     return
   }
-  const ok = await confirm({
-    title: `Move “${doc.name}” to ${trashName}?`,
-    description: `It’s a file inside this shoot folder. You can put it back from ${trashName}.`,
-    action: "Move to Trash",
-    destructive: true,
-  })
-  if (!ok) return
   try {
     await invoke("trash_path", { path: doc.path })
   } catch (e) {

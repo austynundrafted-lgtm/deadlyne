@@ -144,8 +144,6 @@ enum IngestEngine {
         var copied = 0, skipped = 0, bytes: Int64 = 0
         var errors: [String] = []
         var firstFolder: URL?
-        /// Photos (a RAW+JPG pair is one) with at least one file copied, per destination folder path.
-        var copiedPhotos: [String: Int] = [:]
         var cancelled = false
 
         var message: String {
@@ -220,7 +218,6 @@ enum IngestEngine {
         var doneBytes: Int64 = 0
         progress(IngestProgress(filesTotal: files.count, bytesTotal: totalBytes))
         var lastUpdate = Date.distantPast
-        var countedPhotos = Set<ObjectIdentifier>()
 
         for (k, file) in files.enumerated() {
             if isCancelled() { summary.cancelled = true; break }
@@ -244,9 +241,6 @@ enum IngestEngine {
                     if copied != sizes[k] { summary.errors.append("\(target.lastPathComponent): size mismatch after copy") }
                     summary.copied += 1
                     summary.bytes += sizes[k]
-                    if countedPhotos.insert(ObjectIdentifier(file.photo)).inserted {
-                        summary.copiedPhotos[folder.path, default: 0] += 1
-                    }
                 }
             } catch {
                 summary.errors.append("\(file.src.lastPathComponent): \(error.localizedDescription)")

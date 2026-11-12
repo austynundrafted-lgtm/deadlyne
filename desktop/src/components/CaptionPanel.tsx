@@ -21,6 +21,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 
 export const CAPTION_PANEL_WIDTH = 340
 
@@ -50,9 +51,16 @@ export function CaptionPanel() {
         </div>
         <HelpPopover />
         <JpegModePopover />
-        <Button variant="ghost" size="icon-sm" aria-label={`Hide captions (${mod}I)`} onClick={() => setCaptionPanel(false)}>
-          <X />
-        </Button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button variant="ghost" size="icon-sm" aria-label="Hide captions" onClick={() => setCaptionPanel(false)}>
+              <X />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>
+            Hide captions <Kbd>{mod}I</Kbd>
+          </TooltipContent>
+        </Tooltip>
       </div>
 
       <ScrollArea className="min-h-0 flex-1">
@@ -123,9 +131,9 @@ function Section({ id, title, children }: { id: string; title: string; children:
       }}
       className="flex flex-col gap-3"
     >
-      <CollapsibleTrigger className="-mx-2 flex items-center justify-between rounded-md px-2 py-1.5 text-xs font-medium tracking-wide text-muted-foreground uppercase transition-[background-color,color] duration-100 outline-none hover:bg-accent/50 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50">
+      <CollapsibleTrigger className="-mx-2 flex items-center justify-between rounded-md px-2 py-1.5 text-xs font-medium tracking-wide text-muted-foreground uppercase transition-[background-color,color] duration-fast outline-none hover:bg-accent/50 hover:text-foreground focus-inset">
         {title}
-        <ChevronDown className={cn("size-4 transition-[rotate] duration-200", open && "rotate-180")} />
+        <ChevronDown className={cn("size-4 transition-[rotate] duration-normal", open && "rotate-180")} />
       </CollapsibleTrigger>
       <CollapsibleContent className="flex flex-col gap-3">{children}</CollapsibleContent>
     </Collapsible>
@@ -236,7 +244,7 @@ function CodeStatus() {
   const active = lists.filter((l) => !disabled.includes(l.fileName))
   return (
     <button
-      className="m-2 mt-0 flex h-8 shrink-0 items-center gap-2 rounded-md px-2 text-left text-xs text-muted-foreground transition-[background-color,color] duration-100 outline-none hover:bg-accent/50 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50"
+      className="m-2 mt-0 flex h-8 shrink-0 items-center gap-2 rounded-md px-2 text-left text-xs text-muted-foreground transition-[background-color,color] duration-fast outline-none hover:bg-accent/50 hover:text-foreground"
       onClick={() => useStore.getState().setWorkspace("codes")}
       title="Manage lookup files in Codes"
     >
@@ -253,11 +261,16 @@ function HelpPopover() {
   const d = delimiter
   return (
     <Popover>
-      <PopoverTrigger asChild>
-        <Button variant="ghost" size="icon-sm" aria-label="How codes and variables work">
-          <CircleHelp />
-        </Button>
-      </PopoverTrigger>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <PopoverTrigger asChild>
+            <Button variant="ghost" size="icon-sm" aria-label="How codes and variables work">
+              <CircleHelp />
+            </Button>
+          </PopoverTrigger>
+        </TooltipTrigger>
+        <TooltipContent>How codes and variables work</TooltipContent>
+      </Tooltip>
       <PopoverContent align="end" className="w-80 text-sm">
         <p className="font-medium">Codes</p>
         <p className="mt-1 text-muted-foreground">
@@ -279,11 +292,16 @@ function JpegModePopover() {
   const { jpegMode, setJpegMode } = useStore(useShallow((s) => ({ jpegMode: s.jpegMode, setJpegMode: s.setJpegMode })))
   return (
     <Popover>
-      <PopoverTrigger asChild>
-        <Button variant="ghost" size="icon-sm" aria-label="Caption settings">
-          <Settings2 />
-        </Button>
-      </PopoverTrigger>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <PopoverTrigger asChild>
+            <Button variant="ghost" size="icon-sm" aria-label="Caption settings">
+              <Settings2 />
+            </Button>
+          </PopoverTrigger>
+        </TooltipTrigger>
+        <TooltipContent>Caption settings</TooltipContent>
+      </Tooltip>
       <PopoverContent align="end" className="w-72">
         <Field>
           <FieldLabel>Captions in JPG files</FieldLabel>

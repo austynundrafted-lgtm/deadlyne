@@ -30,7 +30,6 @@ targets:
     sources:
       - path: Sources
       - path: Assets.xcassets
-      - path: Externals
       - path: deadlyne_iOS
       - path: assets
         buildPhase: resources
@@ -58,8 +57,8 @@ targets:
         # iOS 27's SDK requires the scene life cycle; tao supplies the scene delegate in code.
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: true
-        CFBundleShortVersionString: 0.3.5
-        CFBundleVersion: "0.3.5"
+        CFBundleShortVersionString: 0.3.6
+        CFBundleVersion: "0.3.6"
     entitlements:
       path: deadlyne_iOS/deadlyne_iOS.entitlements
     scheme:

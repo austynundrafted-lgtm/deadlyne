@@ -32,7 +32,7 @@ export function setPref<T>(key: string, value: T) {
 
 // MARK: Profile
 
-/** The photographer's optional profile, stored only on this computer. */
+/** The photographer's optional profile, cached on this computer and synced with their account. */
 export interface Profile {
   name: string
   /** IPTC Credit, e.g. "Austyn McFadden Photography" or a publication. */

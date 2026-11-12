@@ -10,7 +10,6 @@ import {
   MoreHorizontal,
   Paperclip,
   Play,
-  RotateCcw,
   TriangleAlert,
   X,
 } from "lucide-react"
@@ -25,26 +24,23 @@ import {
   relinkDoc,
   removeDoc,
   renameDoc,
-  resetProgress,
   revealDoc,
 } from "@/lib/folders"
 import { alt, isIPad, mod, openLabel, relativeTime, revealLabel, shift, trashAction } from "@/lib/format"
 import { baseName, folderTitle, isWithin, parentPath, rootShootOf, SECTION_TITLES, useLibrary, type LibrarySection } from "@/lib/library"
 import { cn } from "@/lib/utils"
-import { continueReviewing, useOpenFolderProgress, useViewing } from "@/lib/viewing"
+import { continueReviewing, useOpenFolderProgress } from "@/lib/viewing"
 import { useStore, type FolderDoc, type FolderTab } from "@/store"
-import { ContextEntries, DropdownEntries, folderMenu, type MenuEntry } from "@/components/LibraryMenus"
+import { ContextEntries, FolderEntries, type MenuEntry } from "@/components/LibraryMenus"
 import { FolderItems, subfolderItem, useViewMode, ViewModeToggle } from "@/components/LibraryView"
-import { ViewProgress, viewedSummary } from "@/components/ViewProgress"
+import { viewedSummary } from "@/components/ViewProgress"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { ContextMenu, ContextMenuTrigger } from "@/components/ui/context-menu"
 import { DropdownMenu, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty"
 import { Kbd } from "@/components/ui/kbd"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { Switch } from "@/components/ui/switch"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 
@@ -93,9 +89,9 @@ export function FolderBar() {
 
   return (
     <div className="@container/bar flex h-10 shrink-0 items-center gap-2 border-b bg-background px-3">
-      <nav aria-label="Folder path" className="flex min-w-0 flex-1 items-center gap-0.5 text-[13px]">
+      <nav aria-label="Folder path" className="flex min-w-0 flex-1 items-center gap-0.5 text-control">
         <button
-          className="shrink-0 rounded-sm px-1 text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50"
+          className="shrink-0 rounded-sm px-1 text-muted-foreground outline-none hover:text-foreground"
           onClick={() => useStore.getState().showSection(origin)}
         >
           {sectionLabel(origin)}
@@ -112,7 +108,7 @@ export function FolderBar() {
                 </span>
               ) : (
                 <button
-                  className="truncate rounded-sm px-1 text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50"
+                  className="truncate rounded-sm px-1 text-muted-foreground outline-none hover:text-foreground"
                   title={p}
                   onClick={() => useStore.getState().openFolder(p)}
                 >
@@ -141,7 +137,7 @@ export function FolderBar() {
               className="gap-1.5 text-muted-foreground data-[state=on]:bg-accent data-[state=on]:text-foreground"
             >
               {t.label}
-              <span className="hidden text-[11px] text-muted-foreground tabular-nums @xl/bar:inline">{t.count.toLocaleString()}</span>
+              <span className="hidden text-caption text-muted-foreground tabular-nums @xl/bar:inline">{t.count.toLocaleString()}</span>
             </ToggleGroupItem>
           ))}
       </ToggleGroup>
@@ -175,88 +171,31 @@ export function FolderBar() {
             <MoreHorizontal />
           </Button>
         </DropdownMenuTrigger>
-        <DropdownEntries entries={folderMenu(folder, { open: true, origin })} />
+        <FolderEntries path={folder} context={{ open: true, origin }} dropdown />
       </DropdownMenu>
       {search && folderTab !== "photos" && <span className="sr-only">Filtered by “{search}”</span>}
     </div>
   )
 }
 
-/** The open folder's review progress, with Continue reviewing and the details in a popover. */
+/** Continue reviewing, once a review of the open folder has started and isn't finished. */
 function ReviewProgress() {
   const { viewed, total, ready } = useOpenFolderProgress()
-  const { unviewedOnly, folder } = useStore(useShallow((s) => ({ unviewedOnly: s.unviewedOnly, folder: s.folder })))
-  const last = useViewing((s) => s.last)
-  const photos = useStore((s) => s.photos)
-  if (!total || !ready) return null
-  const partial = viewed > 0 && viewed < total
-  const lastName = last ? photos.find((p) => p.name.replace(/\.[^.]+$/, "").toLowerCase() === last)?.name : undefined
+  if (!total || !ready || !(viewed > 0 && viewed < total)) return null
 
   return (
-    <div className="flex shrink-0 items-center gap-1">
-      <Popover>
-        <PopoverTrigger asChild>
-          <button
-            className="flex h-7 items-center rounded-md px-1.5 outline-none transition-[background-color] duration-100 hover:bg-white/5 focus-visible:ring-2 focus-visible:ring-ring/50 aria-expanded:bg-white/5"
-            aria-label={`Review progress: ${viewedSummary(viewed, total)}`}
-          >
-            <ViewProgress viewed={viewed} total={total} size="md" className="hidden @3xl/bar:inline-flex" />
-            <ViewProgress viewed={viewed} total={total} size="xs" className="@3xl/bar:hidden" />
-          </button>
-        </PopoverTrigger>
-        <PopoverContent align="end" className="w-80">
-          <div className="flex flex-col gap-3">
-            <div className="flex flex-col gap-1">
-              <span className="text-sm font-semibold">Review progress</span>
-              <span className="text-xs text-muted-foreground">
-                A photo counts once it’s been on screen for a second, or opened in the loupe. Tags, ratings and captions are separate.
-              </span>
-            </div>
-            <div className="text-[13px] tabular-nums">
-              {viewedSummary(viewed, total)}
-              {lastName && <span className="block truncate text-xs text-muted-foreground" title={lastName}>Left off at {lastName}</span>}
-            </div>
-            {viewed < total && (
-              <Button size="sm" onClick={continueReviewing}>
-                <Play data-icon="inline-start" />
-                {viewed ? "Continue reviewing" : "Start reviewing"}
-                <Kbd className="ml-auto bg-black/20 text-primary-foreground">{alt}{mod}R</Kbd>
-              </Button>
-            )}
-            <label className="flex items-center justify-between gap-3 text-[13px]">
-              <span className="flex items-center gap-2">
-                <Eye className="size-4 text-muted-foreground" /> Show unviewed only
-              </span>
-              <Switch checked={unviewedOnly} onCheckedChange={(on) => useStore.getState().setUnviewedOnly(on)} />
-            </label>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="justify-start text-muted-foreground"
-              disabled={!viewed}
-              onClick={() => folder && resetProgress(folder)}
-            >
-              <RotateCcw data-icon="inline-start" />
-              Reset viewing progress…
-            </Button>
-          </div>
-        </PopoverContent>
-      </Popover>
-      {partial && (
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button variant="secondary" size="sm" onClick={continueReviewing} className="gap-1.5">
-              <Play className="fill-current" data-icon="inline-start" />
-              <span className="hidden @5xl/bar:inline">Continue reviewing</span>
-              <span className="@5xl/bar:hidden">Continue</span>
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>
-            {viewedSummary(viewed, total)} · back to where you left off <Kbd>{alt}{mod}R</Kbd>
-          </TooltipContent>
-        </Tooltip>
-      )}
-    </div>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button variant="secondary" size="sm" onClick={continueReviewing} className="shrink-0 gap-1.5">
+          <Play className="fill-current" data-icon="inline-start" />
+          <span className="hidden @5xl/bar:inline">Continue reviewing</span>
+          <span className="@5xl/bar:hidden">Continue</span>
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent>
+        {viewedSummary(viewed, total)} · back to where you left off <Kbd>{alt}{mod}R</Kbd>
+      </TooltipContent>
+    </Tooltip>
   )
 }
 
@@ -436,7 +375,8 @@ export function DocumentsView() {
     const selected = d.path === selectedDoc
     const common = {
       "data-doc": d.path,
-      "aria-selected": selected,
+      "data-selected": selected,
+      "aria-description": selected ? "Selected" : undefined,
       title: d.path,
       onFocus: () => select(d.path),
       onPointerDown: (e: React.PointerEvent) => e.button === 0 && select(d.path),
@@ -452,8 +392,9 @@ export function DocumentsView() {
             <button
               {...common}
               role="row"
+              aria-selected={selected}
               className={cn(
-                "grid h-10 w-full items-center gap-3 rounded-md px-2 text-left text-[13px] outline-none transition-[background-color] duration-100 hover:bg-white/[0.04] focus-visible:ring-2 focus-visible:ring-ring/60",
+                "grid h-10 w-full items-center gap-3 rounded-md px-2 text-left text-control outline-none transition-[background-color] duration-fast hover:bg-surface-hover focus-inset",
                 selected && "bg-accent hover:bg-accent",
               )}
               style={{ gridTemplateColumns: DOC_COLUMNS }}
@@ -473,8 +414,10 @@ export function DocumentsView() {
             <button
               {...common}
               role="listitem"
+              // A list item takes its name from `title` (the path) unless it's given one.
+              aria-label={`${d.name}, ${docDetail(d)}${d.linkId ? ", linked" : ""}`}
               className={cn(
-                "flex min-w-0 flex-col items-center gap-2 rounded-xl px-3 pt-4 pb-3 text-center outline-none transition-[background-color] duration-150 hover:bg-white/[0.04] focus-visible:ring-2 focus-visible:ring-ring/60",
+                "flex min-w-0 flex-col items-center gap-2 rounded-xl px-3 pt-4 pb-3 text-center outline-none transition-[background-color] duration-fast hover:bg-surface-hover focus-inset",
                 selected && "bg-accent hover:bg-accent",
               )}
             >
@@ -487,8 +430,8 @@ export function DocumentsView() {
                 )}
               </span>
               <span className="flex w-full min-w-0 flex-col gap-0.5">
-                <span className="truncate text-[13px] font-medium">{d.name}</span>
-                <span className={cn("truncate text-[11px]", d.exists ? "text-muted-foreground" : "text-(--label-yellow)")}>{docDetail(d)}</span>
+                <span className="truncate text-control font-medium">{d.name}</span>
+                <span className={cn("truncate text-caption", d.exists ? "text-muted-foreground" : "text-(--label-yellow)")}>{docDetail(d)}</span>
               </span>
             </button>
           )}
@@ -504,7 +447,7 @@ export function DocumentsView() {
         <p className="p-6 text-center text-sm text-muted-foreground">No documents match “{search}”.</p>
       ) : mode === "list" ? (
         <div role="table" aria-label="Documents" className="min-w-[520px] px-2 pb-4">
-          <div role="row" className="sticky top-0 z-10 grid h-8 items-center gap-3 bg-background px-2 text-[11px] font-medium tracking-wide text-muted-foreground uppercase" style={{ gridTemplateColumns: DOC_COLUMNS }}>
+          <div role="row" className="sticky top-0 z-10 grid h-8 items-center gap-3 bg-background px-2 text-caption font-medium tracking-wide text-muted-foreground uppercase" style={{ gridTemplateColumns: DOC_COLUMNS }}>
             <span role="columnheader" className="col-span-2">Name</span>
             <span role="columnheader">Kind</span>
             <span role="columnheader" className="text-right">Size</span>
@@ -550,7 +493,7 @@ export function DocumentInspector() {
       <ScrollArea className="min-h-0 flex-1">
         <div className="flex flex-col gap-5 p-4">
           <button
-            className="flex h-40 items-center justify-center rounded-lg bg-black/25 shadow-edge outline-none transition-[box-shadow] duration-100 hover:shadow-edge-hover focus-visible:ring-2 focus-visible:ring-ring/60 disabled:cursor-default"
+            className="flex h-40 items-center justify-center rounded-lg bg-preview-canvas shadow-edge outline-none transition-[box-shadow] duration-fast hover:shadow-edge-hover disabled:cursor-default"
             onClick={() => quickLook(doc)}
             disabled={!doc.exists}
             aria-label="Quick Look"

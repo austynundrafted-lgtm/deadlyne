@@ -6,7 +6,6 @@ protocol HomeViewControllerDelegate: AnyObject {
     func homeOpenFolderPanel()
     func homeOpen(_ url: URL)
     func homeEditProfile()
-    func homeShowAchievements()
 }
 
 /// The screen Deadlyne opens to, laid out in the order of the job: start work (ingest, open,
@@ -59,7 +58,6 @@ final class HomeViewController: NSViewController {
     private var narrowLayout: Bool?
     private var stackedWorkflowWidths: [NSLayoutConstraint] = []
 
-    private let statsStrip = HomeStatsStrip()
     private let shortcutsGrid = TileGridView(minTileWidth: 230, spacing: 10) { _ in 30 }
     private let shortcutsToggle = HomeStyle.link("", target: nil, action: nil)
 
@@ -179,9 +177,6 @@ final class HomeViewController: NSViewController {
         destinationCell.onClick = { [weak self] in self?.chooseDestination() }
         for c in [foldersCell, namesCell, afterCell] { c.onClick = { [weak self] in self?.delegate?.homeIngest(from: nil) } }
         add(workflow, after: 40)
-
-        statsStrip.onClick = { [weak self] in self?.delegate?.homeShowAchievements() }
-        add(statsStrip, after: 40)
 
         shortcutsToggle.target = self
         shortcutsToggle.action = #selector(toggleShortcuts(_:))
@@ -372,7 +367,7 @@ final class HomeViewController: NSViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
         let nc = NotificationCenter.default
-        for name in [RecentShoots.didChange, Profile.didChange, Achievements.didChange, IngestSettings.didChange, IngestActivity.didChange] {
+        for name in [RecentShoots.didChange, Profile.didChange, IngestSettings.didChange, IngestActivity.didChange] {
             nc.addObserver(self, selector: #selector(changed(_:)), name: name, object: nil)
         }
         nc.addObserver(self, selector: #selector(ingestProgressed(_:)), name: IngestActivity.didProgress, object: nil)
@@ -461,7 +456,6 @@ final class HomeViewController: NSViewController {
         profilePrompt.isHidden = profile != nil || UserDefaults.standard.bool(forKey: Self.promptDismissedKey)
         refreshRecents()
         refreshWorkflow()
-        statsStrip.refresh()
         refreshActionRowHeight()
     }
 

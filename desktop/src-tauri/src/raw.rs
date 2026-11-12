@@ -147,6 +147,7 @@ pub enum PreviewKind {
 
 /// The bytes of the best JPEG for `kind`: embedded in a RAW, or the file itself for a JPEG.
 pub fn extract(path: &Path, kind: PreviewKind) -> Option<Vec<u8>> {
+    let _access = crate::data::access(path).ok()?;
     let r = Reader::open(path)?;
     let best = choose(&find_candidates(&r), kind)?;
     r.read_exact(best.offset, best.length)

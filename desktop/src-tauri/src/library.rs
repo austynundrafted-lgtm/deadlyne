@@ -19,7 +19,6 @@ use md5::{Digest, Md5};
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
-use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::UNIX_EPOCH;
@@ -83,7 +82,7 @@ struct Entry {
 static CACHE: Mutex<Option<HashMap<String, Entry>>> = Mutex::new(None);
 
 fn viewing_dir() -> PathBuf {
-    dirs::data_dir().unwrap_or_else(std::env::temp_dir).join("Deadlyne").join("Viewing")
+    crate::data::workflow_dir().join("Viewing")
 }
 
 fn record_path(folder: &str) -> PathBuf {
@@ -109,6 +108,17 @@ fn write_record(folder: &str, e: &Entry) -> Result<(), String> {
     let rec = Record { path: folder.to_string(), viewed, last: e.last.clone(), updated: chrono::Local::now().timestamp_millis() };
     let bytes = serde_json::to_vec(&rec).map_err(|e| e.to_string())?;
     xmp::write_atomic(&p, &bytes).map_err(|e| e.to_string())
+}
+
+#[cfg(feature = "mac-app-store")]
+pub fn import_viewing(bytes: &[u8]) -> Result<(), String> {
+    let record: Record = serde_json::from_slice(bytes).map_err(|e| e.to_string())?;
+    if !Path::new(&record.path).is_absolute() { return Err("The viewing record has no absolute folder path.".into()); }
+    with_entry(&record.path, |entry| {
+        entry.viewed.extend(record.viewed.into_iter().map(|key| key.to_lowercase()));
+        if entry.last.is_none() { entry.last = record.last; }
+        write_record(&record.path, entry)
+    })
 }
 
 /// Runs `f` on the folder's cached record, loading it from disk the first time.
@@ -210,6 +220,7 @@ pub async fn viewing_transfer(from: String, to: String, keys: Vec<String>) -> Re
 /// A folder was renamed or found somewhere else: its progress (and its subfolders') follows it.
 pub fn relocate_records(from: &str, to: &str) {
     let (from, to) = (normalize(from), normalize(to));
+    if from == to { return; }
     let mut moves = vec![(from.clone(), to.clone())];
     for (p, _) in recorded_under(&from) {
         if let Ok(rest) = Path::new(&p).strip_prefix(&from) {
@@ -305,6 +316,7 @@ fn walk(dir: &Path, depth: usize, top: &mut FolderStats, total: &mut Tally) -> s
 }
 
 pub fn stats(path: &str) -> FolderStats {
+    let _access = crate::data::access(Path::new(path)).ok();
     let path = normalize(path);
     let dir = Path::new(&path);
     let mut s = FolderStats { path: path.clone(), ..Default::default() };
@@ -359,6 +371,7 @@ pub struct DocEntry {
 }
 
 fn doc_entry(path: &Path) -> DocEntry {
+    let _access = crate::data::access(path).ok();
     let meta = std::fs::metadata(path);
     DocEntry {
         path: path.to_string_lossy().to_string(),
@@ -385,6 +398,7 @@ pub struct FolderContents {
 }
 
 pub fn contents(folder: &Path) -> std::io::Result<FolderContents> {
+    let _access = crate::data::access(folder)?;
     let mut out = FolderContents::default();
     for entry in std::fs::read_dir(folder)?.flatten() {
         let path = entry.path();
@@ -428,21 +442,6 @@ fn free_path(folder: &Path, name: &str) -> Option<PathBuf> {
     (1..1000).map(|n| folder.join(format!("{stem}-{n}{ext}"))).find(|p| !p.exists())
 }
 
-/// Copies `src` to a new file at `dest` (never replacing one) and checks the size.
-fn copy_new(src: &Path, dest: &Path) -> std::io::Result<()> {
-    let size = std::fs::metadata(src)?.len();
-    let mut input = std::fs::File::open(src)?;
-    let mut output = std::fs::OpenOptions::new().write(true).create_new(true).open(dest)?;
-    let copied = std::io::copy(&mut input, &mut output).and_then(|n| output.flush().map(|_| n));
-    match copied {
-        Ok(n) if n == size => Ok(()),
-        other => {
-            let _ = std::fs::remove_file(dest);
-            Err(other.err().unwrap_or_else(|| std::io::Error::other("the copy didn’t match the original")))
-        }
-    }
-}
-
 fn friendly(e: &std::io::Error) -> String {
     match e.kind() {
         std::io::ErrorKind::PermissionDenied => "permission denied".into(),
@@ -463,8 +462,10 @@ pub struct AddOutcome {
 pub async fn add_documents(folder: String, paths: Vec<String>) -> AddOutcome {
     jobs::serial(move || {
         let dir = Path::new(&folder);
+        let _destination_access = crate::data::access(dir).ok();
         let mut out = AddOutcome::default();
         for src in paths.iter().map(Path::new) {
+            let _source_access = crate::data::access(src).ok();
             let name = src.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
             if src.is_dir() {
                 out.errors.push(format!("{name}: folders can’t be added as documents"));
@@ -478,8 +479,8 @@ pub async fn add_documents(folder: String, paths: Vec<String>) -> AddOutcome {
                 out.errors.push(format!("{name}: too many files with this name"));
                 continue;
             };
-            match copy_new(src, &dest) {
-                Ok(()) => out.added.push(doc_entry(&dest)),
+            match fileops::copy_new(src, &dest) {
+                Ok(_) => out.added.push(doc_entry(&dest)),
                 Err(e) => out.errors.push(format!("{name}: {}", friendly(&e))),
             }
         }
@@ -493,6 +494,7 @@ pub async fn add_documents(folder: String, paths: Vec<String>) -> AddOutcome {
 pub async fn move_documents(paths: Vec<String>, destination: String) -> AddOutcome {
     jobs::serial(move || {
         let dir = Path::new(&destination);
+        let _destination_access = crate::data::access(dir).ok();
         let mut out = AddOutcome::default();
         for src in paths.iter().map(Path::new) {
             let name = src.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
@@ -500,7 +502,7 @@ pub async fn move_documents(paths: Vec<String>, destination: String) -> AddOutco
                 out.errors.push(format!("{name}: too many files with this name"));
                 continue;
             };
-            let moved = std::fs::rename(src, &dest).or_else(|_| copy_new(src, &dest).and_then(|_| std::fs::remove_file(src)));
+            let moved = fileops::move_file(src, &dest);
             match moved {
                 Ok(()) => out.added.push(doc_entry(&dest)),
                 Err(e) => out.errors.push(format!("{name}: {}", friendly(&e))),
@@ -525,6 +527,7 @@ pub async fn create_folder(parent: String, name: String) -> Result<String, Strin
     jobs::serial(move || {
         let name = check_name(&name)?;
         let dir = Path::new(&parent);
+        let _access = crate::data::access(dir).map_err(|e| e.to_string())?;
         let path = std::iter::once(dir.join(name))
             .chain((2..1000).map(|n| dir.join(format!("{name} {n}"))))
             .find(|p| !p.exists())
@@ -541,6 +544,7 @@ pub async fn rename_path(path: String, new_name: String) -> Result<String, Strin
     jobs::serial(move || {
         let name = check_name(&new_name)?;
         let src = Path::new(&path);
+        let _access = crate::data::access(src).map_err(|e| e.to_string())?;
         let dest = src.parent().ok_or("can’t rename this")?.join(name);
         if dest == src {
             return Ok(path);
@@ -568,8 +572,12 @@ pub async fn trash_path(path: String) -> Result<(), String> {
 
 /// Quick Look on macOS (like pressing Space in Finder); the default app elsewhere.
 #[tauri::command]
-pub fn quick_look(path: String) -> Result<(), String> {
-    #[cfg(target_os = "macos")]
+pub fn quick_look(app: tauri::AppHandle, path: String) -> Result<(), String> {
+    #[cfg(all(target_os = "macos", feature = "mac-app-store"))]
+    { return crate::mac_store::quick_look(app, path); }
+    #[cfg(not(all(target_os = "macos", feature = "mac-app-store")))]
+    let _ = app;
+    #[cfg(all(target_os = "macos", not(feature = "mac-app-store")))]
     {
         std::process::Command::new("qlmanage")
             .args(["-p", &path])
@@ -642,10 +650,10 @@ mod tests {
         std::fs::write(root.join("Brief.pdf"), b"old").unwrap();
         let dest = free_path(&root, "Brief.pdf").unwrap();
         assert_eq!(dest.file_name().unwrap(), "Brief-1.pdf");
-        copy_new(&src_dir.join("Brief.pdf"), &dest).unwrap();
+        fileops::copy_new(&src_dir.join("Brief.pdf"), &dest).unwrap();
         assert_eq!(std::fs::read(root.join("Brief.pdf")).unwrap(), b"old");
         assert_eq!(std::fs::read(&dest).unwrap(), b"new");
-        assert!(copy_new(&src_dir.join("Brief.pdf"), &dest).is_err(), "create_new refuses an existing file");
+        assert!(fileops::copy_new(&src_dir.join("Brief.pdf"), &dest).is_err(), "create_new refuses an existing file");
         let _ = std::fs::remove_dir_all(&root);
     }
 }

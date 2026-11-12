@@ -1,14 +1,14 @@
 // The library sidebar beside the Photos workspace: Library lists, pinned folders, collections,
 // shoot folders (expandable into their real subfolders) and the archive. Collapses to an icon
-// rail to give the photos more room. Arrow keys move through it like a Finder sidebar.
-import { useEffect, useMemo, useState } from "react"
+// rail to give the photos more room; in a narrow window the rail stays and the full sidebar opens
+// over the photos instead. Arrow keys move through it like a Finder sidebar.
+import { useEffect, useMemo, useRef, useState } from "react"
 import {
   Archive,
   ChevronRight,
   Clock,
   Folder,
   FolderOpen,
-  FolderTree,
   Images,
   Library,
   PanelLeftClose,
@@ -21,7 +21,7 @@ import {
 import { useShallow } from "zustand/react/shallow"
 import { dragSource, useDnd, useDropTarget, type DragItem } from "@/lib/dnd"
 import { newCollection, openShoot, useTree } from "@/lib/folders"
-import { alt, mod } from "@/lib/format"
+import { alt, labelColor, mod } from "@/lib/format"
 import {
   baseName,
   descendantIds,
@@ -38,18 +38,20 @@ import {
 import { pref, setPref } from "@/lib/settings"
 import { cn } from "@/lib/utils"
 import { useStore } from "@/store"
-import { collectionMenu, ContextEntries, folderMenu } from "@/components/LibraryMenus"
-import { ViewProgress } from "@/components/ViewProgress"
+import { collectionMenu, ContextEntries, FolderEntries } from "@/components/LibraryMenus"
 import { Button } from "@/components/ui/button"
 import { ContextMenu, ContextMenuTrigger } from "@/components/ui/context-menu"
 import { Kbd } from "@/components/ui/kbd"
+import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 
 export const SIDEBAR_WIDTH = 240
 export const RAIL_WIDTH = 52
-/** Below this window width the sidebar shows as the rail, whatever was chosen. */
+/** Below this window width the sidebar shows as the rail, and opens over the photos when asked for. */
 const AUTO_RAIL_BELOW = 1100
+/** The flyout's distance from the rail and the title bar, in px (the h-flyout utility leaves the same below). */
+const FLYOUT_GAP = 6
 
 /** Shoots not inside another library shoot: the top of the Folders tree. */
 export function topLevelShoots(shoots: LibraryShoot[]) {
@@ -66,6 +68,18 @@ interface SidebarPrefs {
   expanded: Record<string, boolean>
 }
 let prefs: SidebarPrefs = pref("sidebar", { rail: false, expanded: { library: true, collections: true, folders: true } })
+/** A narrow window has no room beside the photos, so the sidebar opens over them. Not remembered. */
+let flyout = false
+
+const isNarrow = () => window.innerWidth < AUTO_RAIL_BELOW
+/** Tells every sidebar piece, and the menu bar, that the state above changed. */
+const announce = () => window.dispatchEvent(new Event("deadlyne-sidebar"))
+
+function setFlyout(open: boolean) {
+  if (flyout === open) return
+  flyout = open
+  announce()
+}
 
 function usePrefs() {
   const [state, setState] = useState(prefs)
@@ -73,7 +87,7 @@ function usePrefs() {
     prefs = { ...prefs, ...patch }
     setPref("sidebar", prefs)
     setState(prefs)
-    window.dispatchEvent(new Event("deadlyne-sidebar"))
+    announce()
   }
   useEffect(() => {
     const sync = () => setState(prefs)
@@ -83,19 +97,34 @@ function usePrefs() {
   return [state, update] as const
 }
 
-/** Whether the sidebar is collapsed to the rail (the menu's "Show Sidebar" / "Hide Sidebar"). */
-export const isSidebarRail = () => prefs.rail
+function useFlyout() {
+  const [open, setOpen] = useState(flyout)
+  useEffect(() => {
+    const sync = () => setOpen(flyout)
+    window.addEventListener("deadlyne-sidebar", sync)
+    return () => window.removeEventListener("deadlyne-sidebar", sync)
+  }, [])
+  return open
+}
 
+/** Whether the full sidebar is out of sight (the menu's "Show Sidebar" / "Hide Sidebar"). */
+export const isSidebarRail = () => (isNarrow() ? !flyout : prefs.rail)
+
+/** ⌥⌘S: the sidebar beside the photos in a wide window, over them in a narrow one. */
 export function toggleSidebar() {
+  if (isNarrow()) return setFlyout(!flyout)
   prefs = { ...prefs, rail: !prefs.rail }
   setPref("sidebar", prefs)
-  window.dispatchEvent(new Event("deadlyne-sidebar"))
+  announce()
 }
 
 function useNarrowWindow() {
-  const [narrow, setNarrow] = useState(() => window.innerWidth < AUTO_RAIL_BELOW)
+  const [narrow, setNarrow] = useState(isNarrow)
   useEffect(() => {
-    const onResize = () => setNarrow(window.innerWidth < AUTO_RAIL_BELOW)
+    const onResize = () => {
+      setNarrow(isNarrow())
+      if (!isNarrow()) setFlyout(false)
+    }
     window.addEventListener("resize", onResize)
     return () => window.removeEventListener("resize", onResize)
   }, [])
@@ -138,9 +167,21 @@ function onTreeKey(e: React.KeyboardEvent<HTMLElement>) {
 // MARK: - Sidebar
 
 export function Sidebar() {
-  const [{ rail: chosenRail, expanded }, update] = usePrefs()
+  const [{ rail: chosenRail }, update] = usePrefs()
   const narrow = useNarrowWindow()
-  const rail = chosenRail || narrow
+
+  if (narrow || chosenRail) return <Rail narrow={narrow} onExpand={() => update({ rail: false })} />
+
+  return (
+    <nav aria-label="Library" className="flex h-full shrink-0 flex-col border-r bg-sidebar" style={{ width: SIDEBAR_WIDTH }}>
+      <LibraryPanel onCollapse={() => update({ rail: true })} />
+    </nav>
+  )
+}
+
+/** The sidebar's header and tree: beside the photos, or in the narrow window's flyout. */
+function LibraryPanel({ onCollapse }: { onCollapse: () => void }) {
+  const [{ expanded }, update] = usePrefs()
   const { shoots, collections, stats, loaded } = useLibrary(
     useShallow((s) => ({ shoots: s.shoots, collections: s.collections, stats: s.stats, loaded: s.loaded })),
   )
@@ -154,10 +195,8 @@ export function Sidebar() {
   const isSection = (k: LibrarySection["kind"], id?: string) =>
     section?.kind === k && (k !== "collection" || (section as { id: string }).id === id)
 
-  if (rail) return <Rail pinned={pinned} narrow={narrow && !chosenRail} onExpand={() => update({ rail: false })} />
-
   return (
-    <nav aria-label="Library" className="flex h-full shrink-0 flex-col border-r bg-sidebar" style={{ width: SIDEBAR_WIDTH }}>
+    <>
       <div className="flex h-10 shrink-0 items-center gap-1 pr-1.5 pl-3">
         <span className="flex-1 text-xs font-semibold tracking-wide text-muted-foreground uppercase">Library</span>
         <Tooltip>
@@ -170,7 +209,7 @@ export function Sidebar() {
         </Tooltip>
         <Tooltip>
           <TooltipTrigger asChild>
-            <Button variant="ghost" size="icon-sm" aria-label="Collapse sidebar" onClick={() => update({ rail: true })}>
+            <Button variant="ghost" size="icon-sm" aria-label="Collapse sidebar" onClick={onCollapse}>
               <PanelLeftClose />
             </Button>
           </TooltipTrigger>
@@ -204,7 +243,7 @@ export function Sidebar() {
             open={expanded.collections !== false}
             onToggle={() => toggle("collections")}
             action={
-              <Button variant="ghost" size="icon-xs" aria-label="New collection" onClick={() => newCollection()}>
+              <Button variant="ghost" size="icon-xs" role="treeitem" aria-level={1} data-tree-row aria-label="New collection" onClick={() => newCollection()}>
                 <Plus />
               </Button>
             }
@@ -212,7 +251,10 @@ export function Sidebar() {
           >
             {collections.filter((c) => !c.parent).length === 0 ? (
               <button
-                className="mx-1 rounded-md px-2 py-1.5 text-left text-xs text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50"
+                role="treeitem"
+                aria-level={1}
+                data-tree-row
+                className="mx-1 rounded-md px-2 py-1.5 text-left text-xs text-muted-foreground outline-none hover:text-foreground focus-inset"
                 onClick={() => newCollection()}
               >
                 Group shoots by season, team or client. Files stay where they are.
@@ -247,7 +289,7 @@ export function Sidebar() {
           </Group>
         </div>
       </ScrollArea>
-    </nav>
+    </>
   )
 }
 
@@ -281,24 +323,24 @@ function Group({
       {title && (
         <div
           data-drop-id={dropId}
-          className={cn("group/header flex h-7 items-center rounded-md pr-1 transition-[background-color] duration-100", drop === "over" && "bg-primary/15")}
+          className={cn("group/header flex h-7 items-center rounded-md pr-1 transition-[background-color] duration-fast", drop === "over" && "bg-primary/15")}
         >
           <button
             data-tree-row
             role="treeitem"
-            aria-level={0}
+            aria-level={1}
             aria-expanded={open}
             onClick={onToggle}
             ref={(el) => {
               if (!el || !onToggle) return
               el.ontreetoggle = onToggle
             }}
-            className="flex h-full flex-1 items-center gap-1 rounded-md px-2 text-left text-[11px] font-semibold tracking-wide text-muted-foreground uppercase outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50"
+            className="flex h-full flex-1 items-center gap-1 rounded-md px-2 text-left text-caption font-semibold tracking-wide text-muted-foreground uppercase outline-none hover:text-foreground focus-inset"
           >
             {title}
-            <ChevronRight className={cn("size-3 opacity-0 transition-[rotate,opacity] duration-150 group-hover/header:opacity-100", open && "rotate-90")} />
+            <ChevronRight className={cn("size-3 opacity-0 transition-[rotate,opacity] duration-fast group-hover/header:opacity-100 group-focus-within/header:opacity-100 pointer-coarse:opacity-100", open && "rotate-90")} />
           </button>
-          {action && <span className="opacity-0 transition-opacity duration-100 group-hover/header:opacity-100 focus-within:opacity-100 pointer-coarse:opacity-100">{action}</span>}
+          {action && <span className="opacity-0 transition-opacity duration-fast group-hover/header:opacity-100 focus-within:opacity-100 pointer-coarse:opacity-100">{action}</span>}
         </div>
       )}
       {open && children}
@@ -314,7 +356,7 @@ declare global {
 }
 
 const ROW =
-  "group/row relative flex h-7 w-full min-w-0 items-center gap-2 rounded-md pr-2 text-left text-[13px] outline-none transition-[background-color,color] duration-100 hover:bg-white/5 focus-visible:ring-2 focus-visible:ring-ring/50"
+  "group/row relative flex h-7 w-full min-w-0 items-center gap-2 rounded-md pr-2 text-left text-control outline-none transition-[background-color,color] duration-fast hover:bg-surface-hover focus-inset"
 const ROW_ACTIVE = "bg-accent text-foreground hover:bg-accent"
 
 function SectionRow({
@@ -346,12 +388,12 @@ function SectionRow({
       className={cn(ROW, "pl-2", active && ROW_ACTIVE, state === "over" && "bg-primary/15 text-foreground")}
       onClick={() => useStore.getState().showSection(section)}
     >
-      <Icon className={cn("size-4 shrink-0", active ? "text-primary" : "text-muted-foreground")} />
+      <Icon className={cn("size-4 shrink-0", active ? "text-primary-readable" : "text-muted-foreground")} />
       <span className="min-w-0 flex-1 truncate">{label}</span>
       {state === "over" ? (
-        <span className="text-[11px] text-primary">{drop!.label}</span>
+        <span className="text-caption text-primary-readable">{drop!.label}</span>
       ) : (
-        count !== undefined && <span className="text-[11px] text-muted-foreground tabular-nums">{count.toLocaleString()}</span>
+        count !== undefined && <span className="text-caption text-muted-foreground tabular-nums">{count.toLocaleString()}</span>
       )}
     </button>
   )
@@ -364,8 +406,8 @@ function PinnedGroup({ pinned, folder, origin }: { pinned: LibraryShoot[]; folde
   })
   const stats = useLibrary((s) => s.stats)
   return (
-    <div role="group" data-drop-id="pinned" className={cn("flex flex-col gap-px rounded-md transition-[background-color] duration-100", state === "over" && "bg-primary/15")}>
-      <div className="flex h-7 items-center px-2 text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">
+    <div role="group" data-drop-id="pinned" className={cn("flex flex-col gap-px rounded-md transition-[background-color] duration-fast", state === "over" && "bg-primary/15")}>
+      <div className="flex h-7 items-center px-2 text-caption font-semibold tracking-wide text-muted-foreground uppercase">
         Pinned
       </div>
       {pinned.map((s) => (
@@ -427,9 +469,9 @@ function CollectionRow({
             style={{ paddingLeft: 8 + (level - 1) * 14 }}
           >
             <Disclosure open={open} visible={hasChildren} onToggle={() => toggle(key)} />
-            <Library className={cn("size-4 shrink-0", active ? "text-primary" : "text-muted-foreground")} />
+            <Library className={cn("size-4 shrink-0", active ? "text-primary-readable" : "text-muted-foreground")} />
             <span className="min-w-0 flex-1 truncate">{c.name}</span>
-            <span className="text-[11px] text-muted-foreground tabular-nums">{c.shoots.length || ""}</span>
+            <span className="text-caption text-muted-foreground tabular-nums">{c.shoots.length || ""}</span>
           </button>
         </ContextMenuTrigger>
         <ContextEntries entries={collectionMenu(c.id)} />
@@ -470,7 +512,7 @@ function Disclosure({ open, visible, onToggle }: { open: boolean; visible: boole
         onToggle()
       }}
     >
-      <ChevronRight className={cn("size-3 transition-[rotate] duration-150", open && "rotate-90")} />
+      <ChevronRight className={cn("size-3 transition-[rotate] duration-fast", open && "rotate-90")} />
     </span>
   )
 }
@@ -514,6 +556,7 @@ function FolderRow({
   const Icon = missing ? TriangleAlert : icon ?? (active ? FolderOpen : Folder)
   // Shoots read as titles wherever they appear; their subfolders keep their real names.
   const isShoot = useLibrary((s) => s.shoots.some((x) => samePath(x.path, path)))
+  const folderLabel = useLibrary((s) => s.folderLabels[path.replace(/[\\/]+$/, "")])
   const label = isShoot ? folderTitle(path) : baseName(path)
   const total = stats?.totalPhotos ?? 0
 
@@ -537,30 +580,13 @@ function FolderRow({
             style={{ paddingLeft: 8 + (level - 1) * 14 }}
           >
             <Disclosure open={open} visible={expandable} onToggle={() => toggle?.(key)} />
-            <Icon className={cn("size-4 shrink-0", missing ? "text-(--label-yellow)" : active || containsOpen ? "text-primary" : "text-muted-foreground")} />
+            <Icon className={cn("size-4 shrink-0", missing ? "text-(--label-yellow)" : active || containsOpen ? "text-primary-readable" : "text-muted-foreground")} />
             <span className={cn("min-w-0 flex-1 truncate", missing && "text-muted-foreground")}>{label}</span>
-            {/* The count gives way to progress on the open folder, or while pointing at one. The open
-                folder's meter takes its own space so the name truncates before it instead of under it. */}
-            {total > 0 && (
-              <span className="relative flex shrink-0 items-center justify-end">
-                {!active && (
-                  <span className="text-[11px] text-muted-foreground tabular-nums group-hover/row:opacity-0 group-focus-visible/row:opacity-0">
-                    {total.toLocaleString()}
-                  </span>
-                )}
-                <ViewProgress
-                  size="xs"
-                  viewed={stats!.totalViewed}
-                  total={total}
-                  className={cn(
-                    !active && "absolute right-0 opacity-0 transition-opacity duration-150 group-hover/row:opacity-100 group-focus-visible/row:opacity-100",
-                  )}
-                />
-              </span>
-            )}
+            {folderLabel && <span className="size-2 shrink-0 rounded-full" style={{ backgroundColor: labelColor(folderLabel) }} role="img" aria-label={`${folderLabel} label`} />}
+            {total > 0 && <span className="shrink-0 text-caption text-muted-foreground tabular-nums">{total.toLocaleString()}</span>}
           </button>
         </ContextMenuTrigger>
-        <ContextEntries entries={folderMenu(path, { origin, collectionId })} />
+        <FolderEntries path={path} context={{ origin, collectionId }} />
       </ContextMenu>
       {open && expandable && (
         <div role="group" className="flex flex-col gap-px">
@@ -592,8 +618,35 @@ function FolderRow({
 
 // MARK: - Rail
 
-function Rail({ pinned, narrow, onExpand }: { pinned: LibraryShoot[]; narrow: boolean; onExpand: () => void }) {
+/**
+ * The collapsed sidebar. In a wide window its first button puts the sidebar back beside the
+ * photos; in a narrow one there is no room for that, so the same button (and ⌥⌘S) opens the full
+ * sidebar over the photos and it closes again once it has taken you somewhere.
+ */
+function Rail({ narrow, onExpand }: { narrow: boolean; onExpand: () => void }) {
   const { section, folder } = useStore(useShallow((s) => ({ section: s.librarySection, folder: s.folder })))
+  const shoots = useLibrary((s) => s.shoots)
+  const pinned = useMemo(() => shoots.filter((s) => s.pinned).sort(byTitle), [shoots])
+  const open = useFlyout() && narrow
+  /** The flyout closed because it took you somewhere, not because it was dismissed. */
+  const went = useRef(false)
+
+  useEffect(() => {
+    if (!open) return
+    went.current = false
+    return useStore.subscribe((s, prev) => {
+      const moved = s.workspace !== prev.workspace || s.librarySection !== prev.librarySection || s.folder !== prev.folder || (s.loading && !prev.loading)
+      if (!moved) return
+      went.current = true
+      setFlyout(false)
+    })
+  }, [open])
+
+  const expand = (
+    <Button variant="ghost" size="icon" aria-label="Expand sidebar" className="size-9 text-muted-foreground" onClick={narrow ? undefined : onExpand}>
+      <PanelLeftOpen className="size-[18px]" />
+    </Button>
+  )
   const item = (label: string, icon: typeof Images, active: boolean, onClick: () => void, key?: string) => {
     const Icon = icon
     return (
@@ -604,7 +657,7 @@ function Rail({ pinned, narrow, onExpand }: { pinned: LibraryShoot[]; narrow: bo
             size="icon"
             aria-label={label}
             aria-current={active || undefined}
-            className={cn("size-9 text-muted-foreground", active && "bg-accent text-primary hover:text-primary")}
+            className={cn("size-9 text-muted-foreground", active && "bg-accent text-primary-readable hover:text-primary-readable")}
             onClick={onClick}
           >
             <Icon className="size-[18px]" />
@@ -616,24 +669,61 @@ function Rail({ pinned, narrow, onExpand }: { pinned: LibraryShoot[]; narrow: bo
   }
   const show = (s: LibrarySection) => () => useStore.getState().showSection(s)
   return (
-    <nav aria-label="Library" className="flex h-full shrink-0 flex-col items-center gap-1 border-r bg-sidebar py-1.5" style={{ width: RAIL_WIDTH }}>
-      {narrow ? (
-        <span className="flex size-9 items-center justify-center text-muted-foreground" title="Widen the window to show the full sidebar">
-          <FolderTree className="size-[18px]" />
-        </span>
-      ) : (
-        item("Expand sidebar", PanelLeftOpen, false, onExpand)
-      )}
-      <span className="my-1 h-px w-6 bg-border" />
-      {item(SECTION_TITLES.all, Images, section?.kind === "all", show({ kind: "all" }))}
-      {item("Recent", Clock, section?.kind === "recent", show({ kind: "recent" }))}
-      {item(SECTION_TITLES.favorites, Star, section?.kind === "favorites", show({ kind: "favorites" }))}
-      {pinned.length > 0 && <span className="my-1 h-px w-6 bg-border" />}
-      {pinned.map((s) =>
-        item(folderTitle(s.path), Pin, section === null && !!folder && samePath(folder, s.path), () => openShoot(s.path), s.path),
-      )}
-      <span className="my-1 h-px w-6 bg-border" />
-      {item(SECTION_TITLES.archive, Archive, section?.kind === "archive", show({ kind: "archive" }))}
-    </nav>
+    <Popover open={open} onOpenChange={setFlyout}>
+      <PopoverAnchor asChild>
+        <nav aria-label="Library" className="flex h-full shrink-0 flex-col items-center gap-1 border-r bg-sidebar py-1.5" style={{ width: RAIL_WIDTH }}>
+          <Tooltip>
+            <TooltipTrigger asChild>{narrow ? <PopoverTrigger asChild>{expand}</PopoverTrigger> : expand}</TooltipTrigger>
+            <TooltipContent side="right">
+              Expand sidebar <Kbd>{alt}{mod}S</Kbd>
+            </TooltipContent>
+          </Tooltip>
+          <span className="my-1 h-px w-6 bg-border" />
+          {item(SECTION_TITLES.all, Images, section?.kind === "all", show({ kind: "all" }))}
+          {item("Recent", Clock, section?.kind === "recent", show({ kind: "recent" }))}
+          {item(SECTION_TITLES.favorites, Star, section?.kind === "favorites", show({ kind: "favorites" }))}
+          {pinned.length > 0 && <span className="my-1 h-px w-6 bg-border" />}
+          {pinned.map((s) =>
+            item(folderTitle(s.path), Pin, section === null && !!folder && samePath(folder, s.path), () => openShoot(s.path), s.path),
+          )}
+          <span className="my-1 h-px w-6 bg-border" />
+          {item(SECTION_TITLES.archive, Archive, section?.kind === "archive", show({ kind: "archive" }))}
+        </nav>
+      </PopoverAnchor>
+      <PopoverContent
+        side="right"
+        align="start"
+        sideOffset={FLYOUT_GAP}
+        alignOffset={FLYOUT_GAP}
+        aria-label="Library"
+        className="h-flyout gap-0 overflow-hidden p-0"
+        style={{ width: SIDEBAR_WIDTH }}
+        // Arrow keys work at once: start on the row for where you are.
+        onOpenAutoFocus={(event) => {
+          const panel = event.target as HTMLElement | null
+          const row = panel?.querySelector<HTMLElement>('[data-tree-row][aria-selected="true"]') ?? panel?.querySelector<HTMLElement>("[data-tree-row]")
+          if (!row) return
+          event.preventDefault()
+          row.focus()
+        }}
+        // Dismissed, focus goes back to the button as usual. After opening something it rests on
+        // the workspace instead, so the keys act on what was just opened.
+        onCloseAutoFocus={(event) => {
+          if (!went.current) return
+          went.current = false
+          event.preventDefault()
+          document.getElementById("workspace-photos")?.focus({ preventScroll: true })
+        }}
+        // The app's shortcuts stand down inside a popover, so its own shortcut is handled here.
+        onKeyDown={(event) => {
+          if ((event.metaKey || event.ctrlKey) && event.altKey && event.code === "KeyS") {
+            event.preventDefault()
+            setFlyout(false)
+          }
+        }}
+      >
+        <LibraryPanel onCollapse={() => setFlyout(false)} />
+      </PopoverContent>
+    </Popover>
   )
 }

@@ -3,8 +3,6 @@ import { invoke } from "@tauri-apps/api/core"
 import { getCurrentWebview } from "@tauri-apps/api/webview"
 import { getCurrentWindow } from "@tauri-apps/api/window"
 import { FileInput, FolderInput, Library } from "lucide-react"
-import { useShallow } from "zustand/react/shallow"
-import { FILE_SCOPES } from "@/lib/api"
 import { useCodes } from "@/lib/codes"
 import { useDnd } from "@/lib/dnd"
 import { folderTitle, useLibrary } from "@/lib/library"
@@ -13,15 +11,16 @@ import { restoreAccess } from "@/lib/platform"
 import { initViewing } from "@/lib/viewing"
 import { initExport } from "@/lib/export"
 import { initFtp } from "@/lib/ftp"
-import { isIPad, plural, trashAction, trashName } from "@/lib/format"
+import { isIPad } from "@/lib/format"
 import { useHotkeys } from "@/lib/hotkeys"
 import { initMenu } from "@/lib/menu"
 import { initOpening } from "@/lib/opening"
 import { checkForUpdates } from "@/lib/updates"
-import { loadSettings, targetPhotos, useStore } from "@/store"
+import { isMacAppStore } from "@/lib/distribution"
+import { initPresetSync } from "@/lib/workflow-presets"
+import { loadSettings, useStore } from "@/store"
 import { useUI } from "@/ui"
 import { AddFilesDialog } from "@/components/AddFilesDialog"
-import { BadgesDialog } from "@/components/BadgesDialog"
 import { FolderIcon } from "@/components/FolderIcon"
 import { CodesView } from "@/components/CodesView"
 import { ExportDialog } from "@/components/ExportDialog"
@@ -34,16 +33,6 @@ import { Prompts } from "@/components/Prompts"
 import { SendDialog } from "@/components/SendDialog"
 import { ShortcutsDialog } from "@/components/ShortcutsDialog"
 import { TitleBar } from "@/components/TitleBar"
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog"
 import { Toaster } from "@/components/ui/sonner"
 import { TooltipProvider } from "@/components/ui/tooltip"
 
@@ -62,6 +51,7 @@ export default function App() {
   const workspace = useStore((s) => s.workspace)
   const [dropping, setDropping] = useState<null | "rosters" | "documents" | "shoot">(null)
   useHotkeys()
+  useEffect(initPresetSync, [])
 
   useEffect(() => {
     loadSettings()
@@ -69,22 +59,36 @@ export default function App() {
     restoreAccess().then(async (moved) => {
       await useLibrary.getState().load()
       for (const [from, to] of moved) await followMovedFolder(from, to)
+      await initIngest()
+      await initExport()
+      if (!isIPad) await initOpening()
+    }).catch((error) => {
+      void import("sonner").then(({ toast }) => toast.error("Couldn’t restore folder access", { description: String(error), duration: Infinity }))
     })
     initViewing()
     useCodes.getState().load()
-    initIngest()
     initFtp()
-    initExport()
     initMenu()
-    if (!isIPad) checkForUpdates({ quiet: true })
-    // A shoot opened from Finder, the Dock or the command line comes up instead of Home.
-    initOpening()
+    if (!isIPad && !isMacAppStore) checkForUpdates({ quiet: true })
     // Rosters edited in a text editor (or by the Mac app) show up when you come back, and so do folder changes.
-    const unfocus = getCurrentWindow().onFocusChanged(({ payload: focused }) => {
-      if (!focused) return
+    const refresh = () => {
       useCodes.getState().load()
       // Folders renamed, moved or unplugged while away show up as missing (or found again).
       useLibrary.getState().refreshStats()
+    }
+    if (isIPad) {
+      // Tauri's desktop window plugin and file-drop events aren't available on iPad.
+      const visible = () => { if (document.visibilityState === "visible") refresh() }
+      window.addEventListener("focus", refresh)
+      document.addEventListener("visibilitychange", visible)
+      return () => {
+        window.removeEventListener("focus", refresh)
+        document.removeEventListener("visibilitychange", visible)
+      }
+    }
+    // A shoot opened from Finder, the Dock or the command line comes up instead of Home.
+    const unfocus = getCurrentWindow().onFocusChanged(({ payload: focused }) => {
+      if (focused) refresh()
     })
     // Drop a folder (or any photo in it) anywhere on the window to open it.
     const unlisten = getCurrentWebview().onDragDropEvent(({ payload }) => {
@@ -116,13 +120,14 @@ export default function App() {
         <TitleBar />
         <main className="relative min-h-0 flex-1">
           {/* Workspaces stay mounted so switching back keeps scroll position and selection. */}
-          <div className="absolute inset-0" hidden={workspace !== "home"}>
+          <div id="workspace-home" role="tabpanel" aria-labelledby="workspace-tab-home" className="absolute inset-0" hidden={workspace !== "home"}>
             <HomeView />
           </div>
-          <div className="absolute inset-0" hidden={workspace !== "photos"}>
+          {/* Focusable from code only: the narrow-window library flyout rests focus here after it opens something. */}
+          <div id="workspace-photos" role="tabpanel" aria-labelledby="workspace-tab-photos" tabIndex={-1} className="absolute inset-0 outline-none" hidden={workspace !== "photos"}>
             <PhotosView />
           </div>
-          <div className="absolute inset-0" hidden={workspace !== "codes"}>
+          <div id="workspace-codes" role="tabpanel" aria-labelledby="workspace-tab-codes" className="absolute inset-0" hidden={workspace !== "codes"}>
             <CodesView />
           </div>
           {dropping && (
@@ -139,47 +144,15 @@ export default function App() {
       </div>
       <IngestDialog />
       <ProfileDialog />
-      <BadgesDialog />
       <SendDialog />
       <ExportDialog />
       <FtpServersDialog />
       <ShortcutsDialog />
-      <ConfirmTrash />
       <AddFilesDialog />
       <Prompts />
       <DragGhost />
       <Toaster position="bottom-center" />
     </TooltipProvider>
-  )
-}
-
-function ConfirmTrash() {
-  const open = useUI((s) => s.confirmTrash)
-  const { photos, selected, focus, loupe, fileScope, trash } = useStore(
-    useShallow((s) => ({ photos: s.photos, selected: s.selected, focus: s.focus, loupe: s.loupe, fileScope: s.fileScope, trash: s.trash })),
-  )
-  const targets = open ? targetPhotos({ photos, selected, focus, loupe }) : []
-  const scope = FILE_SCOPES.find((f) => f.value === fileScope)!.label
-  return (
-    <AlertDialog open={open} onOpenChange={(o) => useUI.getState().open("confirmTrash", o)}>
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>Move {plural(targets.length, "photo")} to {trashName}?</AlertDialogTitle>
-          <AlertDialogDescription>
-            {fileScope === "both"
-              ? `Their RAW, JPG and sidecar files go to ${trashName}.`
-              : `Only the ${scope.replace(" only", "")} files go; the other half of each pair stays.`}{" "}
-            You can put them back from {trashName}.
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
-          <AlertDialogAction variant="destructive" onClick={() => trash(targets)}>
-            {trashAction}
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
   )
 }
 
@@ -189,7 +162,7 @@ function DragGhost() {
   if (!item) return null
   return (
     <div
-      className="pointer-events-none fixed z-[100] flex max-w-60 items-center gap-2 rounded-lg bg-popover px-2.5 py-1.5 text-[13px] shadow-lg shadow-black/40 ring-1 ring-white/10"
+      className="pointer-events-none fixed z-[100] flex max-w-60 items-center gap-2 rounded-lg bg-popover px-2.5 py-1.5 text-control shadow-floating"
       style={{ left: x + 12, top: y + 10 }}
     >
       {item.kind === "shoot" ? <FolderIcon size={20} selected={!!over} /> : <Library className="size-4 text-muted-foreground" />}

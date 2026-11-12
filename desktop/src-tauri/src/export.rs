@@ -4,7 +4,7 @@
 //! travel with it; only the image data is re-encoded, upright. Never overwrites: a name already in
 //! the folder gets a number added. The originals are never touched.
 
-use crate::{exif, images, jobs, jpeg_meta};
+use crate::{exif, fileops, images, jobs, jpeg_meta};
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
@@ -98,6 +98,8 @@ fn clean_name(s: &str) -> String {
 
 /// Exports every file in `items`, reporting progress through `emit`. Separate from Tauri for tests.
 pub fn run(items: &[Item], o: &Options, emit: impl Fn(Progress) + Sync) -> Result<Summary, String> {
+    let _destination_access = crate::data::access(Path::new(&o.destination)).map_err(|e| e.to_string())?;
+    let _source_access: Vec<_> = items.iter().flat_map(|i| &i.files).map(|f| crate::data::access(Path::new(&f.src))).collect::<Result<_, _>>().map_err(|e| e.to_string())?;
     let mut folder = PathBuf::from(&o.destination);
     if let Some(sub) = o.subfolder.as_deref().map(clean_name).filter(|s| !s.is_empty()) {
         folder.push(sub);
@@ -110,13 +112,19 @@ pub fn run(items: &[Item], o: &Options, emit: impl Fn(Progress) + Sync) -> Resul
     let summary = Mutex::new(Summary { folder: folder.to_string_lossy().to_string(), ..Default::default() });
     let quality = o.quality.clamp(1, 100);
 
-    // Resizing is the slow part, so files go out in parallel; the name check is serialized.
-    items.par_iter().flat_map(|i| i.files.par_iter()).for_each(|f| {
+    // Reserve names for each complete RAW+JPG+sidecar group under one lock. A collision in
+    // just one extension must add the same number to every file, keeping Lightroom's pairing.
+    items.par_iter().flat_map_iter(|item| {
+        let targets = claim(&folder, &item.files, &claimed);
+        item.files.iter().enumerate().map(move |(i, f)| {
+            (f, targets.as_ref().map(|paths| paths[i].clone()).map_err(Clone::clone))
+        })
+    }).for_each(|(f, target)| {
         if CANCEL.load(Ordering::Relaxed) {
             return;
         }
         let src = Path::new(&f.src);
-        let result = export_one(src, &folder, &f.name, o.long_edge, quality, &claimed);
+        let result = target.and_then(|(path, renamed)| export_one(src, &path, renamed, o.long_edge, quality));
         let n = done.fetch_add(1, Ordering::Relaxed) + 1;
         let mut s = summary.lock().unwrap_or_else(|e| e.into_inner());
         match result {
@@ -156,7 +164,7 @@ fn is_jpeg(p: &Path) -> bool {
     p.extension().is_some_and(|e| e.eq_ignore_ascii_case("jpg") || e.eq_ignore_ascii_case("jpeg"))
 }
 
-fn export_one(src: &Path, folder: &Path, name: &str, long_edge: Option<u32>, quality: u8, claimed: &Mutex<HashSet<PathBuf>>) -> Result<Option<Done>, String> {
+fn export_one(src: &Path, target: &Path, renamed: Option<String>, long_edge: Option<u32>, quality: u8) -> Result<Option<Done>, String> {
     if !src.exists() {
         // Sidecars are listed whether or not they exist; a missing one isn't an error.
         if src.extension().is_some_and(|e| e.eq_ignore_ascii_case("xmp")) {
@@ -172,50 +180,36 @@ fn export_one(src: &Path, folder: &Path, name: &str, long_edge: Option<u32>, qua
         _ => None,
     };
 
-    let (target, renamed) = claim(folder, name, claimed)?;
     if target == src {
         return Err("it’s already in this folder".into());
     }
-    // create_new refuses to replace a file that appeared in the meantime.
-    let mut out = std::fs::OpenOptions::new().write(true).create_new(true).open(&target).map_err(|e| e.to_string())?;
+    // Both routes refuse a file that appeared in the meantime and clean up failed writes.
     let written = match &resized {
-        Some(bytes) => {
-            out.write_all(bytes).map_err(|e| e.to_string())?;
-            bytes.len() as u64
-        }
-        None => {
-            let mut from = std::fs::File::open(src).map_err(|e| e.to_string())?;
-            std::io::copy(&mut from, &mut out).map_err(|e| e.to_string())?
-        }
-    };
-    drop(out);
-    if resized.is_none() && std::fs::metadata(src).map(|m| m.len()).unwrap_or(written) != written {
-        let _ = std::fs::remove_file(&target);
-        return Err("the copy didn’t match the original".into());
-    }
+        Some(bytes) => fileops::write_new(target, |out| {
+            out.write_all(bytes)?;
+            Ok(bytes.len() as u64)
+        }),
+        None => fileops::copy_new(src, target),
+    }.map_err(|e| e.to_string())?;
     Ok(Some(Done { bytes: written, resized: resized.is_some(), renamed }))
 }
 
-/// Picks the path to write `name` to: the name itself, or `stem-1.ext`, `stem-2.ext`… when a file
-/// with that name is already there or another thread is about to write it.
-fn claim(folder: &Path, name: &str, claimed: &Mutex<HashSet<PathBuf>>) -> Result<(PathBuf, Option<String>), String> {
+/// Reserve one shared collision suffix for a photo's files. `create_new` still protects the
+/// actual write if another process creates a file after the reservation.
+fn claim(folder: &Path, files: &[File], claimed: &Mutex<HashSet<PathBuf>>) -> Result<Vec<(PathBuf, Option<String>)>, String> {
     let mut taken = claimed.lock().unwrap_or_else(|e| e.into_inner());
-    let free = |p: &PathBuf, taken: &HashSet<PathBuf>| !p.exists() && !taken.contains(p);
-    let first = folder.join(name);
-    if free(&first, &taken) {
-        taken.insert(first.clone());
-        return Ok((first, None));
-    }
-    let (stem, ext) = match name.rfind('.') {
-        Some(i) if i > 0 => (&name[..i], &name[i..]),
-        _ => (name, ""),
-    };
-    for n in 1..1000 {
-        let candidate = format!("{stem}-{n}{ext}");
-        let p = folder.join(&candidate);
-        if free(&p, &taken) {
-            taken.insert(p.clone());
-            return Ok((p, Some(candidate)));
+    for n in 0..1000 {
+        let paths: Vec<_> = files.iter().map(|f| {
+            let (stem, ext) = match f.name.rfind('.') {
+                Some(i) if i > 0 => (&f.name[..i], &f.name[i..]),
+                _ => (f.name.as_str(), ""),
+            };
+            let name = if n == 0 { f.name.clone() } else { format!("{stem}-{n}{ext}") };
+            (folder.join(&name), (n > 0).then_some(name))
+        }).collect();
+        if paths.iter().all(|(p, _)| !p.exists() && !taken.contains(p)) {
+            taken.extend(paths.iter().map(|(p, _)| p.clone()));
+            return Ok(paths);
         }
     }
     Err("too many files with this name in the folder".into())
@@ -369,6 +363,31 @@ mod tests {
         let mut out = vec![];
         image::codecs::jpeg::JpegEncoder::new_with_quality(&mut out, 90).encode_image(&img).unwrap();
         out
+    }
+
+    #[test]
+    fn a_collision_in_one_extension_keeps_the_entire_pair_together() {
+        let dir = std::env::temp_dir().join(format!("deadlyne-export-pair-{}", std::process::id()));
+        let dest = dir.join("Out");
+        std::fs::create_dir_all(&dest).unwrap();
+        let files: Vec<_> = ["CR3", "JPG", "xmp"].iter().map(|ext| {
+            let name = format!("Game.{ext}");
+            let src = dir.join(&name);
+            std::fs::write(&src, ext.as_bytes()).unwrap();
+            File { src: src.to_string_lossy().into(), name }
+        }).collect();
+        // The destination's older RAW must keep its own name and sidecar association.
+        std::fs::write(dest.join("Game.CR3"), b"older photo").unwrap();
+        let o = Options { destination: dest.to_string_lossy().into(), subfolder: None, long_edge: None, quality: 88 };
+        let s = run(&[Item { files }], &o, |_| {}).unwrap();
+        assert_eq!(s.files, 3, "{:?}", s.errors);
+        assert_eq!(s.renamed.len(), 3);
+        assert_eq!(std::fs::read(dest.join("Game.CR3")).unwrap(), b"older photo");
+        for ext in ["CR3", "JPG", "xmp"] {
+            assert_eq!(std::fs::read(dest.join(format!("Game-1.{ext}"))).unwrap(), ext.as_bytes());
+        }
+        assert!(!dest.join("Game.xmp").exists(), "the new sidecar must not attach to the older RAW");
+        std::fs::remove_dir_all(dir).unwrap();
     }
 
     #[test]

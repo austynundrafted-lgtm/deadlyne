@@ -276,7 +276,6 @@ final class IngestWindowController: NSWindowController, NSWindowDelegate {
                     a.informativeText = summary.errors.prefix(8).joined(separator: "\n")
                     a.beginSheetModal(for: self.window!)
                 }
-                Achievements.recordIngest(summary.copiedPhotos) // before opening, so the folder isn't counted twice
                 if let open = summary.firstFolder { self.onFinish(open) }
             }
         }

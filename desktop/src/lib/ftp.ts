@@ -7,6 +7,7 @@ import { create } from "zustand"
 import type { Photo } from "@/lib/api"
 import { plural } from "@/lib/format"
 import { getSetting, setSetting } from "@/lib/settings"
+import { confirm } from "@/lib/prompts"
 
 export type FtpProtocol = "ftp" | "ftps" | "ftpsImplicit"
 export type IfExists = "rename" | "replace" | "skip"
@@ -109,11 +110,11 @@ interface FtpState {
   jobs: SendJob[]
   load: () => Promise<void>
   saveServer: (server: FtpServer, password: string | null) => Promise<void>
-  removeServer: (id: string) => Promise<void>
+  removeServer: (id: string) => Promise<boolean>
   setSendFiles: (f: SendFiles) => void
   send: (server: FtpServer, files: string[], photos: number) => void
   cancel: (jobId: string) => void
-  clearFinished: () => void
+  clearFinished: () => Promise<void>
 }
 
 export const useFtp = create<FtpState>((set, get) => ({
@@ -142,10 +143,17 @@ export const useFtp = create<FtpState>((set, get) => ({
   },
 
   removeServer: async (id) => {
+    const server = get().servers.find((s) => s.id === id)
+    if (!server || !await confirm({
+      title: "Are you sure you want to remove this FTP server?",
+      description: `“${server.name || server.host}” and its saved password will be removed from Deadlyne. Files already sent to the server stay there.`,
+      action: "Remove server", destructive: true,
+    })) return false
     const servers = get().servers.filter((s) => s.id !== id)
     set({ servers })
     await setSetting("ftpServers", servers)
     await setPassword(id, "").catch(() => {})
+    return true
   },
 
   setSendFiles: (sendFiles) => {
@@ -167,7 +175,15 @@ export const useFtp = create<FtpState>((set, get) => ({
     else if (job.status === "sending") invoke("ftp_cancel", { jobId })
   },
 
-  clearFinished: () => set({ jobs: get().jobs.filter((j) => j.status === "queued" || j.status === "sending") }),
+  clearFinished: async () => {
+    const ids = new Set(get().jobs.filter((j) => j.status !== "queued" && j.status !== "sending").map((j) => j.id))
+    if (!ids.size || !await confirm({
+      title: "Are you sure you want to clear finished sends?",
+      description: `${plural(ids.size, "send record")} will be removed from this history. Files already sent stay on the server.`,
+      action: "Clear finished", destructive: true,
+    })) return
+    set({ jobs: get().jobs.filter((j) => !ids.has(j.id) || j.status === "queued" || j.status === "sending") })
+  },
 }))
 
 export const setPassword = (id: string, password: string) => invoke("ftp_set_password", { id, password })

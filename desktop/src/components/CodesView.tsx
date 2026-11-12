@@ -9,7 +9,8 @@ import { useShallow } from "zustand/react/shallow"
 import { reveal } from "@/lib/api"
 import { DELIMITERS, expandLive, resolve, useCodes, type CodeList } from "@/lib/codes"
 import { plural } from "@/lib/format"
-import { cn } from "@/lib/utils"
+import { confirm } from "@/lib/prompts"
+import { cn, TONE } from "@/lib/utils"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -41,7 +42,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 
 /** The chosen editing mode is lit in the Codes workspace color. */
-const MODE = "text-muted-foreground data-[state=on]:bg-(--workspace-codes)/15 data-[state=on]:text-(--workspace-codes)"
+const MODE = TONE.codes
 
 export function CodesView() {
   const { lists, disabled, loaded } = useCodes(useShallow((s) => ({ lists: s.lists, disabled: s.disabled, loaded: s.loaded })))
@@ -66,7 +67,7 @@ export function CodesView() {
 
   return (
     <div className="flex h-full">
-      <aside className="flex w-64 shrink-0 flex-col border-r bg-panel">
+      <aside className="flex w-56 shrink-0 flex-col border-r bg-panel xl:w-64">
         <div className="px-4 pt-4 pb-2">
           <div className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Lookup files</div>
           <div className="mt-0.5 text-xs text-muted-foreground">
@@ -134,13 +135,10 @@ function ListRow({ list, active, onSelect }: { list: CodeList; active: boolean; 
     <ContextMenu>
       <ContextMenuTrigger asChild>
         <div
-          role="button"
-          tabIndex={0}
           onClick={onSelect}
-          onKeyDown={(e) => e.key === "Enter" && onSelect()}
           aria-current={active || undefined}
           className={cn(
-            "flex cursor-default items-center gap-2.5 rounded-md px-2 py-2 transition-[background-color] duration-100 outline-none hover:bg-accent/50 focus-visible:ring-2 focus-visible:ring-ring/50 data-[state=open]:bg-accent/50",
+            "flex cursor-default items-center gap-2.5 rounded-md px-2 py-2 transition-[background-color] duration-fast outline-none hover:bg-accent/50 data-[state=open]:bg-accent/50",
             active && "bg-accent hover:bg-accent data-[state=open]:bg-accent",
           )}
         >
@@ -150,7 +148,17 @@ function ListRow({ list, active, onSelect }: { list: CodeList; active: boolean; 
             onCheckedChange={(v) => setEnabled(list.fileName, v === true)}
             aria-label={`Use ${list.name} while captioning`}
           />
-          <div className="min-w-0">
+          <div
+            className="min-w-0 flex-1 rounded-sm"
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault()
+                onSelect()
+              }
+            }}
+          >
             <div className={cn("truncate text-sm font-medium", !enabled && "text-muted-foreground")}>{list.name}</div>
             <div className="text-xs text-muted-foreground">
               {plural(codes, "code")}
@@ -212,13 +220,27 @@ function Editor({ list, onRenamed }: { list: CodeList; onRenamed: (fileName: str
     requestAnimationFrame(() => document.querySelector<HTMLInputElement>(`[data-cell="${list.rows.length}-0"]`)?.focus())
   }
 
+  const removeRow = async (index: number) => {
+    if (!await confirm({
+      title: "Are you sure you want to delete this code row?",
+      description: `Row ${index + 1} will be removed from “${list.name}”.`,
+      action: "Delete row", destructive: true,
+    })) return
+    const current = useCodes.getState().lists.find((l) => l.fileName === list.fileName)
+    if (!current || current.rows !== list.rows) {
+      toast("The roster changed. Check the row and try again.")
+      return
+    }
+    await saveList({ ...current, rows: current.rows.filter((_, i) => i !== index) })
+  }
+
   const enabled = !disabled.includes(list.fileName)
   const shadowed = [...conflicts].filter(([, names]) => names.includes(list.name) && names[0] !== list.name).length
   const badCodes = list.rows.map((r) => r[0] ?? "").filter((c) => c.includes(delimiter) || /\s/.test(c))
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex h-12 shrink-0 items-center gap-2 border-b bg-bar px-4">
+      <div className="flex min-h-titlebar shrink-0 flex-wrap items-center gap-2 border-b surface-bar px-3 py-2">
         {renaming !== null ? (
           <form
             className="flex-1"
@@ -235,7 +257,7 @@ function Editor({ list, onRenamed }: { list: CodeList; onRenamed: (fileName: str
             <Input autoFocus value={renaming} onChange={(e) => setRenaming(e.target.value)} onBlur={(e) => e.currentTarget.form?.requestSubmit()} className="h-8 max-w-xs" />
           </form>
         ) : (
-          <button className="min-w-0 truncate text-left text-sm font-semibold" onDoubleClick={() => setRenaming(list.name)} title="Double-click to rename">
+          <button className="max-w-48 shrink-0 truncate text-left text-sm font-semibold" onDoubleClick={() => setRenaming(list.name)} title="Double-click to rename">
             {list.name}
           </button>
         )}
@@ -295,8 +317,8 @@ function Editor({ list, onRenamed }: { list: CodeList; onRenamed: (fileName: str
         <TextEditor list={list} />
       ) : (
         <ScrollArea className="min-h-0 flex-1">
-          <table className="w-full border-collapse text-sm">
-            <thead className="sticky top-0 z-10 bg-bar text-xs text-muted-foreground">
+          <table className="w-full table-fixed border-collapse text-sm">
+            <thead className="sticky top-0 z-10 surface-bar text-xs text-muted-foreground">
               <tr>
                 <th className="w-28 border-r border-b px-3 py-2 text-left font-medium">Code</th>
                 {Array.from({ length: columns }, (_, c) => (
@@ -312,11 +334,12 @@ function Editor({ list, onRenamed }: { list: CodeList; onRenamed: (fileName: str
                 const dup = duplicates.has(code)
                 const other = enabled && code && resolve(row[0].trim())?.list !== list.name
                 return (
-                  <tr key={i} className="group">
+                  <tr key={i} className="group hover:bg-surface-hover">
                     {Array.from({ length: columns + 1 }, (_, c) => (
                       <td key={c} className="border-r border-b p-0">
                         <input
                           data-cell={`${i}-${c}`}
+                          aria-label={`Row ${i + 1}, ${c === 0 ? "code" : columnNames[c - 1] || `column ${c}`}`}
                           value={row[c] ?? ""}
                           placeholder={c === 0 ? "code" : ""}
                           title={c === 0 && dup ? "Used more than once in this file — only the first line is used" : c === 0 && other ? "Also in another file, which wins" : undefined}
@@ -325,11 +348,11 @@ function Editor({ list, onRenamed }: { list: CodeList; onRenamed: (fileName: str
                             if (e.key === "Enter") document.querySelector<HTMLInputElement>(`[data-cell="${i + 1}-${c}"]`)?.focus()
                             if (e.key === "Backspace" && c === 0 && !row.some(Boolean)) {
                               e.preventDefault()
-                              saveList({ ...list, rows: list.rows.filter((_, k) => k !== i) })
+                              void removeRow(i)
                             }
                           }}
                           className={cn(
-                            "h-8 w-full bg-transparent px-3 outline-none focus:bg-accent/60",
+                            "h-8 w-full min-w-0 bg-transparent px-3 text-ellipsis outline-none focus:bg-accent/60",
                             c === 0 && "font-mono font-semibold text-(--workspace-codes)",
                             c === 0 && other && "text-(--workspace-photos)",
                             c === 0 && dup && "text-destructive",
@@ -348,7 +371,7 @@ function Editor({ list, onRenamed }: { list: CodeList; onRenamed: (fileName: str
         </ScrollArea>
       )}
 
-      <div className="flex h-8 shrink-0 items-center border-t bg-bar px-4 text-xs text-muted-foreground">
+      <div className="flex h-8 shrink-0 items-center border-t surface-bar px-4 text-xs text-muted-foreground">
         {duplicates.size > 0 || shadowed > 0 || badCodes.length > 0 ? (
           <span className="truncate text-(--workspace-photos)">
             {[
@@ -358,7 +381,7 @@ function Editor({ list, onRenamed }: { list: CodeList; onRenamed: (fileName: str
             ].filter(Boolean).join("   ·   ")}
           </span>
         ) : (
-          <span>Saved automatically · Tab and Enter move between cells · Backspace in an empty row deletes it</span>
+          <span className="truncate">Saved automatically · Tab and Enter move between cells · Backspace in an empty row asks before deleting it</span>
         )}
       </div>
 
@@ -386,8 +409,8 @@ function Editor({ list, onRenamed }: { list: CodeList; onRenamed: (fileName: str
       <AlertDialog open={confirmTrash} onOpenChange={setConfirmTrash}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Move “{list.name}” to the Trash?</AlertDialogTitle>
-            <AlertDialogDescription>Its codes stop working in captions. You can get the file back from the Trash.</AlertDialogDescription>
+            <AlertDialogTitle>Are you sure you want to delete this roster?</AlertDialogTitle>
+            <AlertDialogDescription>“{list.name}” will move to the Trash and its codes will stop working in captions. You can restore the file from the Trash.</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
@@ -423,7 +446,7 @@ function HeaderName({ fileName, column, name }: { fileName: string; column: numb
         placeholder={column === 1 ? "Name · default" : "name"}
         onBlur={(e) => e.target.value !== name && setColumnName(fileName, column, e.target.value)}
         onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
-        className="min-w-0 flex-1 bg-transparent font-medium text-foreground/80 outline-none placeholder:text-muted-foreground/60 focus:text-foreground"
+        className="min-w-0 flex-1 bg-transparent font-medium text-ellipsis text-foreground/80 outline-none placeholder:text-muted-foreground focus:text-foreground"
         aria-label={`Name column ${column}`}
       />
     </span>
@@ -444,8 +467,9 @@ function TextEditor({ list }: { list: CodeList }) {
   return (
     <Textarea
       value={text}
+      aria-label={`${list.name} lookup file text`}
       spellCheck={false}
-      className="min-h-0 flex-1 resize-none rounded-none border-0 font-mono text-sm [tab-size:24]"
+      className="min-h-0 flex-1 resize-none rounded-none border-0 bg-transparent font-mono text-sm shadow-none focus-visible:shadow-none [tab-size:24]"
       onKeyDown={(e) => {
         if (e.key === "Tab") {
           e.preventDefault()
@@ -492,13 +516,13 @@ function Inspector() {
   })
 
   return (
-    <aside className="flex w-80 shrink-0 flex-col border-l bg-panel">
+    <aside className="flex w-64 shrink-0 flex-col border-l bg-panel xl:w-80">
       <ScrollArea className="min-h-0 flex-1">
         <div className="flex flex-col gap-5 p-4">
           <Field orientation="horizontal" className="justify-between">
-            <FieldLabel>Delimiter</FieldLabel>
+            <FieldLabel htmlFor="codes-delimiter">Delimiter</FieldLabel>
             <Select value={delimiter} onValueChange={setDelimiter}>
-              <SelectTrigger size="sm" className="w-36">
+              <SelectTrigger id="codes-delimiter" size="sm" className="w-36">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>

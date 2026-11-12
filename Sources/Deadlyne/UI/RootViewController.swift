@@ -33,8 +33,6 @@ final class RootViewController: NSViewController {
         browser.onWantsProfile = { [weak self] in self?.showProfile(nil) }
         browser.onWantsCodes = { [weak self] in self?.show(.codes) }
         tabBar.onSelect = { [weak self] w in self?.show(w) }
-        NotificationCenter.default.addObserver(self, selector: #selector(badgesUnlocked(_:)),
-                                               name: Achievements.didUnlock, object: nil)
     }
 
     /// Opens a shoot. If the browser already has it loaded, just switches back to it.
@@ -114,54 +112,7 @@ final class RootViewController: NSViewController {
         editor.present(on: window)
     }
 
-    @objc func showAchievements(_ sender: Any?) {
-        if achievementsWindow == nil { achievementsWindow = AchievementsWindowController() }
-        achievementsWindow?.showWindow(nil)
-    }
 
-    // MARK: Badge unlocks
-
-    private var achievementsWindow: AchievementsWindowController?
-    private var banner: UnlockBanner?
-
-    @objc private func badgesUnlocked(_ note: Notification) {
-        guard let badges = note.object as? [Badge], !badges.isEmpty else { return }
-        hideBanner(animated: false)
-        let b = UnlockBanner(badges: badges)
-        b.onClick = { [weak self] in
-            self?.hideBanner(animated: true)
-            self?.showAchievements(nil)
-        }
-        b.translatesAutoresizingMaskIntoConstraints = false
-        view.addSubview(b) // above both screens
-        NSLayoutConstraint.activate([
-            b.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            b.topAnchor.constraint(equalTo: view.topAnchor, constant: 58),
-        ])
-        banner = b
-        b.alphaValue = 0
-        NSAnimationContext.runAnimationGroup { ctx in
-            ctx.duration = 0.25
-            b.animator().alphaValue = 1
-        }
-        NSSound(named: "Glass")?.play()
-        NSAccessibility.post(element: b, notification: .announcementRequested,
-                             userInfo: [.announcement: b.announcement, .priority: NSAccessibilityPriorityLevel.high.rawValue])
-        DispatchQueue.main.asyncAfter(deadline: .now() + 6) { [weak self, weak b] in
-            guard let self, let b, self.banner === b else { return }
-            self.hideBanner(animated: true)
-        }
-    }
-
-    private func hideBanner(animated: Bool) {
-        guard let b = banner else { return }
-        banner = nil
-        guard animated else { b.removeFromSuperview(); return }
-        NSAnimationContext.runAnimationGroup({ ctx in
-            ctx.duration = 0.3
-            b.animator().alphaValue = 0
-        }, completionHandler: { b.removeFromSuperview() })
-    }
 }
 
 extension RootViewController: NSMenuItemValidation {
@@ -199,5 +150,4 @@ extension RootViewController: HomeViewControllerDelegate {
     func homeOpenFolderPanel() { browser.openFolderPanel(nil) }
     func homeOpen(_ url: URL) { openFolder(url) }
     func homeEditProfile() { showProfile(nil) }
-    func homeShowAchievements() { showAchievements(nil) }
 }

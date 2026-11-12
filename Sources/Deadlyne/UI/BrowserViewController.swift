@@ -402,7 +402,6 @@ final class BrowserViewController: NSViewController {
             DispatchQueue.main.async {
                 guard gen == self.loadGeneration else { return }
                 RecentShoots.update(url) { $0.photoCount = photos.count }
-                Achievements.recordFolder(url, photos: photos.count)
                 self.allPhotos = photos
                 self.applyFilter()
                 self.selectionIsPristine = true

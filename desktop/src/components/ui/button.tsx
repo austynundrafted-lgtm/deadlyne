@@ -1,42 +1,50 @@
 import * as React from "react"
 import { cva, type VariantProps } from "class-variance-authority"
-import { cn } from "cn"
+import { cn } from "@/lib/utils"
 import { Slot } from "radix-ui"
 
+// A raised control: a hairline cut into the surface around it, light along its upper edge and a
+// short contact shadow. Held down, or holding its menu open, it sinks instead of shrinking, so
+// nothing beside it moves. Keyboard focus is the shared ring in index.css.
+const RAISED = "border-cut sheen-raised shadow-raised aria-expanded:sheen-pressed aria-expanded:shadow-pressed"
+
 const buttonVariants = cva(
-  "group/button inline-flex shrink-0 items-center justify-center rounded-lg border border-transparent bg-clip-padding text-sm font-medium whitespace-nowrap transition-[color,background-color,border-color,box-shadow,opacity,scale] duration-150 ease-out outline-none select-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+  "group/button inline-flex shrink-0 items-center justify-center rounded-lg border border-transparent bg-clip-padding text-sm font-medium whitespace-nowrap transition-[color,background-color,border-color,box-shadow,opacity] duration-fast ease-out outline-none select-none disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
   {
     variants: {
       variant: {
-        default: "bg-primary text-primary-foreground hover:bg-primary/80",
-        outline:
-          "border-border bg-background hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50",
-        secondary:
-          "bg-secondary text-secondary-foreground hover:bg-[color-mix(in_oklch,var(--secondary),var(--foreground)_5%)] aria-expanded:bg-secondary aria-expanded:text-secondary-foreground",
+        default:
+          "border-[color-mix(in_oklab,var(--primary)_58%,black)] bg-primary text-primary-foreground sheen-cap shadow-cap hover:bg-primary-hover aria-expanded:sheen-pressed aria-expanded:shadow-pressed",
+        outline: cn(RAISED, "bg-control-surface text-foreground hover:bg-control-surface-hover aria-expanded:bg-control-surface"),
+        secondary: cn(RAISED, "bg-secondary text-secondary-foreground hover:bg-secondary-hover aria-expanded:bg-secondary"),
         ghost:
-          "hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground dark:hover:bg-muted/50",
-        destructive:
-          "bg-destructive/10 text-destructive hover:bg-destructive/20 focus-visible:border-destructive/40 focus-visible:ring-destructive/20 dark:bg-destructive/20 dark:hover:bg-destructive/30 dark:focus-visible:ring-destructive/40",
-        link: "text-primary underline-offset-4 hover:underline",
+          "hover:bg-surface-hover hover:text-foreground aria-expanded:bg-surface-inset aria-expanded:text-foreground aria-expanded:shadow-pressed",
+        destructive: cn(RAISED, "border-destructive/30 bg-destructive/15 text-destructive hover:bg-destructive/25 aria-expanded:bg-destructive/15"),
+        link: "text-primary-readable underline-offset-4 hover:underline",
       },
       size: {
         default:
           "h-8 gap-1.5 px-2.5 has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2",
-        xs: "h-6 gap-1 rounded-[min(var(--radius-md),10px)] px-2 text-xs in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3",
-        sm: "h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5",
+        xs: "h-6 gap-1 rounded-md px-2 text-xs in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3",
+        sm: "h-7 gap-1 rounded-md px-2.5 text-control in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5",
         lg: "h-9 gap-1.5 px-2.5 has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2",
         icon: "size-8",
         "icon-xs":
-          "size-6 rounded-[min(var(--radius-md),10px)] in-data-[slot=button-group]:rounded-lg [&_svg:not([class*='size-'])]:size-3",
+          "size-6 rounded-md in-data-[slot=button-group]:rounded-lg [&_svg:not([class*='size-'])]:size-3",
         "icon-sm":
-          "size-7 rounded-[min(var(--radius-md),12px)] in-data-[slot=button-group]:rounded-lg",
+          "size-7 rounded-md in-data-[slot=button-group]:rounded-lg",
         "icon-lg": "size-9",
       },
       press: {
-        true: "active:not-aria-[haspopup]:not-disabled:scale-[0.96]",
+        true: "",
         false: "",
       },
     },
+    compoundVariants: [
+      // The pressed face: darker toward the top, shaded inside, no contact shadow.
+      { press: true, variant: ["default", "outline", "secondary", "destructive"], className: "active:not-disabled:sheen-pressed active:not-disabled:shadow-pressed" },
+      { press: true, variant: "ghost", className: "active:not-disabled:bg-surface-inset active:not-disabled:shadow-pressed" },
+    ],
     defaultVariants: {
       variant: "default",
       size: "default",
@@ -55,7 +63,7 @@ function Button({
 }: React.ComponentProps<"button"> &
   Omit<VariantProps<typeof buttonVariants>, "press"> & {
     asChild?: boolean
-    /** No press scale, for controls hit over and over where motion would distract. */
+    /** No pressed face, for controls hit over and over where the flicker would distract. */
     static?: boolean
   }) {
   const Comp = asChild ? Slot.Root : "button"

@@ -12,6 +12,8 @@ DerivedData/
 *.key
 *.p12
 *.mobileprovision
+*.provisionprofile
+*.p8
 
 # Reproducible dependencies, build output, and local verification artifacts.
 node_modules/
@@ -23,3 +25,7 @@ coverage/
 *.log
 xcuserdata/
 Pods/
+
+# Kept on this Mac only: another tool's skill bundle and the October design-audit evidence.
+/.codex/
+/design-audit/

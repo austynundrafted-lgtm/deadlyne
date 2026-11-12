@@ -48,7 +48,7 @@ export function FtpServersDialog() {
             {servers.length ? (
               <ItemGroup className="gap-1">
                 {servers.map((s) => (
-                  <Item key={s.id} variant="outline" size="sm" className="cursor-pointer bg-card/40 hover:bg-card hover:shadow-edge-hover" onClick={() => setEditing(s)}>
+                  <Item key={s.id} variant="outline" size="sm" className="cursor-pointer bg-card/40 shadow-plate hover:bg-card hover:shadow-plate-hover" onClick={() => setEditing(s)}>
                     <ItemMedia variant="icon">
                       <Server />
                     </ItemMedia>
@@ -59,7 +59,7 @@ export function FtpServersDialog() {
                       </ItemDescription>
                     </ItemContent>
                     <ItemActions>
-                      <Button variant="ghost" size="sm">
+                      <Button variant="ghost" size="sm" aria-label={`Edit ${s.name || s.host}`}>
                         Edit
                       </Button>
                     </ItemActions>
@@ -169,9 +169,9 @@ function ServerForm({ server, isNew, onDone }: { server: FtpServer; isNew: boole
           </Field>
         </div>
         <Field>
-          <FieldLabel>Connection</FieldLabel>
+          <FieldLabel htmlFor="ftp-protocol">Connection</FieldLabel>
           <Select value={draft.protocol} onValueChange={(v) => update({ protocol: v as FtpServer["protocol"] })}>
-            <SelectTrigger className="w-full">
+            <SelectTrigger id="ftp-protocol" className="w-full">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -209,9 +209,9 @@ function ServerForm({ server, isNew, onDone }: { server: FtpServer; isNew: boole
           <FieldDescription className="text-xs">Missing folders are created when you send.</FieldDescription>
         </Field>
         <Field>
-          <FieldLabel>If a photo with the same name is already there</FieldLabel>
+          <FieldLabel htmlFor="ftp-if-exists">If a photo with the same name is already there</FieldLabel>
           <Select value={draft.ifExists} onValueChange={(v) => update({ ifExists: v as FtpServer["ifExists"] })}>
-            <SelectTrigger className="w-full">
+            <SelectTrigger id="ftp-if-exists" className="w-full">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -257,8 +257,7 @@ function ServerForm({ server, isNew, onDone }: { server: FtpServer; isNew: boole
             variant="ghost"
             className="text-destructive sm:mr-auto"
             onClick={async () => {
-              await removeServer(server.id)
-              onDone()
+              if (await removeServer(server.id)) onDone()
             }}
           >
             Remove

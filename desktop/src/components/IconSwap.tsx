@@ -4,7 +4,7 @@
 import type { ComponentProps, ReactNode } from "react"
 import { cn } from "@/lib/utils"
 
-const SWAP = "flex items-center justify-center transition-[opacity,filter,scale] duration-300 ease-[cubic-bezier(0.2,0,0,1)] motion-reduce:transition-none"
+const SWAP = "flex items-center justify-center transition-[opacity,filter,scale] duration-slow ease-[cubic-bezier(0.2,0,0,1)] motion-reduce:transition-none"
 const SHOWN = "scale-100 opacity-100 blur-[0px]"
 const HIDDEN = "scale-[0.25] opacity-0 blur-[4px]"
 

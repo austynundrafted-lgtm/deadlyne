@@ -10,10 +10,11 @@ import { formatBytes, openFiles } from "@/lib/api"
 import { cancelExport, EXPORT_FILES, exportItems, exportName, QUALITIES, RENAME_TOKENS, runExport, SIZES, useExport, type ExportFiles } from "@/lib/export"
 import { plural } from "@/lib/format"
 import { shootName } from "@/lib/shootName"
-import { CHOICE, cn } from "@/lib/utils"
+import { CHOICE, cn, focusDefaultAction } from "@/lib/utils"
 import { targetPhotos, useStore } from "@/store"
 import { useUI } from "@/ui"
 import { Button } from "@/components/ui/button"
+import { WorkflowPresets } from "@/components/WorkflowPresets"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field"
@@ -48,7 +49,10 @@ export function ExportDialog() {
   const chosen = which === "tagged" ? tagged : selection
   const { files, missing } = useMemo(() => exportItems(chosen, prefs.files, null), [chosen, prefs.files])
   const kind = EXPORT_FILES.find((f) => f.value === prefs.files)!.label
-  const example = chosen[0] ? exportName(prefs.renamePattern, chosen[0], shoot, 1) : "Fairborn_0001"
+  const example = useMemo(() => {
+    const rename = prefs.renameOn && prefs.renamePattern.trim() ? (p: typeof chosen[number], seq: number) => exportName(prefs.renamePattern, p, shoot, seq) : null
+    return exportItems(chosen, prefs.files, rename).items[0]?.files[0]?.name ?? "…"
+  }, [chosen, prefs.files, prefs.renameOn, prefs.renamePattern, shoot])
   const sub = prefs.subfolderOn ? subfolder.trim() : ""
   const destinationName = prefs.destination ? folderName(prefs.destination) : null
   const sameFolder = !!folder && !!prefs.destination && !sub && prefs.destination.replace(/[\\/]+$/, "") === folder.replace(/[\\/]+$/, "")
@@ -95,7 +99,12 @@ export function ExportDialog() {
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && close()}>
-      <DialogContent className="sm:max-w-md" onEscapeKeyDown={(e) => running && e.preventDefault()} onInteractOutside={(e) => running && e.preventDefault()}>
+      <DialogContent
+        className="max-h-dialog overflow-y-auto sm:max-w-md"
+        onOpenAutoFocus={focusDefaultAction}
+        onEscapeKeyDown={(e) => running && e.preventDefault()}
+        onInteractOutside={(e) => running && e.preventDefault()}
+      >
         <DialogHeader>
           <DialogTitle>Export photos</DialogTitle>
           <DialogDescription>Copies for the client or the desk, captions included. The originals stay put.</DialogDescription>
@@ -103,7 +112,7 @@ export function ExportDialog() {
 
         {running ? (
           <div className="flex flex-col gap-3 py-2">
-            <Progress value={progress?.filesTotal ? (progress.filesDone / progress.filesTotal) * 100 : null} className="h-1.5" />
+            <Progress aria-label="Export progress" value={progress?.filesTotal ? (progress.filesDone / progress.filesTotal) * 100 : null} className="h-1.5" />
             <p className="truncate text-sm text-muted-foreground tabular-nums">
               {progress ? `${progress.filesDone.toLocaleString()} of ${progress.filesTotal.toLocaleString()} · ${progress.currentFile}` : "Starting…"}
             </p>
@@ -116,9 +125,10 @@ export function ExportDialog() {
             }}
           >
             <FieldGroup className="gap-4">
+              <WorkflowPresets kind="export" current={prefs} onApply={setPrefs} active={open && !running} />
               <Field>
-                <FieldLabel>Photos</FieldLabel>
-                <ToggleGroup type="single" variant="outline" value={which} onValueChange={(v) => v && setWhich(v as typeof which)} className="w-full">
+                <FieldLabel id="export-photos-label">Photos</FieldLabel>
+                <ToggleGroup type="single" variant="outline" value={which} onValueChange={(v) => v && setWhich(v as typeof which)} className="w-full" aria-labelledby="export-photos-label">
                   <ToggleGroupItem value="tagged" className={cn("flex-1", CHOICE)}>
                     Tagged ({tagged.length.toLocaleString()})
                   </ToggleGroupItem>
@@ -129,8 +139,8 @@ export function ExportDialog() {
               </Field>
 
               <Field>
-                <FieldLabel>Files</FieldLabel>
-                <ToggleGroup type="single" variant="outline" value={prefs.files} onValueChange={(v) => v && setPrefs({ files: v as ExportFiles })} className="w-full">
+                <FieldLabel id="export-files-label">Files</FieldLabel>
+                <ToggleGroup type="single" variant="outline" value={prefs.files} onValueChange={(v) => v && setPrefs({ files: v as ExportFiles })} className="w-full" aria-labelledby="export-files-label">
                   {EXPORT_FILES.map((f) => (
                     <ToggleGroupItem key={f.value} value={f.value} className={cn("flex-1", CHOICE)}>
                       {f.label}
@@ -187,7 +197,8 @@ export function ExportDialog() {
                 </Button>
                 <Field orientation="horizontal" className="items-center">
                   <Switch id="export-subfolder" checked={prefs.subfolderOn} onCheckedChange={(v) => setPrefs({ subfolderOn: v })} />
-                  <FieldLabel htmlFor="export-subfolder" className="w-auto shrink-0">In a new folder</FieldLabel>
+                  {/* The label keeps its own width, so the folder name gets the rest of the row. */}
+                  <FieldLabel htmlFor="export-subfolder" className="w-auto !flex-none">In a new folder</FieldLabel>
                   <Input
                     value={subfolder}
                     disabled={!prefs.subfolderOn}
@@ -217,7 +228,7 @@ export function ExportDialog() {
                 <CollapsibleContent className="flex flex-col gap-3">
                   <Field orientation="horizontal" className="items-center">
                     <Switch id="export-rename" checked={prefs.renameOn} onCheckedChange={(v) => setPrefs({ renameOn: v })} />
-                    <FieldLabel htmlFor="export-rename" className="w-auto shrink-0">Rename files</FieldLabel>
+                    <FieldLabel htmlFor="export-rename" className="w-auto !flex-none">Rename files</FieldLabel>
                     <Input
                       disabled={!prefs.renameOn}
                       value={prefs.renamePattern}
@@ -227,7 +238,7 @@ export function ExportDialog() {
                     />
                   </Field>
                   <FieldDescription className={cn("text-xs", !prefs.renameOn && "opacity-60")}>
-                    <span className="font-mono">→ {prefs.renameOn ? example || "…" : chosen[0]?.name || "MCD_0001"}.JPG</span> · RAW+JPG pairs share a name. Tokens: {RENAME_TOKENS}
+                    <span className="font-mono">→ {example}</span> · RAW+JPG pairs share a name. Tokens: {RENAME_TOKENS}
                   </FieldDescription>
                   <Field orientation="horizontal">
                     <Switch id="export-open" checked={prefs.openWhenDone} onCheckedChange={(v) => setPrefs({ openWhenDone: v })} />

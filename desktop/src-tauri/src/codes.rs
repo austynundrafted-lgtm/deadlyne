@@ -27,7 +27,7 @@ pub struct CodeList {
 }
 
 pub fn dir() -> PathBuf {
-    dirs::data_dir().unwrap_or_else(std::env::temp_dir).join("Deadlyne").join("Code Replacements")
+    crate::data::workflow_dir().join("Code Replacements")
 }
 
 fn to_text(comments: &[String], rows: &[Vec<String>]) -> String {
@@ -134,6 +134,7 @@ fn parse_csv(text: &str) -> Vec<Vec<String>> {
 }
 
 fn read_file(path: &Path) -> std::io::Result<(Vec<String>, Vec<Vec<String>>)> {
+    let _access = crate::data::access(path)?;
     let text = decode(&std::fs::read(path)?);
     let is_csv = path.extension().is_some_and(|e| e.eq_ignore_ascii_case("csv"));
     if !is_csv {

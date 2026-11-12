@@ -1,5 +1,6 @@
 // Recently opened shoots, kept in the app's settings file (Tauri store plugin).
 import { LazyStore } from "@tauri-apps/plugin-store"
+import { mergeRecentData } from "@/lib/legacy-data"
 
 export interface RecentShoot {
   path: string
@@ -18,6 +19,8 @@ const listeners = new Set<Listener>()
 export async function recentShoots(): Promise<RecentShoot[]> {
   return (await store.get<RecentShoot[]>(KEY)) ?? []
 }
+
+export async function importRecentShoots(incoming: unknown) { await save(mergeRecentData(await recentShoots(), incoming)) }
 
 export function onRecentShoots(fn: Listener) {
   listeners.add(fn)

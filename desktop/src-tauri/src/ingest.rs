@@ -3,7 +3,7 @@
 //! Never overwrites, verifies each copy's size, and can eject the card when done.
 //! Port of `IngestEngine.swift`.
 
-use crate::{achievements, exif, folder};
+use crate::{exif, fileops, folder};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -49,10 +49,20 @@ pub struct Card {
 /// Mounted volumes that look like camera cards (they contain a DCIM folder).
 #[tauri::command]
 pub fn memory_cards() -> Vec<Card> {
+    #[cfg(all(target_os = "macos", feature = "mac-app-store"))]
+    {
+        return crate::mac_store::granted_roots().into_iter().filter_map(|path| {
+            let root = Path::new(&path);
+            let _access = crate::data::access(root).ok()?;
+            root.join("DCIM").is_dir().then(|| Card { name: root.file_name().unwrap_or_default().to_string_lossy().into_owned(), path: path.clone() })
+        }).collect();
+    }
+    #[cfg(not(all(target_os = "macos", feature = "mac-app-store")))]
+    {
     // iPad has no mounted volumes to scan: cards come in through the Files folder picker.
     #[cfg_attr(target_os = "ios", allow(unused_mut))]
     let mut roots: Vec<PathBuf> = vec![];
-    #[cfg(target_os = "macos")]
+    #[cfg(all(target_os = "macos", not(feature = "mac-app-store")))]
     if let Ok(entries) = std::fs::read_dir("/Volumes") {
         roots.extend(entries.flatten().map(|e| e.path()));
     }
@@ -76,6 +86,7 @@ pub fn memory_cards() -> Vec<Card> {
             Card { path: r.to_string_lossy().to_string(), name }
         })
         .collect()
+    }
 }
 
 #[derive(Serialize)]
@@ -91,6 +102,7 @@ pub struct CardInfo {
 pub async fn inspect_source(path: String) -> CardInfo {
     crate::jobs::blocking(move || {
         let root = Path::new(&path);
+        let _access = crate::data::access(root).ok();
         let dcim = root.join("DCIM");
         let mut files = vec![];
         walk(if dcim.is_dir() { &dcim } else { root }, &mut files);
@@ -109,6 +121,7 @@ pub async fn inspect_source(path: String) -> CardInfo {
 /// Free space on the drive holding `path`, in bytes.
 #[tauri::command]
 pub fn free_space(path: String) -> Option<u64> {
+    let _access = crate::data::access(Path::new(&path)).ok()?;
     fs2::available_space(Path::new(&path)).ok()
 }
 
@@ -182,7 +195,6 @@ pub struct Summary {
     pub first_folder: Option<String>,
     pub cancelled: bool,
     pub ejected: bool,
-    pub unlocked: Vec<achievements::Badge>,
 }
 
 #[tauri::command]
@@ -230,6 +242,8 @@ pub fn run(o: &Options, mut emit: impl FnMut(&Progress)) -> Summary {
     use rayon::prelude::*;
     let mut s = Summary::default();
     let source = Path::new(&o.source);
+    let source_access = crate::data::access(source).ok();
+    let _destination_access = crate::data::access(Path::new(&o.destination)).ok();
     let mut files = vec![];
     walk(source, &mut files);
     if files.is_empty() {
@@ -269,8 +283,6 @@ pub fn run(o: &Options, mut emit: impl FnMut(&Progress)) -> Summary {
     let mut progress = Progress { files_done: 0, files_total: plan.len(), bytes_done: 0, bytes_total, current_file: String::new() };
     emit(&progress);
     let mut last_emit = std::time::Instant::now();
-    let mut copied_photos: HashMap<String, u64> = HashMap::new();
-    let mut counted = std::collections::HashSet::new();
 
     for (k, (src, group_index, size)) in plan.iter().enumerate() {
         if CANCEL.load(Ordering::SeqCst) {
@@ -296,15 +308,9 @@ pub fn run(o: &Options, mut emit: impl FnMut(&Progress)) -> Summary {
                 }
                 return Err(format!("{} already exists at the destination", target.file_name().unwrap().to_string_lossy()));
             }
-            std::fs::copy(src, &target).map_err(|e| e.to_string())?;
-            if std::fs::metadata(&target).map(|m| m.len()).ok() != Some(*size) {
-                return Err("size mismatch after copy".into());
-            }
+            let copied = fileops::copy_new(src, &target).map_err(|e| e.to_string())?;
             s.copied += 1;
-            s.bytes += size;
-            if counted.insert(*group_index) {
-                *copied_photos.entry(folder.to_string_lossy().to_string()).or_default() += 1;
-            }
+            s.bytes += copied;
             Ok(())
         })();
         if let Err(e) = result {
@@ -320,7 +326,8 @@ pub fn run(o: &Options, mut emit: impl FnMut(&Progress)) -> Summary {
         }
     }
 
-    s.unlocked = achievements::record_ingest(&copied_photos);
+    #[allow(dropping_copy_types)] // Non-store leases are a no-op; store leases must end before eject.
+    drop(source_access);
     if o.eject && !s.cancelled && s.errors.is_empty() {
         s.ejected = eject(source);
     }
@@ -329,7 +336,9 @@ pub fn run(o: &Options, mut emit: impl FnMut(&Progress)) -> Summary {
 
 /// Ejects a card, if `path` is the root of a removable volume.
 fn eject(path: &Path) -> bool {
-    #[cfg(target_os = "macos")]
+    #[cfg(all(target_os = "macos", feature = "mac-app-store"))]
+    { return crate::mac_store::eject(path); }
+    #[cfg(all(target_os = "macos", not(feature = "mac-app-store")))]
     {
         if path.parent() != Some(Path::new("/Volumes")) {
             return false;

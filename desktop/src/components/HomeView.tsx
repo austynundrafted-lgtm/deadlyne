@@ -6,17 +6,17 @@ import { useShallow } from "zustand/react/shallow"
 import logo from "@/assets/logo.png"
 import { openFolderDialog } from "@/lib/actions"
 import { OFFLINE_GRACE_DAYS, useAuth } from "@/lib/auth"
-import { resumeShoot } from "@/lib/folders"
+import { locateFolder, openShoot, removeRecentShoot, resumeShoot } from "@/lib/folders"
 import { isIPad, mod, plural, relativeTime } from "@/lib/format"
 import { statsFor, useLibrary } from "@/lib/library"
-import { forgetRecentShoot, onRecentShoots, recentShoots, type RecentShoot } from "@/lib/recents"
+import { onRecentShoots, recentShoots, type RecentShoot } from "@/lib/recents"
 import { shootName, shootSubtitle } from "@/lib/shootName"
 import { checkForUpdates } from "@/lib/updates"
+import { isMacAppStore } from "@/lib/distribution"
+import { cn } from "@/lib/utils"
 import { useStore } from "@/store"
 import { useUI } from "@/ui"
-import { BadgeMedal, nextBadge, useAchievements } from "@/components/BadgesDialog"
 import { FolderIcon } from "@/components/FolderIcon"
-import { ViewProgress } from "@/components/ViewProgress"
 import { IngestProgressView, useIngest } from "@/components/IngestDialog"
 import { Button } from "@/components/ui/button"
 import {
@@ -39,16 +39,9 @@ import {
 } from "@/components/ui/dropdown-menu"
 
 export function HomeView() {
-  const openFolder = useStore((s) => s.openFolder)
   const profile = useStore((s) => s.profile)
   const workspace = useStore((s) => s.workspace)
   const { cards, running } = useIngest(useShallow((s) => ({ cards: s.cards, running: s.running })))
-  const { summary, refresh } = useAchievements()
-  const next = summary ? nextBadge(summary) : null
-
-  useEffect(() => {
-    if (workspace === "home") refresh()
-  }, [workspace, running, refresh])
   const [recents, setRecents] = useState<RecentShoot[]>([])
   const [version, setVersion] = useState("")
   const stats = useLibrary((s) => s.stats)
@@ -74,13 +67,13 @@ export function HomeView() {
           </div>
         </div>
 
-        <div className="mt-10 grid grid-cols-2 gap-3">
+        <div className="mt-10 grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Button size="lg" className="h-auto flex-col items-start gap-1 px-4 py-3 text-left" onClick={() => useUI.getState().open("ingest")}>
             <span className="flex w-full items-center gap-2 text-base">
               <HardDriveDownload className="size-5" /> Ingest
-              <Kbd className="ml-auto bg-black/20 text-primary-foreground">⇧{mod}I</Kbd>
+              <Kbd className="ml-auto bg-primary-foreground/10 text-primary-foreground shadow-[inset_0_1px_1px_rgb(0_0_0/0.22),0_1px_0_rgb(255_255_255/0.22)]">⇧{mod}I</Kbd>
             </span>
-            <span className="text-xs font-normal opacity-85">{cards[0] ? `${cards[0].name} is ready` : "Copy a card into a named folder"}</span>
+            <span className="text-xs font-normal">{cards[0] ? `${cards[0].name} is ready` : "Copy a card into a named folder"}</span>
           </Button>
           <Button size="lg" variant="secondary" className="h-auto flex-col items-start gap-1 px-4 py-3 text-left" onClick={openFolderDialog}>
             <span className="flex w-full items-center gap-2 text-base">
@@ -119,33 +112,65 @@ export function HomeView() {
                 const st = statsFor(stats, s.path)
                 const total = st?.totalPhotos ?? s.photos
                 const viewed = st?.totalViewed ?? 0
-                const partial = viewed > 0 && viewed < total
+                const missing = !!st && !st.exists
+                const partial = !missing && viewed > 0 && viewed < total
+                const open = () => void openShoot(s.path, { kind: "recent" })
                 return (
                 <Item
                   key={s.path}
                   variant="outline"
                   size="sm"
-                  className="group cursor-pointer bg-card/40 hover:bg-card hover:shadow-edge-hover"
-                  onClick={() => openFolder(s.path, { origin: { kind: "recent" } })}
+                  role="listitem"
+                  className="group cursor-pointer bg-card/40 shadow-plate hover:bg-card hover:shadow-plate-hover"
+                  onClick={open}
                   title={s.path}
                 >
                   <ItemMedia>
-                    <FolderIcon size={30} missing={st && !st.exists} />
+                    <FolderIcon size={30} missing={missing} />
                   </ItemMedia>
                   <ItemContent className="min-w-0">
-                    <ItemTitle className="w-full truncate">{name.title}</ItemTitle>
-                    <ItemDescription>
-                      {[shootSubtitle(name), plural(total, "photo"), relativeTime(s.openedAt)].filter(Boolean).join(" · ")}
+                    <ItemTitle
+                      className={cn("w-full truncate rounded-sm", missing && "text-muted-foreground")}
+                      role="button"
+                      tabIndex={0}
+                      aria-label={`Open ${name.title}`}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault()
+                          open()
+                        }
+                      }}
+                    >
+                      {name.title}
+                    </ItemTitle>
+                    {/* One line, so every row is the same height whatever its actions are. */}
+                    <ItemDescription className="line-clamp-1 text-xs">
+                      {missing ? (
+                        <span className="text-(--label-yellow)">Folder not found</span>
+                      ) : (
+                        [shootSubtitle(name), plural(total, "photo"), relativeTime(s.openedAt)].filter(Boolean).join(" · ")
+                      )}
                     </ItemDescription>
                   </ItemContent>
-                  <ItemActions>
-                    {/* Progress only once a review has started: a fresh shoot needs no 0%. */}
-                    {viewed > 0 && total > 0 && <ViewProgress viewed={viewed} total={total} size="xs" />}
+                  {/* A tight cluster: the row's details keep the room, and stay on one line. */}
+                  <ItemActions className="gap-1">
+                    {missing && (
+                      <Button
+                        variant="secondary"
+                        size="xs"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          void locateFolder(s.path)
+                        }}
+                      >
+                        Locate…
+                      </Button>
+                    )}
                     {partial && (
                       <Button
                         variant="secondary"
                         size="xs"
-                        className="opacity-0 transition-opacity duration-150 group-hover:opacity-100 focus-visible:opacity-100 pointer-coarse:opacity-100"
+                        className="opacity-0 transition-opacity duration-fast group-hover:opacity-100 focus-visible:opacity-100 pointer-coarse:opacity-100"
                         onClick={(e) => {
                           e.stopPropagation()
                           resumeShoot(s.path, { kind: "recent" })
@@ -159,11 +184,11 @@ export function HomeView() {
                       variant="ghost"
                       size="icon-xs"
                       static
-                      className="scale-[0.25] opacity-0 blur-[4px] transition-[opacity,filter,scale] duration-300 ease-[cubic-bezier(0.2,0,0,1)] group-hover:scale-100 group-hover:opacity-100 group-hover:blur-[0px] focus-visible:scale-100 focus-visible:opacity-100 focus-visible:blur-[0px] pointer-coarse:scale-100 pointer-coarse:opacity-100 pointer-coarse:blur-[0px] motion-reduce:transition-none"
+                      className="scale-[0.25] opacity-0 blur-[4px] transition-[opacity,filter,scale] duration-slow ease-[cubic-bezier(0.2,0,0,1)] group-hover:scale-100 group-hover:opacity-100 group-hover:blur-[0px] focus-visible:scale-100 focus-visible:opacity-100 focus-visible:blur-[0px] pointer-coarse:scale-100 pointer-coarse:opacity-100 pointer-coarse:blur-[0px] motion-reduce:transition-none"
                       aria-label={`Remove ${name.title} from recent shoots`}
                       onClick={(e) => {
                         e.stopPropagation()
-                        forgetRecentShoot(s.path)
+                        void removeRecentShoot(s.path)
                       }}
                     >
                       <X />
@@ -175,25 +200,6 @@ export function HomeView() {
               })}
             </ItemGroup>
           </section>
-        )}
-
-        {summary && (
-          <button
-            className="mt-8 flex items-center gap-3 rounded-lg bg-card/40 px-3 py-2.5 text-left text-sm shadow-edge transition-[background-color,box-shadow] duration-100 hover:bg-card hover:shadow-edge-hover"
-            onClick={() => useUI.getState().open("badges")}
-          >
-            {next && <BadgeMedal badge={next.badge} earned={false} size={32} />}
-            <span className="min-w-0 flex-1">
-              <span className="font-medium">This month</span>
-              <span className="text-muted-foreground">
-                {" "}· {plural(summary.month.photos, "photo")} · {plural(summary.month.shoots, "shoot")}
-              </span>
-              <span className="block truncate text-xs text-muted-foreground">
-                {next ? `Next badge: ${next.badge.name} · ${next.toGo.toLocaleString()} to go` : "Every photo badge earned"}
-              </span>
-            </span>
-            <ChevronRight className="size-4 text-muted-foreground" />
-          </button>
         )}
 
         <footer className="mt-auto flex flex-wrap items-center justify-center gap-x-2 gap-y-1 pt-12 text-xs text-muted-foreground">
@@ -209,7 +215,7 @@ export function HomeView() {
           <span>·</span>
           <span className="whitespace-nowrap">Version {version}</span>
           {/* The iPad app updates through the App Store / TestFlight, not GitHub. */}
-          {!isIPad && (
+          {!isIPad && !isMacAppStore && (
             <>
               <span>·</span>
               <Button variant="link" size="xs" className="h-auto p-0 text-xs text-muted-foreground" onClick={() => checkForUpdates({ quiet: false })}>
@@ -244,6 +250,7 @@ function AccountMenu() {
           )}
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
+        <DropdownMenuItem onSelect={() => useUI.getState().openAccount()}>Account settings…</DropdownMenuItem>
         <DropdownMenuItem onSelect={() => useAuth.getState().signOut()}>Sign out</DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

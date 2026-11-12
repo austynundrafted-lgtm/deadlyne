@@ -7,11 +7,17 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "build:mac": "tauri build --bundles app --config src-tauri/tauri.local.conf.json -- --locked",
+    "build:store": "node scripts/build-mac-store.mjs",
+    "build:store:check": "node scripts/build-mac-store.mjs --check",
+    "prebuild:ipad:sim": "npm run ipad:prepare",
+    "build:ipad:sim": "node scripts/build-ipad-simulator.mjs",
     "preview": "vite preview",
     "tauri": "tauri",
     "release": "node scripts/release.mjs",
     "test": "vitest run",
     "app": "tauri dev --config src-tauri/tauri.dev.conf.json",
+    "ipad:prepare": "node scripts/prepare-ipad.mjs",
+    "preipad": "npm run ipad:prepare",
     "ipad": "PATH=\"$HOME/.local/xcodegen-dl/xcodegen/bin:$PATH\" tauri ios dev --open"
   },
   "dependencies": {
@@ -37,6 +43,7 @@
     "zustand": "^5.0.15"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "0.5.15",
     "@tauri-apps/cli": "^2",
     "@types/node": "^26.5.1",
     "@types/react": "^19.1.8",

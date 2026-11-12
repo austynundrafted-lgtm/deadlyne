@@ -4,7 +4,9 @@ import { Loader2 } from "lucide-react"
 import { useShallow } from "zustand/react/shallow"
 import logo from "@/assets/logo.png"
 import { confirmSignUp, recover, resendSignUp, sendRecovery, setNewPassword, signIn, signUp, useAuth } from "@/lib/auth"
-import { isMac } from "@/lib/format"
+import { isIPad, isMac } from "@/lib/format"
+import { checkDeletionStatus, deletionBusy, initAccountDeletion, leaveDeletionStatus, useAccountDeletion } from "@/lib/account-deletion"
+import { useUI } from "@/ui"
 import { Button } from "@/components/ui/button"
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
@@ -21,20 +23,44 @@ const MIN_PASSWORD = 8
 
 export function AuthGate({ children }: { children: React.ReactNode }) {
   const { status, access, mustSetPassword } = useAuth(useShallow((s) => ({ status: s.status, access: s.access, mustSetPassword: s.mustSetPassword })))
+  const deletion = useAccountDeletion()
+  const notice = useAuth((s) => s.notice)
 
   useEffect(() => {
-    useAuth.getState().init()
+    void initAccountDeletion().then(() => useAuth.getState().init()).catch(() => {
+      useAuth.setState({ status: "signedOut", notice: "Couldn’t restore your sign-in. Connect to the internet and sign in again." })
+    })
+    const refresh = () => {
+      if (document.visibilityState === "visible" && useAuth.getState().status === "signedIn") void useAuth.getState().refreshAccess().catch(() => {})
+    }
+    // Other devices learn about deletion at the next online check-in, including a foreground
+    // app that hasn't refreshed its JWT. Offline access keeps its existing bounded grace.
+    window.addEventListener("online", refresh)
+    window.addEventListener("focus", refresh)
+    document.addEventListener("visibilitychange", refresh)
+    const timer = setInterval(refresh, 60000)
+    return () => {
+      clearInterval(timer)
+      window.removeEventListener("online", refresh)
+      window.removeEventListener("focus", refresh)
+      document.removeEventListener("visibilitychange", refresh)
+    }
   }, [])
 
-  if (status === "signedIn" && access === "active" && !mustSetPassword) return <>{children}</>
+  const unresolved = deletion.phase !== "idle" && deletion.phase !== "completed"
+  if (deletion.ready && !unresolved && status === "signedIn" && access === "active" && !mustSetPassword) return <>{children}</>
 
   return (
     <div className="flex h-full flex-col">
       {/* The window has no visible title bar; this strip keeps it draggable. */}
-      <div data-tauri-drag-region className="h-12 shrink-0" style={{ paddingLeft: isMac ? 92 : 12 }} />
+      <div data-tauri-drag-region className={`h-titlebar shrink-0 pl-(--titlebar-inset) ${isMac ? "mac-titlebar" : ""}`} />
       <main className="flex min-h-0 flex-1 items-center justify-center overflow-y-auto px-6 pb-12">
         <div className="w-full max-w-sm">
-          {status === "loading" || (status === "signedIn" && access === "checking" && !mustSetPassword) ? (
+          {!deletion.ready ? (
+            <Loader2 className="mx-auto size-6 animate-spin motion-reduce:animate-none" aria-label="Checking account status" />
+          ) : unresolved ? (
+            <DeletionRecovery />
+          ) : status === "loading" || (status === "signedIn" && access === "checking" && !mustSetPassword) ? (
             <Loader2 className="mx-auto size-6 animate-spin text-muted-foreground" aria-label="Signing in" />
           ) : status === "unconfigured" ? (
             <Unconfigured />
@@ -43,10 +69,28 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
           ) : status === "signedIn" ? (
             <Waiting disabled={access === "disabled"} />
           ) : (
-            <SignedOut />
+            <>{notice && <p role="status" className="mb-6 rounded-lg p-3 text-sm shadow-edge">{notice}</p>}<SignedOut /></>
           )}
         </div>
       </main>
+    </div>
+  )
+}
+
+function DeletionRecovery() {
+  const { phase, error, request } = useAccountDeletion()
+  const account = useAuth((s) => s.account)
+  const busy = deletionBusy(phase)
+  return (
+    <div className={`account-controls space-y-4 ${isIPad ? "account-dynamic-type" : ""}`}>
+      <Header title={phase === "cleanup" ? "Account deleted" : "Check account deletion"} subtitle="Your local photography files and rosters have been kept." />
+      <p role="status" aria-live="polite" className="text-sm text-muted-foreground">{busy ? phase === "cleanup" ? "Clearing this device’s sign-in details…" : "Waiting for confirmation from the account server…" : error || "The last deletion request hasn’t been confirmed. Check its status before continuing."}</p>
+      <div className="flex flex-col gap-2 [&_button]:min-h-11">
+        <Button disabled={busy || !request} onClick={() => void checkDeletionStatus()}>Check deletion status</Button>
+        {account && !request?.confirmed && <Button variant="outline" disabled={busy} onClick={() => useUI.getState().open("deleteAccount")}>Retry with password</Button>}
+        <Button variant="ghost" disabled={busy} onClick={() => void leaveDeletionStatus()}>Return to sign in</Button>
+      </div>
+      <p className="text-xs text-muted-foreground">Returning to sign in doesn’t cancel a request already sent.</p>
     </div>
   )
 }
@@ -298,6 +342,7 @@ function Waiting({ disabled }: { disabled: boolean }) {
         <Button variant="ghost" onClick={() => useAuth.getState().signOut()}>
           Sign out
         </Button>
+        <Button variant="destructive" className="min-h-11" onClick={() => useUI.getState().open("deleteAccount")}>Delete Account…</Button>
       </div>
     </>
   )

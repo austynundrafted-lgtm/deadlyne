@@ -164,7 +164,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             item("About Deadlyne", #selector(NSApplication.orderFrontStandardAboutPanel(_:))),
             sep(),
             item("Profile…", #selector(R.showProfile(_:)), ","),
-            item("Achievements…", #selector(R.showAchievements(_:))),
             sep(),
             item("Hide Deadlyne", #selector(NSApplication.hide(_:)), "h"),
             item("Hide Others", #selector(NSApplication.hideOtherApplications(_:)), "h", [.command, .option]),

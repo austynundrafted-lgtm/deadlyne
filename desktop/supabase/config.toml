@@ -1,0 +1,6 @@
+project_id = "deadlyne"
+
+[functions.delete-account]
+# The handler verifies deletion requests with Auth.getUser and the current password.
+# Status checks use a random 256-bit receipt, including after Auth has deleted the user.
+verify_jwt = false

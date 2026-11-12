@@ -39,6 +39,7 @@ pub fn iim_date_time(m: &Meta) -> Option<(String, String)> {
 }
 
 pub fn read(path: &Path) -> Meta {
+    let _access = crate::data::access(path).ok();
     let mut m = Meta { orientation: 1, ..Default::default() };
     if let Some(r) = Reader::open(path) {
         if let Some(head) = r.read(0, 16) {

@@ -79,7 +79,7 @@ export function ShortcutsDialog() {
   const open = useUI((s) => s.shortcuts)
   return (
     <Dialog open={open} onOpenChange={(o) => useUI.getState().open("shortcuts", o)}>
-      <DialogContent className="max-h-[calc(100vh-4rem)] overflow-y-auto sm:max-w-2xl">
+      <DialogContent className="max-h-dialog overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>Keyboard shortcuts</DialogTitle>
           <DialogDescription>The same keys as Deadlyne for Mac. Press ? anywhere to see this again.</DialogDescription>

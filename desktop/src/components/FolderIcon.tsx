@@ -26,7 +26,7 @@ export function FolderIcon({ kind = "folder", size = 72, selected, dropTarget, d
       height={(size * 64) / 80}
       aria-hidden
       className={cn(
-        "group/folder shrink-0 overflow-visible transition-[opacity,filter] duration-200",
+        "group/folder shrink-0 overflow-visible transition-[opacity,filter] duration-normal",
         dragging && "opacity-40",
         missing && "opacity-55 grayscale",
         className,
@@ -81,7 +81,7 @@ export function FolderIcon({ kind = "folder", size = 72, selected, dropTarget, d
 
       {/* Prints tucked inside */}
       {detailed && !missing && (
-        <g className="transition-transform duration-300 ease-[cubic-bezier(0.2,0,0,1)] group-hover/card:-translate-y-0.5 motion-reduce:transition-none">
+        <g className="transition-transform duration-slow ease-[cubic-bezier(0.2,0,0,1)] group-hover/card:-translate-y-0.5 motion-reduce:transition-none">
           <rect x="15" y="15" width="44" height="30" rx="1.6" fill="#6f665e" transform="rotate(-4 37 30)" />
           <rect x="20" y="14.5" width="44" height="30" rx="1.6" fill={`url(#${id}p)`} transform="rotate(3 42 29)" />
           <rect x="23" y="17.5" width="38" height="20" rx="0.8" fill="#2a2522" opacity="0.85" transform="rotate(3 42 29)" />
@@ -92,7 +92,7 @@ export function FolderIcon({ kind = "folder", size = 72, selected, dropTarget, d
       {!missing && (
         <g
           className={cn(
-            "origin-bottom transition-transform duration-200 ease-[cubic-bezier(0.2,0,0,1)] [transform-box:fill-box] motion-reduce:transition-none",
+            "origin-bottom transition-transform duration-normal ease-[cubic-bezier(0.2,0,0,1)] [transform-box:fill-box] motion-reduce:transition-none",
             "group-hover/card:[transform:skewX(-3deg)_scaleY(0.97)]",
             open && "[transform:skewX(-7deg)_scaleY(0.9)] group-hover/card:[transform:skewX(-7deg)_scaleY(0.9)]",
           )}
@@ -101,7 +101,7 @@ export function FolderIcon({ kind = "folder", size = 72, selected, dropTarget, d
           <path
             d="M4 25a4 4 0 0 1 4-4h64a4 4 0 0 1 4 4l-1.6 29.2A4 4 0 0 1 70.4 58H9.6a4 4 0 0 1-4-3.8Z"
             fill={`url(#${id}a)`}
-            className={cn("transition-opacity duration-200", selected || dropTarget ? "opacity-100" : "opacity-0")}
+            className={cn("transition-opacity duration-normal", selected || dropTarget ? "opacity-100" : "opacity-0")}
           />
           {/* Lit top edge and a faint fold line */}
           <path d="M8.2 21.7H71.8" stroke="#fff" strokeOpacity={selected || dropTarget ? 0.42 : 0.2} strokeWidth="0.9" strokeLinecap="round" />
