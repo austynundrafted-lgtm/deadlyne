@@ -14,6 +14,7 @@ import {
   isWithin,
   parentPath,
   samePath,
+  statsFor,
   useLibrary,
   type LibrarySection,
   type SubFolder,
@@ -90,8 +91,41 @@ export async function transferSelectionHere(destination: string, moveFiles: bool
 
 // MARK: - Opening
 
-export function openShoot(path: string, origin?: LibrarySection) {
+/**
+ * Opens a shoot from the library, Home or the sidebar. One whose folder has gone missing gets a
+ * plain explanation and a way to find it, instead of a file-system error and a trip to another screen.
+ */
+export async function openShoot(path: string, origin?: LibrarySection) {
+  // One message per folder: asking again replaces it, and it goes away once the folder opens.
+  const message = `missing:${path.replace(/[\\/]+$/, "")}`
+  if (await stillMissing(path)) {
+    toast.error(`Can’t find “${folderTitle(path)}”`, {
+      id: message,
+      description: "The folder may have been moved or renamed, or its drive isn’t connected.",
+      duration: 12000,
+      action: {
+        label: "Locate…",
+        // Opening it was the point: carry on once it's found.
+        onClick: async () => {
+          const found = await locateFolder(path)
+          if (found) await useStore.getState().openFolder(found, { origin })
+        },
+      },
+    })
+    return
+  }
+  toast.dismiss(message)
   return useStore.getState().openFolder(path, { origin })
+}
+
+/** True when the library already shows this folder as missing and a fresh look agrees (its drive may be back). */
+async function stillMissing(path: string) {
+  const lib = useLibrary.getState()
+  const known = statsFor(lib.stats, path)
+  if (!known || known.exists) return false
+  await lib.refreshStats([path])
+  const now = statsFor(useLibrary.getState().stats, path)
+  return !!now && !now.exists
 }
 
 /** Opens a shoot and picks up where the review stopped. */
@@ -183,12 +217,13 @@ export async function followMovedFolder(from: string, to: string) {
   await relocateRecentShoots(from, to)
 }
 
-/** For a shoot whose folder was moved or renamed outside Deadlyne: point it at the new place. */
-export async function locateFolder(path: string) {
+/** For a shoot whose folder was moved or renamed outside Deadlyne: point it at the new place. Resolves to where it is now. */
+export async function locateFolder(path: string): Promise<string | null> {
   const picked = await pickFolder(`Where is “${baseName(path)}” now?`)
-  if (!picked) return
+  if (!picked) return null
   await followMovedFolder(path, picked)
   toast.success(`Found “${baseName(picked)}”`, { description: "Its collections and review progress came along." })
+  return picked
 }
 
 export async function resetProgress(path: string) {

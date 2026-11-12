@@ -59,7 +59,7 @@ export function FtpServersDialog() {
                       </ItemDescription>
                     </ItemContent>
                     <ItemActions>
-                      <Button variant="ghost" size="sm">
+                      <Button variant="ghost" size="sm" aria-label={`Edit ${s.name || s.host}`}>
                         Edit
                       </Button>
                     </ItemActions>

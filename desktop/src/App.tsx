@@ -123,7 +123,8 @@ export default function App() {
           <div id="workspace-home" role="tabpanel" aria-labelledby="workspace-tab-home" className="absolute inset-0" hidden={workspace !== "home"}>
             <HomeView />
           </div>
-          <div id="workspace-photos" role="tabpanel" aria-labelledby="workspace-tab-photos" className="absolute inset-0" hidden={workspace !== "photos"}>
+          {/* Focusable from code only: the narrow-window library flyout rests focus here after it opens something. */}
+          <div id="workspace-photos" role="tabpanel" aria-labelledby="workspace-tab-photos" tabIndex={-1} className="absolute inset-0 outline-none" hidden={workspace !== "photos"}>
             <PhotosView />
           </div>
           <div id="workspace-codes" role="tabpanel" aria-labelledby="workspace-tab-codes" className="absolute inset-0" hidden={workspace !== "codes"}>

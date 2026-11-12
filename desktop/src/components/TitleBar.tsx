@@ -52,7 +52,7 @@ export function TitleBar() {
       <img src={logo} alt="" className="pointer-events-none size-6" draggable={false} />
 
       <Tabs value={workspace} onValueChange={(v) => setWorkspace(v as Workspace)}>
-        <TabsList className="h-9 bg-tab-track p-1">
+        <TabsList className="h-9 bg-tab-track p-1" aria-label="Workspaces">
           {WORKSPACES.map(({ value, label, icon: Icon, key }) => (
             <Tooltip key={value}>
               <TooltipTrigger asChild>
@@ -85,9 +85,12 @@ export function TitleBar() {
       {culling && (
         <>
           <PhotoFilters />
-          <ExportButton />
-          <PhotoActions />
-          <CaptionToggle />
+          {/* What you do with the shoot sits together, the way the filters do. */}
+          <div className="flex shrink-0 items-center gap-1">
+            <ExportButton />
+            <PhotoActions />
+            <CaptionToggle />
+          </div>
         </>
       )}
 
@@ -95,9 +98,10 @@ export function TitleBar() {
 
       <Tooltip>
         <TooltipTrigger asChild>
-          <Button variant="ghost" size="sm" onClick={openFolderDialog}>
-            <FolderOpen data-icon="inline-start" />
-            Open
+          <Button variant="ghost" size="sm" className="shrink-0" aria-label="Open a shoot" onClick={openFolderDialog}>
+            <FolderOpen />
+            {/* Beside a contact sheet's controls, a compact window keeps the icon and gives up the word (like Export and Captions). */}
+            <span className={cn(culling && "hidden min-[1280px]:inline")}>Open</span>
           </Button>
         </TooltipTrigger>
         <TooltipContent>
@@ -133,6 +137,8 @@ function PhotoFilters() {
         size="sm"
         value={tagFilter}
         onValueChange={(v) => v && setFilter({ tagFilter: v as typeof tagFilter })}
+        aria-label="Show tagged or untagged photos"
+        className="shrink-0"
       >
         <ToggleGroupItem value="all" className={ACTIVE}>All</ToggleGroupItem>
         <ToggleGroupItem value="tagged" className={ACTIVE}>Tagged</ToggleGroupItem>
@@ -140,13 +146,18 @@ function PhotoFilters() {
       </ToggleGroup>
 
       <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="sm" aria-label="Filter by rating or label">
-            <Filter data-icon="inline-start" />
-            Filter
-            {extra > 0 && <Badge className="h-4 min-w-4 px-1 text-micro">{extra}</Badge>}
-          </Button>
-        </DropdownMenuTrigger>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="sm" className="shrink-0" aria-label={extra > 0 ? `Filter (${extra} active)` : "Filter"}>
+                <Filter />
+                <span className="hidden min-[1280px]:inline">Filter</span>
+                {extra > 0 && <Badge className="h-4 min-w-4 px-1 text-micro">{extra}</Badge>}
+              </Button>
+            </DropdownMenuTrigger>
+          </TooltipTrigger>
+          <TooltipContent>Filter by rating, label, viewed or file type</TooltipContent>
+        </Tooltip>
         <DropdownMenuContent align="end" className="w-48">
           <DropdownMenuLabel>Rating</DropdownMenuLabel>
           <DropdownMenuRadioGroup value={String(minRating)} onValueChange={(v) => setFilter({ minRating: Number(v) })}>

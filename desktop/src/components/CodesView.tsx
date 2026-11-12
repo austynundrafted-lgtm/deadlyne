@@ -352,7 +352,7 @@ function Editor({ list, onRenamed }: { list: CodeList; onRenamed: (fileName: str
                             }
                           }}
                           className={cn(
-                            "h-8 w-full min-w-0 bg-transparent px-3 outline-none focus:bg-accent/60",
+                            "h-8 w-full min-w-0 bg-transparent px-3 text-ellipsis outline-none focus:bg-accent/60",
                             c === 0 && "font-mono font-semibold text-(--workspace-codes)",
                             c === 0 && other && "text-(--workspace-photos)",
                             c === 0 && dup && "text-destructive",
@@ -446,7 +446,7 @@ function HeaderName({ fileName, column, name }: { fileName: string; column: numb
         placeholder={column === 1 ? "Name · default" : "name"}
         onBlur={(e) => e.target.value !== name && setColumnName(fileName, column, e.target.value)}
         onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
-        className="min-w-0 flex-1 bg-transparent font-medium text-foreground/80 outline-none placeholder:text-muted-foreground focus:text-foreground"
+        className="min-w-0 flex-1 bg-transparent font-medium text-ellipsis text-foreground/80 outline-none placeholder:text-muted-foreground focus:text-foreground"
         aria-label={`Name column ${column}`}
       />
     </span>

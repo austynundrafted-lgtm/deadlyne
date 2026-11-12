@@ -414,6 +414,8 @@ export function DocumentsView() {
             <button
               {...common}
               role="listitem"
+              // A list item takes its name from `title` (the path) unless it's given one.
+              aria-label={`${d.name}, ${docDetail(d)}${d.linkId ? ", linked" : ""}`}
               className={cn(
                 "flex min-w-0 flex-col items-center gap-2 rounded-xl px-3 pt-4 pb-3 text-center outline-none transition-[background-color] duration-fast hover:bg-surface-hover focus-visible:ring-2 focus-visible:ring-ring",
                 selected && "bg-accent hover:bg-accent",

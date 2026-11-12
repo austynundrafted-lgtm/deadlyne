@@ -38,6 +38,7 @@ import {
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty"
 import { Kbd } from "@/components/ui/kbd"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 
 export type ViewMode = "grid" | "list"
 type Sort = "name" | "opened" | "progress"
@@ -151,11 +152,16 @@ export function LibraryView({ section }: { section: LibrarySection }) {
         )}
         {section.kind !== "recent" && (
           <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon-sm" aria-label="Sort">
-                <ArrowDownUp />
-              </Button>
-            </DropdownMenuTrigger>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="icon-sm" aria-label="Sort shoots">
+                    <ArrowDownUp />
+                  </Button>
+                </DropdownMenuTrigger>
+              </TooltipTrigger>
+              <TooltipContent>Sort shoots</TooltipContent>
+            </Tooltip>
             <DropdownMenuContent align="end" className="w-48">
               <DropdownMenuLabel>Sort by</DropdownMenuLabel>
               <DropdownMenuRadioGroup
@@ -381,6 +387,8 @@ function GridCard({ item, stats, selected, current, onSelect, onOpen, collection
       {...rest}
       ref={ref}
       role="listitem"
+      // A list item takes its name from `title` (the path) unless it's given one: say what the card shows.
+      aria-label={[item.title, statusLine(item, stats).trim()].filter(Boolean).join(", ")}
       data-card={itemKey(item)}
       data-drop-id={dnd.dropId}
       aria-current={current || undefined}
@@ -489,7 +497,7 @@ function ListRow({ item, stats, selected, current, onSelect, onOpen, collectionI
       <FolderIcon size={24} kind={item.kind} selected={selected || current} dropTarget={dnd.over} missing={missing} />
       <span role="cell" className="flex min-w-0 flex-col">
         <span className={cn("flex min-w-0 items-center gap-1.5 font-medium", missing && "text-muted-foreground")}><span className="truncate">{item.title}</span>{folderLabel && <span className="size-2 shrink-0 rounded-full" style={{ backgroundColor: labelColor(folderLabel) }} role="img" aria-label={`${folderLabel} label`} />}</span>
-        {missing && <span className="truncate text-caption text-(--label-yellow)">Folder not found · right-click to locate it</span>}
+        {missing && <span className="truncate text-caption text-(--label-yellow)">Folder not found · open it to locate it</span>}
       </span>
       <span role="cell" className="text-right text-muted-foreground tabular-nums">
         {item.kind === "collection" ? plural(item.count, "shoot") : stats ? stats.totalPhotos.toLocaleString() : ""}

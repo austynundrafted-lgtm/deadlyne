@@ -300,6 +300,8 @@ export const useStore = create<State>((set, get) => ({
       if (gen !== openGeneration) return
       set({ loading: false })
       toast.error("Couldn’t open that folder", { description: String(e) })
+      // If it has gone missing, the library says so (and offers to locate it) from now on.
+      void useLibrary.getState().refreshStats([path])
     }
   },
 

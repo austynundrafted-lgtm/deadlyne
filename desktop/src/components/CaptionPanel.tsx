@@ -21,6 +21,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 
 export const CAPTION_PANEL_WIDTH = 340
 
@@ -50,9 +51,16 @@ export function CaptionPanel() {
         </div>
         <HelpPopover />
         <JpegModePopover />
-        <Button variant="ghost" size="icon-sm" aria-label={`Hide captions (${mod}I)`} onClick={() => setCaptionPanel(false)}>
-          <X />
-        </Button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button variant="ghost" size="icon-sm" aria-label="Hide captions" onClick={() => setCaptionPanel(false)}>
+              <X />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>
+            Hide captions <Kbd>{mod}I</Kbd>
+          </TooltipContent>
+        </Tooltip>
       </div>
 
       <ScrollArea className="min-h-0 flex-1">
@@ -253,11 +261,16 @@ function HelpPopover() {
   const d = delimiter
   return (
     <Popover>
-      <PopoverTrigger asChild>
-        <Button variant="ghost" size="icon-sm" aria-label="How codes and variables work">
-          <CircleHelp />
-        </Button>
-      </PopoverTrigger>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <PopoverTrigger asChild>
+            <Button variant="ghost" size="icon-sm" aria-label="How codes and variables work">
+              <CircleHelp />
+            </Button>
+          </PopoverTrigger>
+        </TooltipTrigger>
+        <TooltipContent>How codes and variables work</TooltipContent>
+      </Tooltip>
       <PopoverContent align="end" className="w-80 text-sm">
         <p className="font-medium">Codes</p>
         <p className="mt-1 text-muted-foreground">
@@ -279,11 +292,16 @@ function JpegModePopover() {
   const { jpegMode, setJpegMode } = useStore(useShallow((s) => ({ jpegMode: s.jpegMode, setJpegMode: s.setJpegMode })))
   return (
     <Popover>
-      <PopoverTrigger asChild>
-        <Button variant="ghost" size="icon-sm" aria-label="Caption settings">
-          <Settings2 />
-        </Button>
-      </PopoverTrigger>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <PopoverTrigger asChild>
+            <Button variant="ghost" size="icon-sm" aria-label="Caption settings">
+              <Settings2 />
+            </Button>
+          </PopoverTrigger>
+        </TooltipTrigger>
+        <TooltipContent>Caption settings</TooltipContent>
+      </Tooltip>
       <PopoverContent align="end" className="w-72">
         <Field>
           <FieldLabel>Captions in JPG files</FieldLabel>

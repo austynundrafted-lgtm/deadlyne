@@ -6,7 +6,7 @@ import { useShallow } from "zustand/react/shallow"
 import { formatBytes } from "@/lib/api"
 import { mod, plural } from "@/lib/format"
 import { describeServer, SEND_FILES, sendableFiles, useFtp, type SendFiles, type SendJob } from "@/lib/ftp"
-import { CHOICE, cn } from "@/lib/utils"
+import { CHOICE, cn, focusDefaultAction } from "@/lib/utils"
 import { targetPhotos, useStore } from "@/store"
 import { useUI } from "@/ui"
 import { IconSwap } from "@/components/IconSwap"
@@ -55,7 +55,7 @@ export function SendDialog() {
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && close()}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-md" onOpenAutoFocus={focusDefaultAction}>
         <DialogHeader>
           <DialogTitle>Send photos</DialogTitle>
           <DialogDescription>Over FTP, with the captions already inside the files.</DialogDescription>
@@ -69,8 +69,8 @@ export function SendDialog() {
         >
           <FieldGroup className="gap-4">
             <Field>
-              <FieldLabel>Photos</FieldLabel>
-              <ToggleGroup type="single" variant="outline" value={which} onValueChange={(v) => v && setWhich(v as typeof which)} className="w-full">
+              <FieldLabel id="send-photos-label">Photos</FieldLabel>
+              <ToggleGroup type="single" variant="outline" value={which} onValueChange={(v) => v && setWhich(v as typeof which)} className="w-full" aria-labelledby="send-photos-label">
                 <ToggleGroupItem value="tagged" className={cn("flex-1", CHOICE)}>
                   Tagged ({tagged.length.toLocaleString()})
                 </ToggleGroupItem>
@@ -81,8 +81,8 @@ export function SendDialog() {
             </Field>
 
             <Field>
-              <FieldLabel>Files</FieldLabel>
-              <ToggleGroup type="single" variant="outline" value={sendFiles} onValueChange={(v) => v && setSendFiles(v as SendFiles)} className="w-full">
+              <FieldLabel id="send-files-label">Files</FieldLabel>
+              <ToggleGroup type="single" variant="outline" value={sendFiles} onValueChange={(v) => v && setSendFiles(v as SendFiles)} className="w-full" aria-labelledby="send-files-label">
                 {SEND_FILES.map((f) => (
                   <ToggleGroupItem key={f.value} value={f.value} className={cn("flex-1", CHOICE)}>
                     {f.label}
@@ -97,11 +97,11 @@ export function SendDialog() {
             </Field>
 
             <Field>
-              <FieldLabel>To</FieldLabel>
+              <FieldLabel id="send-server-label">To</FieldLabel>
               <div className="flex gap-2">
                 {servers.length ? (
                   <Select value={serverId ?? ""} onValueChange={setServerId}>
-                    <SelectTrigger className="min-w-0 flex-1">
+                    <SelectTrigger className="min-w-0 flex-1" aria-labelledby="send-server-label">
                       <SelectValue placeholder="Choose a server" />
                     </SelectTrigger>
                     <SelectContent>

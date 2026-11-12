@@ -6,13 +6,14 @@ import { useShallow } from "zustand/react/shallow"
 import logo from "@/assets/logo.png"
 import { openFolderDialog } from "@/lib/actions"
 import { OFFLINE_GRACE_DAYS, useAuth } from "@/lib/auth"
-import { removeRecentShoot, resumeShoot } from "@/lib/folders"
+import { locateFolder, openShoot, removeRecentShoot, resumeShoot } from "@/lib/folders"
 import { isIPad, mod, plural, relativeTime } from "@/lib/format"
 import { statsFor, useLibrary } from "@/lib/library"
 import { onRecentShoots, recentShoots, type RecentShoot } from "@/lib/recents"
 import { shootName, shootSubtitle } from "@/lib/shootName"
 import { checkForUpdates } from "@/lib/updates"
 import { isMacAppStore } from "@/lib/distribution"
+import { cn } from "@/lib/utils"
 import { useStore } from "@/store"
 import { useUI } from "@/ui"
 import { FolderIcon } from "@/components/FolderIcon"
@@ -38,7 +39,6 @@ import {
 } from "@/components/ui/dropdown-menu"
 
 export function HomeView() {
-  const openFolder = useStore((s) => s.openFolder)
   const profile = useStore((s) => s.profile)
   const workspace = useStore((s) => s.workspace)
   const { cards, running } = useIngest(useShallow((s) => ({ cards: s.cards, running: s.running })))
@@ -112,7 +112,9 @@ export function HomeView() {
                 const st = statsFor(stats, s.path)
                 const total = st?.totalPhotos ?? s.photos
                 const viewed = st?.totalViewed ?? 0
-                const partial = viewed > 0 && viewed < total
+                const missing = !!st && !st.exists
+                const partial = !missing && viewed > 0 && viewed < total
+                const open = () => void openShoot(s.path, { kind: "recent" })
                 return (
                 <Item
                   key={s.path}
@@ -120,32 +122,50 @@ export function HomeView() {
                   size="sm"
                   role="listitem"
                   className="group cursor-pointer bg-card/40 hover:bg-card hover:shadow-edge-hover"
-                  onClick={() => openFolder(s.path, { origin: { kind: "recent" } })}
+                  onClick={open}
                   title={s.path}
                 >
                   <ItemMedia>
-                    <FolderIcon size={30} missing={st && !st.exists} />
+                    <FolderIcon size={30} missing={missing} />
                   </ItemMedia>
                   <ItemContent className="min-w-0">
                     <ItemTitle
-                      className="w-full truncate rounded-sm"
+                      className={cn("w-full truncate rounded-sm", missing && "text-muted-foreground")}
                       role="button"
                       tabIndex={0}
                       aria-label={`Open ${name.title}`}
                       onKeyDown={(e) => {
                         if (e.key === "Enter" || e.key === " ") {
                           e.preventDefault()
-                          openFolder(s.path, { origin: { kind: "recent" } })
+                          open()
                         }
                       }}
                     >
                       {name.title}
                     </ItemTitle>
-                    <ItemDescription>
-                      {[shootSubtitle(name), plural(total, "photo"), relativeTime(s.openedAt)].filter(Boolean).join(" · ")}
+                    {/* One line, so every row is the same height whatever its actions are. */}
+                    <ItemDescription className="line-clamp-1 text-xs">
+                      {missing ? (
+                        <span className="text-(--label-yellow)">Folder not found</span>
+                      ) : (
+                        [shootSubtitle(name), plural(total, "photo"), relativeTime(s.openedAt)].filter(Boolean).join(" · ")
+                      )}
                     </ItemDescription>
                   </ItemContent>
-                  <ItemActions>
+                  {/* A tight cluster: the row's details keep the room, and stay on one line. */}
+                  <ItemActions className="gap-1">
+                    {missing && (
+                      <Button
+                        variant="secondary"
+                        size="xs"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          void locateFolder(s.path)
+                        }}
+                      >
+                        Locate…
+                      </Button>
+                    )}
                     {partial && (
                       <Button
                         variant="secondary"

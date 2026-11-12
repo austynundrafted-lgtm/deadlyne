@@ -131,7 +131,7 @@ export function names(prefs: IngestPrefs, seq: number) {
 
 export function IngestDialog() {
   const open = useUI((s) => s.ingest)
-  const { cards, prefs, setPrefs, running, progress } = useIngest()
+  const { cards, prefs, setPrefs, running } = useIngest()
   const [source, setSource] = useState<string | null>(null)
   const [customSources, setCustomSources] = useState<string[]>([])
   const [info, setInfo] = useState<SourceInfo | null>(null)
@@ -188,7 +188,24 @@ export function IngestDialog() {
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && close()}>
-      <DialogContent className="max-h-dialog overflow-y-auto sm:max-w-lg">
+      <DialogContent
+        className="max-h-dialog overflow-y-auto sm:max-w-lg"
+        onOpenAutoFocus={(event) => {
+          const job = document.getElementById("ingest-job") as HTMLInputElement | null
+          if (!job) {
+            // Looking in on a running ingest: nothing starts in focus, so a stray Return can't stop it.
+            event.preventDefault()
+            ;(event.target as HTMLElement | null)?.focus()
+            return
+          }
+          // The job name is the one thing that changes every game: start there, ready to be
+          // replaced, and Return starts the ingest. A touch keyboard stays down until it's asked for.
+          if (isIPad) return
+          event.preventDefault()
+          job.focus()
+          job.select()
+        }}
+      >
         <DialogHeader>
           <DialogTitle>Ingest photos</DialogTitle>
           <DialogDescription>Copies a card into a named folder, never overwrites, then opens it for culling.</DialogDescription>
@@ -197,127 +214,135 @@ export function IngestDialog() {
         {running ? (
           <IngestProgressView />
         ) : (
-          <FieldGroup className="gap-4">
-            <WorkflowPresets kind="ingest" current={prefs} onApply={setPrefs} active={open && !running} />
-            <Field>
-              <FieldLabel htmlFor="ingest-source">From</FieldLabel>
-              <Select
-                value={source ?? ""}
-                onValueChange={async (v) => {
-                  if (v !== "__choose") return setSource(v)
-                  const picked = await pickFolder("Choose a card or folder to ingest from")
-                  if (picked) {
-                    setCustomSources((c) => [...new Set([...c, picked])])
-                    setSource(picked)
-                  }
-                }}
-              >
-                <SelectTrigger id="ingest-source" className="w-full">
-                  <SelectValue placeholder="No memory card found" />
-                </SelectTrigger>
-                <SelectContent>
-                  {sources.map((s) => (
-                    <SelectItem key={s} value={s}>
-                      <HardDrive /> {sourceLabel(s)}
-                    </SelectItem>
-                  ))}
-                  {sources.length > 0 && <SelectSeparator />}
-                  <SelectItem value="__choose">Choose a folder…</SelectItem>
-                </SelectContent>
-              </Select>
-              <FieldDescription>
-                {!source ? "Insert a card, or choose a folder." : info ? `${info.camera || "Photos"} · ${plural(info.photos, "photo")} · ${formatBytes(info.bytes)}` : "Counting photos…"}
-              </FieldDescription>
-            </Field>
-
-            <Field>
-              <FieldLabel>To</FieldLabel>
-              <Button
-                variant="outline"
-                className="justify-start font-normal"
-                onClick={async () => {
-                  const picked = await pickFolder("Where should ingested photos go?")
-                  if (picked) setPrefs({ destination: picked })
-                }}
-              >
-                <FolderOpen data-icon="inline-start" />
-                <span className="truncate">{prefs.destination ?? "Choose a destination…"}</span>
-              </Button>
-              {space !== null && (
-                <FieldDescription className={cn(tooBig && "text-destructive")}>
-                  {tooBig ? `Not enough room: ${formatBytes(space)} free, ${formatBytes(info!.bytes)} needed.` : `${formatBytes(space)} free`}
+          <form
+            onSubmit={(e) => {
+              e.preventDefault()
+              start()
+            }}
+          >
+            <FieldGroup className="gap-4">
+              <WorkflowPresets kind="ingest" current={prefs} onApply={setPrefs} active={open && !running} />
+              <Field>
+                <FieldLabel htmlFor="ingest-source">From</FieldLabel>
+                <Select
+                  value={source ?? ""}
+                  onValueChange={async (v) => {
+                    if (v !== "__choose") return setSource(v)
+                    const picked = await pickFolder("Choose a card or folder to ingest from")
+                    if (picked) {
+                      setCustomSources((c) => [...new Set([...c, picked])])
+                      setSource(picked)
+                    }
+                  }}
+                >
+                  <SelectTrigger id="ingest-source" className="w-full">
+                    <SelectValue placeholder="No memory card found" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {sources.map((s) => (
+                      <SelectItem key={s} value={s}>
+                        <HardDrive /> {sourceLabel(s)}
+                      </SelectItem>
+                    ))}
+                    {sources.length > 0 && <SelectSeparator />}
+                    <SelectItem value="__choose">Choose a folder…</SelectItem>
+                  </SelectContent>
+                </Select>
+                <FieldDescription>
+                  {!source ? "Insert a card, or choose a folder." : info ? `${info.camera || "Photos"} · ${plural(info.photos, "photo")} · ${formatBytes(info.bytes)}` : "Counting photos…"}
                 </FieldDescription>
-              )}
-            </Field>
+              </Field>
 
-            <Field>
-              <FieldLabel htmlFor="ingest-job">Job name</FieldLabel>
-              <Input id="ingest-job" value={prefs.job} onChange={(e) => setPrefs({ job: e.target.value })} placeholder="e.g. Fairborn-vs-Tecumseh" />
-              <FieldDescription className="text-xs">
-                <span className="font-mono">→ {example.folder}/{example.file}.CR3</span>
-                {prefs.folderPattern.includes("{date}") && " · dated by each photo’s capture day"}
-              </FieldDescription>
-            </Field>
-
-            <Collapsible className="flex flex-col gap-3">
-              <CollapsibleTrigger className="group flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground">
-                Naming and options <ChevronDown className="size-3.5 transition-transform group-data-[state=open]:rotate-180" />
-              </CollapsibleTrigger>
-              <CollapsibleContent className="flex flex-col gap-3">
-                <Field>
-                  <FieldLabel htmlFor="ingest-folder">Folder name</FieldLabel>
-                  <Input id="ingest-folder" value={prefs.folderPattern} onChange={(e) => setPrefs({ folderPattern: e.target.value })} />
-                </Field>
-                <Field orientation="horizontal" className="items-center">
-                  <Switch id="ingest-rename" checked={prefs.renameOn} onCheckedChange={(v) => setPrefs({ renameOn: v })} />
-                  <FieldLabel htmlFor="ingest-rename" className="w-auto">Rename files</FieldLabel>
-                  <Input disabled={!prefs.renameOn} value={prefs.renamePattern} onChange={(e) => setPrefs({ renamePattern: e.target.value })} className="flex-1" />
-                  <Input
-                    disabled={!prefs.renameOn}
-                    type="number"
-                    min={0}
-                    value={firstSeq}
-                    onChange={(e) => setFirstSeq(Math.max(0, Number(e.target.value) || 0))}
-                    className="w-20"
-                    aria-label="First sequence number"
-                  />
-                </Field>
-                <FieldDescription className="text-xs">
-                  Tokens: {"{job} {date} {year} {month} {day} {time} {seq} {original} {camera}"}
-                </FieldDescription>
-                <Field orientation="horizontal">
-                  <Switch id="ingest-skip" checked={prefs.skipExisting} onCheckedChange={(v) => setPrefs({ skipExisting: v })} />
-                  <FieldLabel htmlFor="ingest-skip">Skip photos already ingested</FieldLabel>
-                </Field>
-                {/* iPadOS ejects cards from Files, not from apps. */}
-                {!isIPad && (
-                  <Field orientation="horizontal">
-                    <Switch id="ingest-eject" checked={prefs.eject} onCheckedChange={(v) => setPrefs({ eject: v })} />
-                    <FieldLabel htmlFor="ingest-eject">Eject the card when done</FieldLabel>
-                  </Field>
+              <Field>
+                <FieldLabel>To</FieldLabel>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="justify-start font-normal"
+                  onClick={async () => {
+                    const picked = await pickFolder("Where should ingested photos go?")
+                    if (picked) setPrefs({ destination: picked })
+                  }}
+                >
+                  <FolderOpen data-icon="inline-start" />
+                  <span className="truncate">{prefs.destination ?? "Choose a destination…"}</span>
+                </Button>
+                {space !== null && (
+                  <FieldDescription className={cn(tooBig && "text-destructive")}>
+                    {tooBig ? `Not enough room: ${formatBytes(space)} free, ${formatBytes(info!.bytes)} needed.` : `${formatBytes(space)} free`}
+                  </FieldDescription>
                 )}
-              </CollapsibleContent>
-            </Collapsible>
-          </FieldGroup>
+              </Field>
+
+              <Field>
+                <FieldLabel htmlFor="ingest-job">Job name</FieldLabel>
+                <Input id="ingest-job" value={prefs.job} onChange={(e) => setPrefs({ job: e.target.value })} placeholder="e.g. Fairborn-vs-Tecumseh" />
+                <FieldDescription className="text-xs">
+                  <span className="font-mono">→ {example.folder}/{example.file}.CR3</span>
+                  {prefs.folderPattern.includes("{date}") && " · dated by each photo’s capture day"}
+                </FieldDescription>
+              </Field>
+
+              <Collapsible className="flex flex-col gap-3">
+                <CollapsibleTrigger className="group flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground">
+                  Naming and options <ChevronDown className="size-3.5 transition-transform group-data-[state=open]:rotate-180" />
+                </CollapsibleTrigger>
+                <CollapsibleContent className="flex flex-col gap-3">
+                  <Field>
+                    <FieldLabel htmlFor="ingest-folder">Folder name</FieldLabel>
+                    <Input id="ingest-folder" value={prefs.folderPattern} onChange={(e) => setPrefs({ folderPattern: e.target.value })} />
+                  </Field>
+                  <Field orientation="horizontal" className="items-center">
+                    <Switch id="ingest-rename" checked={prefs.renameOn} onCheckedChange={(v) => setPrefs({ renameOn: v })} />
+                    {/* The label keeps its own width, so the pattern gets the rest of the row. */}
+                    <FieldLabel htmlFor="ingest-rename" className="w-auto !flex-none">Rename files</FieldLabel>
+                    <Input disabled={!prefs.renameOn} value={prefs.renamePattern} onChange={(e) => setPrefs({ renamePattern: e.target.value })} className="min-w-0 flex-1" aria-label="Rename pattern" />
+                    <Input
+                      disabled={!prefs.renameOn}
+                      type="number"
+                      min={0}
+                      value={firstSeq}
+                      onChange={(e) => setFirstSeq(Math.max(0, Number(e.target.value) || 0))}
+                      className="w-20"
+                      aria-label="First sequence number"
+                    />
+                  </Field>
+                  <FieldDescription className="text-xs">
+                    Tokens: {"{job} {date} {year} {month} {day} {time} {seq} {original} {camera}"}
+                  </FieldDescription>
+                  <Field orientation="horizontal">
+                    <Switch id="ingest-skip" checked={prefs.skipExisting} onCheckedChange={(v) => setPrefs({ skipExisting: v })} />
+                    <FieldLabel htmlFor="ingest-skip">Skip photos already ingested</FieldLabel>
+                  </Field>
+                  {/* iPadOS ejects cards from Files, not from apps. */}
+                  {!isIPad && (
+                    <Field orientation="horizontal">
+                      <Switch id="ingest-eject" checked={prefs.eject} onCheckedChange={(v) => setPrefs({ eject: v })} />
+                      <FieldLabel htmlFor="ingest-eject">Eject the card when done</FieldLabel>
+                    </Field>
+                  )}
+                </CollapsibleContent>
+              </Collapsible>
+            </FieldGroup>
+
+            <DialogFooter className="mt-6">
+              <Button type="button" variant="outline" onClick={close}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={!source || !prefs.destination || !!tooBig}>
+                Ingest{info ? ` ${plural(info.photos, "photo")}` : ""}
+              </Button>
+            </DialogFooter>
+          </form>
         )}
 
-        <DialogFooter>
-          {running ? (
+        {running && (
+          <DialogFooter>
             <Button variant="outline" onClick={() => cancelIngest()}>
               Stop
             </Button>
-          ) : (
-            <>
-              <Button variant="outline" onClick={close}>
-                Cancel
-              </Button>
-              <Button disabled={!source || !prefs.destination || !!tooBig} onClick={start}>
-                Ingest{info ? ` ${plural(info.photos, "photo")}` : ""}
-              </Button>
-            </>
-          )}
-        </DialogFooter>
-        {running && !progress && <p className="text-xs text-muted-foreground">Scanning the card…</p>}
+          </DialogFooter>
+        )}
       </DialogContent>
     </Dialog>
   )
@@ -325,7 +350,15 @@ export function IngestDialog() {
 
 export function IngestProgressView({ compact }: { compact?: boolean }) {
   const { progress, started } = useIngest()
-  if (!progress) return <Progress aria-label="Ingest progress" value={null} />
+  // Before the first file there is nothing to count: say what it's doing beside the moving bar.
+  if (!progress) {
+    return (
+      <div className="flex flex-col gap-2">
+        <Progress aria-label="Ingest progress" value={null} />
+        <p className={cn("text-muted-foreground", compact ? "text-xs" : "text-sm")}>Scanning the card…</p>
+      </div>
+    )
+  }
   const fraction = progress.bytesTotal ? progress.bytesDone / progress.bytesTotal : 0
   const elapsed = started ? (Date.now() - started) / 1000 : 0
   const remaining = fraction > 0.02 && elapsed > 2 ? Math.round((elapsed / fraction) * (1 - fraction)) : null

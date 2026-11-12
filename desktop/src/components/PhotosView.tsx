@@ -373,7 +373,7 @@ const PhotoCard = memo(function PhotoCard({ photo: p, width, selected, focused, 
           <Check className={cn(!p.tagged && "text-muted-foreground")} />
         </Button>
         {p.label && <span className="size-2.5 shrink-0 rounded-full" style={{ background: labelColor(p.label) }} role="img" aria-label={`${p.label} label`} />}
-        <span className="min-w-0 flex-1 truncate font-medium text-foreground/90">{p.name}</span>
+        <span className="min-w-0 flex-1 truncate font-medium text-foreground/90" title={p.name}>{p.name}</span>
         {(p.captions.caption || p.captions.headline) && (
           <MessageSquareText className="size-3.5 shrink-0 text-muted-foreground" aria-label="Has a caption" />
         )}
@@ -410,13 +410,13 @@ function Stars({ rating, onRate }: { rating: number; onRate: (n: number) => void
           variant="ghost"
           size="icon-xs"
           static
-          className="size-4 rounded-none p-0 hover:bg-transparent"
+          className="relative size-4 rounded-none p-0 after:absolute after:inset-x-0 after:-inset-y-1.5 hover:bg-transparent"
           aria-label={`${n} star${n > 1 ? "s" : ""}`}
           aria-pressed={rating === n}
           onClick={() => onRate(n)}
         >
           <Star
-            className={cn("size-3", n <= rating ? "fill-(--workspace-photos) text-(--workspace-photos)" : "text-muted-foreground")}
+            className={cn("size-3", n <= rating ? "fill-(--workspace-photos) text-(--workspace-photos)" : "text-muted-foreground group-hover/button:text-foreground")}
           />
         </Button>
       ))}

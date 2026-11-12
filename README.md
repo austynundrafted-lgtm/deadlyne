@@ -24,6 +24,8 @@ The desktop loupe keeps portrait and mirrored images upright when moving between
 The desktop interface uses shared dark-theme tokens for readable action colors and keyboard focus. Dialogs scroll in shorter windows, and the Codes toolbar wraps in smaller Mac windows. See the [UI audit](desktop/UI_AUDIT.md) for verification and remaining styles.
 Its controls and shortcut hints stay on one line as the photo pane narrows. Nearby full-size images are decoded ahead in a small cache to reduce the wait between frames.
 
+The desktop usability pass of November 11, 2026 makes Return run the default action in the Ingest, Export, Send and Add files dialogs, opens the full library sidebar over the photos in narrow windows (⌥⌘S), explains a missing shoot folder and offers to locate it, and keeps every title-bar control on screen at the smallest window size. Details and what was verified are in the [UI audit](desktop/UI_AUDIT.md).
+
 ## Why Photo Mechanic (and Deadlyne) are fast
 
 Photo Mechanic doesn't use a secret RAW decoder. It **skips RAW decoding completely.**

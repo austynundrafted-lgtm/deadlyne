@@ -178,6 +178,8 @@
 @utility duration-slow { transition-duration: var(--duration-slow); }
 @utility max-h-dialog { max-height: calc(100dvh - 2 * var(--spacing-dialog-gutter)); }
 @utility max-w-dialog { max-width: calc(100vw - 2 * var(--spacing-dialog-gutter)); }
+/* The narrow-window library flyout hangs just under the title bar and stops just short of the window's bottom edge. */
+@utility h-flyout { height: calc(100dvh - var(--spacing-titlebar) - env(safe-area-inset-top) - env(safe-area-inset-bottom) - var(--spacing) * 3); }
 
 /* Preserve state feedback, including indeterminate work, without animated motion. */
 @media (prefers-reduced-motion: reduce) {

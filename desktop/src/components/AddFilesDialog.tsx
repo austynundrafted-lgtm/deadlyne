@@ -5,7 +5,7 @@ import { Copy, FileText, Link2 } from "lucide-react"
 import { addFiles } from "@/lib/folders"
 import { plural } from "@/lib/format"
 import { baseName, folderTitle } from "@/lib/library"
-import { cn } from "@/lib/utils"
+import { cn, focusDefaultAction } from "@/lib/utils"
 import { useUI } from "@/ui"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -38,11 +38,20 @@ export function AddFilesDialog() {
     setMode("copy")
   }, [pending])
   const close = () => useUI.setState({ addFiles: null })
+  const add = async () => {
+    if (!pending || busy) return
+    setBusy(true)
+    try {
+      await addFiles(pending.folder, pending.paths, mode)
+    } finally {
+      close()
+    }
+  }
 
   return (
     <Dialog open={!!pending} onOpenChange={(o) => !o && !busy && close()}>
       {pending && (
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-md" onOpenAutoFocus={focusDefaultAction}>
           <DialogHeader>
             <DialogTitle>Add {plural(pending.paths.length, "file")} to {folderTitle(pending.folder)}</DialogTitle>
             <DialogDescription>They appear under Documents, apart from the photos.</DialogDescription>
@@ -57,46 +66,59 @@ export function AddFilesDialog() {
             ))}
           </ul>
 
-          <div role="radiogroup" aria-label="How to add them" className="flex flex-col gap-2">
-            {MODES.map(({ value, icon: Icon, title, body }) => (
-              <button
-                key={value}
-                type="button"
-                role="radio"
-                aria-checked={mode === value}
-                onClick={() => setMode(value)}
-                className={cn(
-                  "flex items-start gap-3 rounded-lg p-3 text-left shadow-edge outline-none transition-[background-color,box-shadow] duration-fast hover:shadow-edge-hover focus-visible:ring-3 focus-visible:ring-ring",
-                  mode === value ? "bg-primary/12" : "bg-card/40 hover:bg-card",
-                )}
-              >
-                <Icon className={cn("mt-0.5 size-4 shrink-0", mode === value ? "text-primary-readable" : "text-muted-foreground")} />
-                <span className="flex flex-col gap-0.5">
-                  <span className="text-sm font-medium">{title}</span>
-                  <span className="text-xs text-muted-foreground">{body}</span>
-                </span>
-              </button>
-            ))}
-          </div>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={close} disabled={busy}>
-              Cancel
-            </Button>
-            <Button
-              disabled={busy}
-              onClick={async () => {
-                setBusy(true)
-                try {
-                  await addFiles(pending.folder, pending.paths, mode)
-                } finally {
-                  close()
-                }
+          {/* Return adds the files the chosen way; the arrows change the choice, as in any radio group. */}
+          <form
+            className="grid gap-4"
+            onSubmit={(e) => {
+              e.preventDefault()
+              void add()
+            }}
+          >
+            <div
+              role="radiogroup"
+              aria-label="How to add them"
+              className="flex flex-col gap-2"
+              onKeyDown={(e) => {
+                const step = e.key === "ArrowDown" || e.key === "ArrowRight" ? 1 : e.key === "ArrowUp" || e.key === "ArrowLeft" ? -1 : 0
+                if (!step) return
+                e.preventDefault()
+                const next = MODES[(MODES.findIndex((m) => m.value === mode) + step + MODES.length) % MODES.length].value
+                setMode(next)
+                e.currentTarget.querySelector<HTMLElement>(`[data-mode="${next}"]`)?.focus()
               }}
             >
-              {mode === "copy" ? "Copy" : "Link"} {plural(pending.paths.length, "file")}
-            </Button>
-          </DialogFooter>
+              {MODES.map(({ value, icon: Icon, title, body }) => (
+                <button
+                  key={value}
+                  type="button"
+                  role="radio"
+                  aria-checked={mode === value}
+                  tabIndex={mode === value ? 0 : -1}
+                  data-mode={value}
+                  onClick={() => setMode(value)}
+                  className={cn(
+                    "flex items-start gap-3 rounded-lg p-3 text-left shadow-edge outline-none transition-[background-color,box-shadow] duration-fast hover:shadow-edge-hover focus-visible:ring-3 focus-visible:ring-ring",
+                    mode === value ? "bg-primary/12" : "bg-card/40 hover:bg-card",
+                  )}
+                >
+                  <Icon className={cn("mt-0.5 size-4 shrink-0", mode === value ? "text-primary-readable" : "text-muted-foreground")} />
+                  <span className="flex flex-col gap-0.5">
+                    <span className="text-sm font-medium">{title}</span>
+                    <span className="text-xs text-muted-foreground">{body}</span>
+                  </span>
+                </button>
+              ))}
+            </div>
+
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={close} disabled={busy}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={busy}>
+                {mode === "copy" ? "Copy" : "Link"} {plural(pending.paths.length, "file")}
+              </Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       )}
     </Dialog>
