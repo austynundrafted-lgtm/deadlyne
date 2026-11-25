@@ -38,6 +38,7 @@ interface ViewingState {
 }
 
 let pending: { folder: string; keys: Set<string>; last: string | null } | null = null
+let loadGeneration = 0
 let flushTimer: ReturnType<typeof setTimeout> | undefined
 
 export async function flushViewing() {
@@ -74,16 +75,25 @@ export const useViewing = create<ViewingState>((set, get) => ({
   version: 0,
 
   load: async (folder) => {
-    await flushViewing()
-    set({ folder, viewed: new Set(), last: null, ready: false, version: get().version + 1 })
+    const gen = ++loadGeneration
+    const flushing = flushViewing()
+    const previous = get()
+    set({
+      folder,
+      viewed: previous.folder === folder ? previous.viewed : new Set(),
+      last: previous.folder === folder ? previous.last : null,
+      ready: false, version: previous.version + 1,
+    })
     try {
+      await flushing
+      if (gen !== loadGeneration) return
       const r = await invoke<{ viewed: string[]; last: string | null }>("viewing_load", { folder })
-      if (get().folder !== folder) return
+      if (gen !== loadGeneration) return
       // Keep anything marked while the record was loading.
       const viewed = new Set([...r.viewed, ...get().viewed])
       set({ viewed, last: get().last ?? r.last, ready: true, version: get().version + 1 })
     } catch {
-      set({ ready: true })
+      if (gen === loadGeneration) set({ ready: true })
     }
   },
 
@@ -242,7 +252,7 @@ export function initViewing() {
 export function continueReviewing() {
   const s = useStore.getState()
   const v = useViewing.getState()
-  if (!s.folder || !s.photos.length) return
+  if (!s.folder || !s.photos.length || v.folder !== s.folder || !v.ready) return
   const byKey = (k: string | null) => (k ? s.photos.find((p) => photoKey(p) === k) : undefined)
   let target = byKey(v.last)
   if (!target) {

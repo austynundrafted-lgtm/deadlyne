@@ -86,6 +86,12 @@ export const commands: Record<string, () => void> = {
   },
   "copy-tagged": () => void copyOrMove("tagged", false),
   "move-tagged": () => void copyOrMove("tagged", true),
+  rename: () => {
+    const { s, inFolder } = where()
+    if (inFolder && s.photos.length) useUI.getState().openRename(s.selected.size > 1 ? "selected" : s.photos.some((p) => p.tagged) ? "tagged" : "selected")
+  },
+  "rotate-left": onSheet((s) => void s.rotate(false)),
+  "rotate-right": onSheet((s) => void s.rotate(true)),
   reveal: onSheet(revealTarget),
   "open-default": onSheet(openTargets),
   trash: onSheet(askTrash),

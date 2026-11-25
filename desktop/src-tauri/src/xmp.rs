@@ -20,13 +20,45 @@ pub struct Culling {
     pub rating: u8,
     pub label: Option<String>,
     pub tagged: bool,
+    /// Protected on the camera (the card's read-only flag). Never written to the sidecar: it
+    /// comes from the file. A locked photo counts as tagged until it is explicitly untagged.
+    #[serde(default)]
+    pub locked: bool,
 }
 
-/// Culling and captions from one read of a sidecar.
-pub fn read_all(sidecar: &Path) -> Option<(Culling, Captions)> {
+/// Culling and captions from one read of a sidecar, plus whether the tag was set explicitly
+/// (a locked photo untagged in Deadlyne stays untagged) and Lightroom's sidecar orientation.
+pub struct Sidecar {
+    pub culling: Culling,
+    pub captions: Captions,
+    pub tag: Option<bool>,
+    pub orientation: Option<u32>,
+}
+
+pub fn read_all(sidecar: &Path) -> Option<Sidecar> {
     let _access = crate::data::access(sidecar).ok()?;
     let text = std::fs::read_to_string(sidecar).ok()?;
-    Some((read_culling(&text), read_captions(&text)))
+    Some(Sidecar { culling: read_culling(&text), captions: read_captions(&text), tag: explicit_tag(&text), orientation: orientation(&text) })
+}
+
+/// `tiff:Orientation` in a sidecar: how Lightroom and Camera Raw rotate a RAW without touching it.
+pub fn orientation(text: &str) -> Option<u32> {
+    value("tiff:Orientation", text).and_then(|o| o.trim().parse::<u32>().ok()).filter(|o| (1..=8).contains(o))
+}
+
+/// The orientation a RAW's sidecar sets, if any.
+pub fn sidecar_orientation(sidecar: &Path) -> Option<u32> {
+    let _access = crate::data::access(sidecar).ok()?;
+    orientation(&std::fs::read_to_string(sidecar).ok()?)
+}
+
+/// The tag as the sidecar records it: `None` when it says nothing either way.
+pub fn explicit_tag(text: &str) -> Option<bool> {
+    // "lensdesk:Tagged" was written before the app was renamed to Deadlyne.
+    value("deadlyne:Tagged", text)
+        .or_else(|| value("lensdesk:Tagged", text))
+        .or_else(|| value("photomechanic:Tagged", text))
+        .map(|t| t.trim().eq_ignore_ascii_case("true"))
 }
 
 pub fn read_culling(text: &str) -> Culling {
@@ -35,13 +67,7 @@ pub fn read_culling(text: &str) -> Culling {
         v.rating = n.clamp(0, 5) as u8;
     }
     v.label = value("xmp:Label", text).filter(|l| LABELS.contains(&l.as_str()));
-    // "lensdesk:Tagged" was written before the app was renamed to Deadlyne.
-    if let Some(t) = value("deadlyne:Tagged", text)
-        .or_else(|| value("lensdesk:Tagged", text))
-        .or_else(|| value("photomechanic:Tagged", text))
-    {
-        v.tagged = t.eq_ignore_ascii_case("true");
-    }
+    v.tagged = explicit_tag(text).unwrap_or(false);
     v
 }
 
@@ -78,7 +104,8 @@ pub fn update(sidecar: &Path, ext: &str, culling: Option<&Culling>, captions: Op
     let mut text = match std::fs::read_to_string(sidecar) {
         Ok(t) => t,
         Err(_) => {
-            let culling_empty = culling.is_none_or(|v| v.rating == 0 && v.label.is_none() && !v.tagged);
+            // Untagging a locked photo has to be written down, or the lock would tag it again.
+            let culling_empty = culling.is_none_or(|v| v.rating == 0 && v.label.is_none() && !v.tagged && !v.locked);
             let captions_empty = captions.is_none_or(|(c, fields)| fields.iter().all(|f| c.get(*f).is_empty()));
             if culling_empty && captions_empty {
                 return Ok(());
@@ -90,7 +117,8 @@ pub fn update(sidecar: &Path, ext: &str, culling: Option<&Culling>, captions: Op
         let rating = if v.rating == 0 && !text.contains("xmp:Rating") { None } else { Some(v.rating.to_string()) };
         text = set("xmp:Rating", rating.as_deref(), &text);
         text = set("xmp:Label", v.label.as_deref(), &text);
-        text = set("deadlyne:Tagged", v.tagged.then_some("True"), &text);
+        let tag = if v.tagged { Some("True") } else if v.locked { Some("False") } else { None };
+        text = set("deadlyne:Tagged", tag, &text);
         if text.contains("deadlyne:Tagged") && !text.contains("xmlns:deadlyne") {
             text = insert_attribute(&format!("xmlns:deadlyne=\"{DEADLYNE_NS}\""), &text);
         }
@@ -104,13 +132,33 @@ pub fn update(sidecar: &Path, ext: &str, culling: Option<&Culling>, captions: Op
     write_atomic(sidecar, text.as_bytes())
 }
 
-/// Writes beside the original, then swaps, so a crash never leaves half a file.
+/// Records a RAW's display orientation the way Lightroom does, leaving the RAW untouched.
+pub fn set_orientation(sidecar: &Path, ext: &str, orientation: u32) -> std::io::Result<()> {
+    let _access = crate::data::access(sidecar)?;
+    let mut text = std::fs::read_to_string(sidecar).unwrap_or_else(|_| template(ext));
+    text = set("tiff:Orientation", Some(&orientation.to_string()), &text);
+    if !text.contains("xmlns:tiff=") {
+        text = insert_attribute("xmlns:tiff=\"http://ns.adobe.com/tiff/1.0/\"", &text);
+    }
+    write_atomic(sidecar, text.as_bytes())
+}
+
+/// Writes beside the original, then swaps, so a crash never leaves half a file. The new file
+/// keeps the original's permissions, so a photo locked on the camera (read-only) stays locked
+/// after a caption or rotation is written into it.
 pub fn write_atomic(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
     let _access = crate::data::access(path)?;
     let name = path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
     let tmp = path.with_file_name(format!(".{name}.deadlyne-tmp"));
-    std::fs::write(&tmp, bytes)?;
-    std::fs::rename(&tmp, path).inspect_err(|_| {
+    let permissions = std::fs::metadata(path).ok().map(|m| m.permissions());
+    let swap = || {
+        std::fs::write(&tmp, bytes)?;
+        if let Some(p) = &permissions {
+            std::fs::set_permissions(&tmp, p.clone())?;
+        }
+        std::fs::rename(&tmp, path)
+    };
+    swap().inspect_err(|_| {
         let _ = std::fs::remove_file(&tmp);
     })
 }
@@ -368,9 +416,67 @@ mod tests {
         text = set("deadlyne:Tagged", Some("True"), &text);
         assert!(text.contains("crs:Exposure2012=\"+0.50\""));
         let v = read_culling(&text);
-        assert_eq!(v, Culling { rating: 4, label: Some("Red".into()), tagged: true });
+        assert_eq!(v, Culling { rating: 4, label: Some("Red".into()), tagged: true, locked: false });
         let cleared = read_culling(&set("deadlyne:Tagged", None, &set("xmp:Label", None, &text)));
-        assert_eq!(cleared, Culling { rating: 4, label: None, tagged: false });
+        assert_eq!(cleared, Culling { rating: 4, label: None, tagged: false, locked: false });
+    }
+
+    #[test]
+    fn untagging_a_locked_photo_is_written_down() {
+        let dir = std::env::temp_dir().join(format!("deadlyne-xmp-lock-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let sidecar = dir.join("A.xmp");
+        let _ = std::fs::remove_file(&sidecar);
+        // A locked photo untagged in Deadlyne gets an explicit "False", even with no other data.
+        update(&sidecar, "JPG", Some(&Culling { locked: true, ..Default::default() }), None).unwrap();
+        let text = std::fs::read_to_string(&sidecar).unwrap();
+        assert_eq!(explicit_tag(&text), Some(false));
+        // Tagging it again writes "True"; an unlocked photo's untag removes the property.
+        update(&sidecar, "JPG", Some(&Culling { tagged: true, ..Default::default() }), None).unwrap();
+        assert_eq!(explicit_tag(&std::fs::read_to_string(&sidecar).unwrap()), Some(true));
+        update(&sidecar, "JPG", Some(&Culling::default()), None).unwrap();
+        assert_eq!(explicit_tag(&std::fs::read_to_string(&sidecar).unwrap()), None);
+        // An unlocked, untouched photo still never creates a sidecar.
+        let other = dir.join("B.xmp");
+        update(&other, "JPG", Some(&Culling::default()), None).unwrap();
+        assert!(!other.exists());
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn orientation_round_trips_beside_develop_settings() {
+        let lr = "<x:xmpmeta><rdf:RDF><rdf:Description rdf:about=\"\"\n xmlns:crs=\"http://ns.adobe.com/camera-raw-settings/1.0/\"\n crs:Exposure2012=\"+0.50\">\n</rdf:Description></rdf:RDF></x:xmpmeta>";
+        let dir = std::env::temp_dir().join(format!("deadlyne-xmp-orient-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let sidecar = dir.join("A.xmp");
+        std::fs::write(&sidecar, lr).unwrap();
+        set_orientation(&sidecar, "CR3", 6).unwrap();
+        set_orientation(&sidecar, "CR3", 3).unwrap();
+        let text = std::fs::read_to_string(&sidecar).unwrap();
+        assert_eq!(orientation(&text), Some(3));
+        assert_eq!(text.matches("tiff:Orientation=").count(), 1);
+        assert_eq!(text.matches("xmlns:tiff=").count(), 1);
+        assert!(text.contains("crs:Exposure2012=\"+0.50\""));
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn rewriting_a_locked_file_keeps_it_read_only() {
+        let dir = std::env::temp_dir().join(format!("deadlyne-xmp-perm-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let photo = dir.join("A.JPG");
+        std::fs::write(&photo, b"before").unwrap();
+        let mut locked = std::fs::metadata(&photo).unwrap().permissions();
+        locked.set_readonly(true);
+        std::fs::set_permissions(&photo, locked).unwrap();
+        write_atomic(&photo, b"after").unwrap();
+        assert_eq!(std::fs::read(&photo).unwrap(), b"after");
+        assert!(crate::fileops::is_locked(&photo));
+        let mut open = std::fs::metadata(&photo).unwrap().permissions();
+        #[allow(clippy::permissions_set_readonly_false)]
+        open.set_readonly(false);
+        std::fs::set_permissions(&photo, open).unwrap();
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]
@@ -431,7 +537,7 @@ mod tests {
         c.caption = "Jordan Sample (10) & friends".into();
         c.keywords = vec!["Fairborn".into(), "Football".into()];
         c.creator = "Austyn McFadden".into();
-        update(path, "CR3", Some(&Culling { rating: 3, label: Some("Green".into()), tagged: true }), Some((&c, &Field::ALL))).unwrap();
+        update(path, "CR3", Some(&Culling { rating: 3, label: Some("Green".into()), tagged: true, locked: false }), Some((&c, &Field::ALL))).unwrap();
         let after = std::fs::read_to_string(path).unwrap();
         let crs = |t: &str| t.split(|c: char| c.is_whitespace() || c == '>').filter(|w| w.starts_with("crs:") || w.starts_with("<crs:")).map(String::from).collect::<Vec<String>>();
         assert_eq!(crs(&before), crs(&after), "develop settings must be untouched");

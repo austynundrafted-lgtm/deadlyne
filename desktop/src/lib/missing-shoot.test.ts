@@ -96,3 +96,32 @@ describe("opening a shoot whose folder has gone missing", () => {
     expect(scanned()).toEqual([])
   })
 })
+
+it("shows photos before slow folder contents and saved viewing records arrive", async () => {
+  const folder = "/shoots/Busy"
+  const path = folder + "/test.JPG"
+  const scan = { folder, photos: [{ id: path, name: "test.JPG", raw: null, jpeg: path, sidecar: folder + "/test.xmp", kind: "JPG" }] }
+  const original = f.invoke.getMockImplementation()!
+  let finishContents!: (value: { subfolders: never[]; documents: never[] }) => void
+  let finishViewing!: (value: { viewed: string[]; last: string }) => void
+  const contents = new Promise((resolve) => { finishContents = resolve })
+  const viewing = new Promise((resolve) => { finishViewing = resolve })
+  f.invoke.mockImplementation((command, args) => {
+    if (command === "scan_folder") return Promise.resolve(scan)
+    if (command === "folder_contents") return contents
+    if (command === "viewing_load") return viewing
+    return original(command, args)
+  })
+
+  const opening = openShoot(folder)
+  try {
+    await vi.waitFor(() => expect(useStore.getState()).toMatchObject({ folder, loading: false, focus: path }))
+    useStore.getState().setUnviewedOnly(true)
+    expect(useStore.getState().unviewedSnapshot).toBeNull()
+  } finally {
+    finishContents({ subfolders: [], documents: [] })
+    finishViewing({ viewed: ["test"], last: "test" })
+    await opening
+  }
+  expect(useStore.getState().unviewedSnapshot).toEqual(new Set(["test"]))
+})

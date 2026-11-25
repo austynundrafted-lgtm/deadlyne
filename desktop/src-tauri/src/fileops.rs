@@ -5,7 +5,7 @@
 use crate::jobs;
 use serde::{Deserialize, Serialize};
 use std::io::{self, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use tauri::{AppHandle, Emitter};
 
 #[derive(Deserialize)]
@@ -34,6 +34,24 @@ fn optional(p: &Path) -> bool {
     p.extension().is_some_and(|e| e.eq_ignore_ascii_case("xmp"))
 }
 
+/// Protected on the camera. Cameras set the card file's read-only attribute when you lock a
+/// photo; the Mac shows it as the Finder's Locked flag (`uchg`) or as no write permission, and
+/// Windows as the read-only attribute. A copy keeps the permission (see `copy_new`).
+pub fn is_locked(path: &Path) -> bool {
+    let Ok(m) = std::fs::metadata(path) else { return false };
+    const UF_IMMUTABLE: u32 = 0x2;
+    #[cfg(target_os = "macos")]
+    if std::os::macos::fs::MetadataExt::st_flags(&m) & UF_IMMUTABLE != 0 {
+        return true;
+    }
+    #[cfg(target_os = "ios")]
+    if std::os::ios::fs::MetadataExt::st_flags(&m) & UF_IMMUTABLE != 0 {
+        return true;
+    }
+    let _ = UF_IMMUTABLE;
+    m.is_file() && m.permissions().readonly()
+}
+
 /// Creates only a new destination. A failed write closes and removes our partial file so a
 /// retry (especially ingest's same-size skip) can never mistake it for a completed copy.
 pub(crate) fn write_new<T>(dest: &Path, write: impl FnOnce(&mut std::fs::File) -> io::Result<T>) -> io::Result<T> {
@@ -53,6 +71,11 @@ pub(crate) fn copy_new(src: &Path, dest: &Path) -> io::Result<u64> {
     let mut input = std::fs::File::open(src)?;
     let metadata = input.metadata()?;
     write_new(dest, |output| {
+        // On Apple platforms io::copy uses a small userspace buffer for plain files.
+        // Larger sequential reads reduce system calls for multi-megabyte camera originals.
+        #[cfg(any(target_os = "macos", target_os = "ios"))]
+        let copied = io::copy(&mut io::BufReader::with_capacity(256 << 10, &mut input), output)?;
+        #[cfg(not(any(target_os = "macos", target_os = "ios")))]
         let copied = io::copy(&mut input, output)?;
         if copied != metadata.len() || input.metadata()?.len() != metadata.len() {
             return Err(io::Error::other("the copy didn’t match the original"));
@@ -143,6 +166,118 @@ pub async fn transfer_photos(app: AppHandle, items: Vec<Item>, destination: Stri
             if n % 10 == 9 || n + 1 == total {
                 let _ = app.emit("transfer-progress", (n + 1, total));
             }
+        }
+        out
+    })
+    .await
+}
+
+#[derive(Deserialize)]
+pub struct RenameItem {
+    pub id: String,
+    /// Every file the photo has (RAW, JPG, sidecar); missing sidecars are fine.
+    pub files: Vec<String>,
+    /// The new file name without extension.
+    pub stem: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Renamed {
+    pub id: String,
+    /// The stem actually used: `stem`, or `stem-1`, `stem-2`… when the name was taken.
+    pub stem: String,
+    /// Old path → new path for each file that was renamed.
+    pub files: Vec<(String, String)>,
+}
+
+#[derive(Serialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct RenameOutcome {
+    pub renamed: Vec<Renamed>,
+    pub errors: Vec<String>,
+}
+
+/// A name the file system accepts: no path separators or colons, no leading dot.
+fn clean_stem(stem: &str) -> String {
+    stem.replace(['/', '\\', ':'], "-").trim().trim_start_matches('.').trim().to_string()
+}
+
+fn stem_of(p: &Path) -> String {
+    p.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default()
+}
+
+/// Renames one photo's files to `stem` in their folder, all with the same new name. A name
+/// already taken gets the first free `-1`, `-2`… for the whole group, never an overwrite. If
+/// one file can't be renamed, the ones already renamed are put back.
+pub(crate) fn rename_group(files: &[PathBuf], stem: &str) -> io::Result<(String, Vec<(PathBuf, PathBuf)>)> {
+    let stem = clean_stem(stem);
+    if stem.is_empty() {
+        return Err(io::Error::new(io::ErrorKind::InvalidInput, "the new name is empty"));
+    }
+    let present: Vec<&PathBuf> = files.iter().filter(|f| f.exists() || !optional(f)).collect();
+    let target = |f: &Path, s: &str| {
+        let ext = f.extension().map(|e| format!(".{}", e.to_string_lossy())).unwrap_or_default();
+        f.with_file_name(format!("{s}{ext}"))
+    };
+    if present.iter().all(|f| stem_of(f) == stem) {
+        return Ok((stem, vec![]));
+    }
+    for n in 0..10_000 {
+        let candidate = if n == 0 { stem.clone() } else { format!("{stem}-{n}") };
+        if present.iter().any(|f| target(f, &candidate).symlink_metadata().is_ok()) {
+            continue;
+        }
+        let mut done: Vec<(PathBuf, PathBuf)> = vec![];
+        for f in &present {
+            let to = target(f, &candidate);
+            match move_file(f, &to) {
+                Ok(()) => done.push(((*f).clone(), to)),
+                Err(e) => {
+                    for (from, to) in done.iter().rev() {
+                        let _ = move_file(to, from);
+                    }
+                    // Taken in the meantime: try the next number.
+                    if e.kind() == io::ErrorKind::AlreadyExists {
+                        done.clear();
+                        break;
+                    }
+                    return Err(e);
+                }
+            }
+        }
+        if done.len() == present.len() {
+            return Ok((candidate, done));
+        }
+    }
+    Err(io::Error::new(io::ErrorKind::AlreadyExists, "no free name"))
+}
+
+/// Renames photos where they are. RAW + JPG pairs and their sidecars change together, and the
+/// photos' review progress follows the new names.
+#[tauri::command]
+pub async fn rename_photos(folder: String, items: Vec<RenameItem>) -> RenameOutcome {
+    jobs::serial(move || {
+        let _folder_access = crate::data::access(Path::new(&folder)).ok();
+        let mut out = RenameOutcome::default();
+        let mut viewed: Vec<(String, String)> = vec![];
+        for item in &items {
+            let files: Vec<PathBuf> = item.files.iter().map(PathBuf::from).collect();
+            let old = files.iter().find(|f| !optional(f)).map(|f| stem_of(f)).unwrap_or_default();
+            let _access: Vec<_> = files.iter().filter_map(|f| crate::data::access(f).ok()).collect();
+            match rename_group(&files, &item.stem) {
+                Ok((stem, moved)) => {
+                    if !moved.is_empty() {
+                        viewed.push((old, stem.clone()));
+                    }
+                    let files = moved.into_iter().map(|(a, b)| (a.to_string_lossy().to_string(), b.to_string_lossy().to_string())).collect();
+                    out.renamed.push(Renamed { id: item.id.clone(), stem, files });
+                }
+                Err(e) => out.errors.push(format!("{}: {e}", files.first().map(|f| name(f)).unwrap_or_default())),
+            }
+        }
+        if let Err(e) = crate::library::rename_viewed(&folder, &viewed) {
+            out.errors.push(format!("Review progress: {e}"));
         }
         out
     })
@@ -266,6 +401,58 @@ mod tests {
         fn drop(&mut self) {
             let _ = std::fs::remove_dir_all(&self.0);
         }
+    }
+
+    #[test]
+    fn renames_pairs_and_sidecars_together_without_overwriting() {
+        let dir = Scratch::new("rename");
+        for f in ["ADM_1.CR3", "ADM_1.JPG", "ADM_1.xmp", "UNC_0001.JPG"] {
+            std::fs::write(dir.0.join(f), f).unwrap();
+        }
+        let files = vec![dir.0.join("ADM_1.CR3"), dir.0.join("ADM_1.JPG"), dir.0.join("ADM_1.xmp")];
+        // UNC_0001.JPG belongs to someone else: the whole group moves to UNC_0001-1.
+        let (stem, moved) = rename_group(&files, "UNC_0001").unwrap();
+        assert_eq!(stem, "UNC_0001-1");
+        assert_eq!(moved.len(), 3);
+        assert_eq!(std::fs::read(dir.0.join("UNC_0001.JPG")).unwrap(), b"UNC_0001.JPG");
+        for (f, ext) in [("ADM_1.CR3", "CR3"), ("ADM_1.JPG", "JPG"), ("ADM_1.xmp", "xmp")] {
+            assert_eq!(std::fs::read(dir.0.join(format!("UNC_0001-1.{ext}"))).unwrap(), f.as_bytes());
+            assert!(!dir.0.join(f).exists());
+        }
+        // Back again (what Undo does), and a missing sidecar isn't an error.
+        let renamed: Vec<PathBuf> = moved.iter().map(|(_, to)| to.clone()).collect();
+        let (back, _) = rename_group(&renamed, "ADM_1").unwrap();
+        assert_eq!(back, "ADM_1");
+        let lone = vec![dir.0.join("UNC_0001.JPG"), dir.0.join("UNC_0001.xmp")];
+        assert_eq!(rename_group(&lone, " a/b ").unwrap().0, "a-b");
+        assert!(rename_group(&[dir.0.join("ADM_1.CR3")], "  ").is_err());
+    }
+
+    #[test]
+    fn camera_locked_files_are_detected() {
+        let dir = Scratch::new("locked");
+        let f = dir.0.join("LOCK.JPG");
+        std::fs::write(&f, b"x").unwrap();
+        assert!(!is_locked(&f));
+        let mut perms = std::fs::metadata(&f).unwrap().permissions();
+        perms.set_readonly(true);
+        std::fs::set_permissions(&f, perms.clone()).unwrap();
+        assert!(is_locked(&f));
+        #[allow(clippy::permissions_set_readonly_false)]
+        perms.set_readonly(false);
+        std::fs::set_permissions(&f, perms).unwrap();
+        #[cfg(target_os = "macos")]
+        {
+            use std::ffi::CString;
+            use std::os::unix::ffi::OsStrExt;
+            let c = CString::new(f.as_os_str().as_bytes()).unwrap();
+            // The Finder's Locked flag, which is how a card's read-only attribute shows up.
+            assert_eq!(unsafe { libc::chflags(c.as_ptr(), libc::UF_IMMUTABLE) }, 0);
+            assert!(is_locked(&f));
+            assert_eq!(unsafe { libc::chflags(c.as_ptr(), 0) }, 0);
+        }
+        assert!(!is_locked(&f));
+        assert!(!is_locked(&dir.0.join("missing.JPG")));
     }
 
     #[test]

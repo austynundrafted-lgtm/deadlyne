@@ -96,6 +96,15 @@ pub struct CardInfo {
     /// A RAW+JPG pair counts once.
     pub photos: usize,
     pub bytes: u64,
+    /// Photos protected on the camera (a pair counts once).
+    pub locked: usize,
+    /// Their size, for the free-space check when only they are ingested.
+    pub locked_bytes: u64,
+}
+
+/// A photo's files on the card: pairs share a folder and a stem.
+fn group_key(f: &Path) -> (PathBuf, String) {
+    (f.parent().map(Path::to_path_buf).unwrap_or_default(), f.file_stem().map(|s| s.to_string_lossy().to_lowercase()).unwrap_or_default())
 }
 
 #[tauri::command]
@@ -106,14 +115,24 @@ pub async fn inspect_source(path: String) -> CardInfo {
         let dcim = root.join("DCIM");
         let mut files = vec![];
         walk(if dcim.is_dir() { &dcim } else { root }, &mut files);
-        let mut bases = std::collections::HashSet::new();
+        let mut groups: HashMap<(PathBuf, String), (bool, u64)> = HashMap::new();
         let mut bytes = 0;
         for f in &files {
-            bases.insert((f.parent().map(Path::to_path_buf), f.file_stem().map(|s| s.to_string_lossy().to_lowercase())));
-            bytes += std::fs::metadata(f).map(|m| m.len()).unwrap_or(0);
+            let size = std::fs::metadata(f).map(|m| m.len()).unwrap_or(0);
+            bytes += size;
+            let g = groups.entry(group_key(f)).or_default();
+            g.0 |= fileops::is_locked(f);
+            g.1 += size;
         }
+        let locked = groups.values().filter(|g| g.0);
         let sample = files.iter().find(|f| is_photo(f) == Some(true)).or(files.first());
-        CardInfo { camera: sample.map(|s| exif::read(s).camera).unwrap_or_default(), photos: bases.len(), bytes }
+        CardInfo {
+            camera: sample.map(|s| exif::read(s).camera).unwrap_or_default(),
+            photos: groups.len(),
+            bytes,
+            locked: locked.clone().count(),
+            locked_bytes: locked.map(|g| g.1).sum(),
+        }
     })
     .await
 }
@@ -139,6 +158,9 @@ pub struct Options {
     pub first_seq: u32,
     pub skip_existing: bool,
     pub eject: bool,
+    /// Only the photos protected on the camera.
+    #[serde(default)]
+    pub locked_only: bool,
 }
 
 /// Expands `{job} {date} {year} {month} {day} {time} {seq} {original} {camera}`.
@@ -256,17 +278,26 @@ pub fn run(o: &Options, mut emit: impl FnMut(&Progress)) -> Summary {
         base: String,
         files: Vec<PathBuf>,
         primary: PathBuf,
+        locked: bool,
     }
     let mut groups: HashMap<(PathBuf, String), Group> = HashMap::new();
     for f in files {
         let base = f.file_stem().map(|b| b.to_string_lossy().to_string()).unwrap_or_default();
-        let key = (f.parent().map(Path::to_path_buf).unwrap_or_default(), base.to_lowercase());
         let is_raw = is_photo(&f) == Some(true);
-        let g = groups.entry(key).or_insert_with(|| Group { base, files: vec![], primary: f.clone() });
+        let locked = fileops::is_locked(&f);
+        let g = groups.entry(group_key(&f)).or_insert_with(|| Group { base, files: vec![], primary: f.clone(), locked: false });
         if is_raw {
             g.primary = f.clone();
         }
+        g.locked |= locked;
         g.files.push(f);
+    }
+    if o.locked_only {
+        groups.retain(|_, g| g.locked);
+        if groups.is_empty() {
+            s.errors.push(format!("No photos are locked on the camera in {}", source.display()));
+            return s;
+        }
     }
     let mut groups: Vec<(Group, exif::Meta)> = groups.into_values().par_bridge().map(|g| {
         let m = exif::read(&g.primary);
@@ -283,6 +314,8 @@ pub fn run(o: &Options, mut emit: impl FnMut(&Progress)) -> Summary {
     let mut progress = Progress { files_done: 0, files_total: plan.len(), bytes_done: 0, bytes_total, current_file: String::new() };
     emit(&progress);
     let mut last_emit = std::time::Instant::now();
+    // Photos locked on the camera arrive tagged: their new sidecars, with the RAW's extension.
+    let mut tag: HashMap<PathBuf, String> = HashMap::new();
 
     for (k, (src, group_index, size)) in plan.iter().enumerate() {
         if CANCEL.load(Ordering::SeqCst) {
@@ -311,6 +344,10 @@ pub fn run(o: &Options, mut emit: impl FnMut(&Progress)) -> Summary {
             let copied = fileops::copy_new(src, &target).map_err(|e| e.to_string())?;
             s.copied += 1;
             s.bytes += copied;
+            if g.locked {
+                let ext = g.primary.extension().map(|e| e.to_string_lossy().to_ascii_uppercase()).unwrap_or_default();
+                tag.insert(folder.join(format!("{base}.xmp")), ext);
+            }
             Ok(())
         })();
         if let Err(e) = result {
@@ -323,6 +360,13 @@ pub fn run(o: &Options, mut emit: impl FnMut(&Progress)) -> Summary {
         if last_emit.elapsed().as_millis() > 100 || k + 1 == plan.len() {
             last_emit = std::time::Instant::now();
             emit(&progress);
+        }
+    }
+
+    let tagged = crate::xmp::Culling { tagged: true, locked: true, ..Default::default() };
+    for (sidecar, ext) in &tag {
+        if let Err(e) = crate::xmp::update(sidecar, ext, Some(&tagged), None) {
+            s.errors.push(format!("{}: couldn’t tag it ({e})", sidecar.file_name().unwrap_or_default().to_string_lossy()));
         }
     }
 
@@ -377,6 +421,7 @@ mod tests {
             first_seq: 1,
             skip_existing: true,
             eject: false,
+            locked_only: false,
         };
         assert_eq!(
             names(&o, "MCD_0001", "2026-08-22T09:45:27.07", "Canon EOS R3", 7),
@@ -384,6 +429,55 @@ mod tests {
         );
         let no_job = Options { job: String::new(), rename_pattern: None, ..o };
         assert_eq!(names(&no_job, "MCD_0001", "2026-08-22T09:45:27", "", 1), ("2026-08-22".to_string(), "MCD_0001".to_string()));
+    }
+
+    #[test]
+    fn locked_photos_arrive_tagged_and_can_be_ingested_alone() {
+        let root = std::env::temp_dir().join(format!("deadlyne-ingest-locked-{}", std::process::id()));
+        let (card, dest) = (root.join("card/DCIM/100CANON"), root.join("dest"));
+        std::fs::create_dir_all(&card).unwrap();
+        std::fs::create_dir_all(&dest).unwrap();
+        for f in ["A.CR3", "A.JPG", "B.JPG"] {
+            std::fs::write(card.join(f), f).unwrap();
+        }
+        // The camera locked A (both halves of the pair).
+        for f in ["A.CR3", "A.JPG"] {
+            let mut p = std::fs::metadata(card.join(f)).unwrap().permissions();
+            p.set_readonly(true);
+            std::fs::set_permissions(card.join(f), p).unwrap();
+        }
+        let o = Options {
+            source: root.join("card").to_string_lossy().into(),
+            destination: dest.to_string_lossy().into(),
+            job: "Locked".into(),
+            folder_pattern: "{job}".into(),
+            rename_pattern: None,
+            first_seq: 1,
+            skip_existing: true,
+            eject: false,
+            locked_only: true,
+        };
+        let s = run(&o, |_| {});
+        assert!(s.errors.is_empty(), "{:?}", s.errors);
+        assert_eq!(s.copied, 2);
+        let out = dest.join("Locked");
+        assert!(out.join("A.CR3").exists() && out.join("A.JPG").exists() && !out.join("B.JPG").exists());
+        let sidecar = std::fs::read_to_string(out.join("A.xmp")).unwrap();
+        assert_eq!(crate::xmp::explicit_tag(&sidecar), Some(true));
+        assert!(sidecar.contains("photoshop:SidecarForExtension=\"CR3\""));
+        // Everything else comes along untagged when the whole card is ingested.
+        let all = run(&Options { locked_only: false, ..o }, |_| {});
+        assert_eq!((all.copied, all.skipped), (1, 2));
+        assert!(!out.join("B.xmp").exists());
+        for dir in [&card, &out] {
+            for e in std::fs::read_dir(dir).unwrap().flatten() {
+                let mut p = e.metadata().unwrap().permissions();
+                #[allow(clippy::permissions_set_readonly_false)]
+                p.set_readonly(false);
+                let _ = std::fs::set_permissions(e.path(), p);
+            }
+        }
+        std::fs::remove_dir_all(&root).unwrap();
     }
 
     /// A full ingest from a fake card: `DEADLYNE_CARD=/card DEADLYNE_DEST=/dest cargo test --release real_ingest -- --ignored --nocapture`
@@ -400,6 +494,7 @@ mod tests {
             first_seq: 1,
             skip_existing: true,
             eject: false,
+            locked_only: false,
         };
         let mut events = 0;
         let s = run(&o, |_| events += 1);

@@ -26,9 +26,14 @@ Gamification has been removed: no badges, achievements, milestone counters or un
   - The folder toolbar shows Continue reviewing while a review is partway; its tooltip gives the viewed count.
   - **Continue reviewing (⌥⌘R)** goes back to the photo you were last reviewing (or the first unviewed one if it's gone) and marks it briefly. **Show unviewed only** (⌥⌘U) is in the Filter menu; Reset viewing progress… in the folder menu asks first.
 - **Photos:**
-  - An instant contact sheet for thousands of RAW+JPEG files, with pairing and capture-time order.
+  - The contact sheet loads as soon as the photo files are listed. Capture times, captions, review history and folder contents load in the background.
   - Search (⌘F) across file names, captions and keywords. Use the clear button or Esc to clear the search; Esc again leaves the field.
-  - A slim filter bar (All / Tagged / Untagged, plus one Filter menu for rating, label and file type) and one actions menu.
+  - Filter → Files switches between RAW + JPG, RAW only and JPG only (⌥⌘4/5/6). A paired capture stays in one tile. In a single-format view, the grid and loupe show that file and its extension. The footer shows the current format.
+  - **Sort** (next to the folder tabs): capture time, file name, rating, color label or tagged first, either direction. Each shoot remembers its order; ties keep capture order and RAW + JPG pairs stay together.
+  - Thumbnails come from a priority queue: the photos on screen jump ahead of ones scrolled past, and a small embedded preview shows first while the full thumbnail decodes, so fast scrolling through thousands of frames settles in seconds.
+  - **Rotate left / right (⌘[ / ⌘])** from the loupe, the actions menu, the Cull menu or a right-click. RAWs are turned in the XMP sidecar (`tiff:Orientation`, which Lightroom reads); JPGs get their orientation tag changed in place, so no pixel is re-encoded. The notice afterwards offers Undo.
+  - **Rename photos…** (File menu, actions menu or right-click): renames the tagged, selected or all photos where they are, from a pattern with `{shoot} {seq} {original} {date} {time} {camera}` and a first number, numbered in the contact sheet's order. Pairs and sidecars change together, review progress follows, nothing is overwritten (a taken name gets -1, -2) and the notice offers Undo.
+  - Photos locked on the camera (protected, so read-only on the card) show a lock and count as tagged, as Photo Mechanic does. Untagging one is remembered in its sidecar. Writing a caption or rotation keeps a locked file read-only.
   - Right-click menus on photos: show in Finder/Explorer (⇧⌘R) or open in the default app (⌘E).
   - When a filter hides photos, the status bar says "X of Y" with a Show all button. Show all clears search, rating, label, viewing and RAW/JPG filters together, including from the empty grid.
   - Filter, Export, Captions and Open have text labels in wider windows; compact windows retain the same actions with icons and tooltips, so nothing is pushed off the title bar while an FTP send is showing.
@@ -56,7 +61,8 @@ Gamification has been removed: no badges, achievements, milestone counters or un
 - **Ingest:**
   - Picks the card automatically and remembers your destination and naming.
   - `{date}_{job}` folders with optional renaming (`{job}_{seq}`). RAW+JPG pairs share a number.
-  - Skips photos already ingested, verifies sizes, warns when the destination is short on space, and can eject the card.
+  - Copies originals with larger sequential reads on Mac, skips photos already ingested, verifies file sizes, warns when the destination is short on space, and can eject the card.
+  - When the card has photos locked on the camera, **Photos: All / Locked on camera** ingests just those. Locked photos arrive tagged either way.
   - Opens the new folder when it's done.
   - The dialog opens on the job name, ready to be typed over; Return starts the ingest.
 - **Export (⇧⌘E):** copies of the tagged photos or the selection for the client or the desk, from the title-bar button, the actions menu or a right-click. JPGs by default (RAW + JPG or RAW too), into a new folder named after the shoot inside the place you exported to last time. Resize JPGs to a long edge (1200 / 2048 / 3000 / 4000 px) with a quality choice: they come out upright and keep their EXIF, XMP captions, legacy IPTC and color profile. Rename with `{shoot}_{seq}` and the other tokens; pairs share a name. Nothing is overwritten (a name already there gets a number added), the originals stay put, and the folder opens when it's done. ⇧⌘E then Return exports with the choices from last time.

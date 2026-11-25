@@ -329,6 +329,7 @@ mod menu {
                 &b.item("send", "Send via FTP…", Some("Shift+CmdOrCtrl+U"))?,
                 &b.item("copy-tagged", "Copy Tagged Photos To…", Some("Shift+CmdOrCtrl+C"))?,
                 &b.item("move-tagged", "Move Tagged Photos To…", Some("Shift+CmdOrCtrl+M"))?,
+                &b.item("rename", "Rename Photos…", None)?,
                 &b.sep()?,
                 &b.item("reveal", "Show in Finder", Some("Shift+CmdOrCtrl+R"))?,
                 &b.item("open-default", "Open in Default App", Some("CmdOrCtrl+E"))?,
@@ -395,6 +396,9 @@ mod menu {
                 &b.item("label:2", "Green Label", None)?,
                 &b.item("label:3", "Blue Label", None)?,
                 &b.item("label:none", "No Label", None)?,
+                &b.sep()?,
+                &b.item("rotate-left", "Rotate Left", Some("CmdOrCtrl+["))?,
+                &b.item("rotate-right", "Rotate Right", Some("CmdOrCtrl+]"))?,
                 &b.sep()?,
                 &b.check("auto-advance", "Auto-Advance After Rating", Some("Shift+CmdOrCtrl+A"))?,
                 &b.sep()?,
@@ -503,12 +507,13 @@ mod menu {
             let targets = s.photos && s.has_targets;
             on("new-folder", s.in_folder);
             on("caption-panel", s.in_folder);
-            for id in ["export", "send", "copy-tagged", "move-tagged", "select-tagged"] {
+            for id in ["export", "send", "copy-tagged", "move-tagged", "select-tagged", "rename"] {
                 on(id, s.has_photos);
             }
             for id in [
                 "reveal", "open-default", "trash", "edit-caption", "copy-caption", "paste-caption", "fill-credits", "tag", "rate:0",
                 "rate:1", "rate:2", "rate:3", "rate:4", "rate:5", "label:0", "label:1", "label:2", "label:3", "label:none", "loupe", "zoom",
+                "rotate-left", "rotate-right",
             ] {
                 on(id, targets);
             }

@@ -3,6 +3,8 @@
 // documents with their own inspector. Photos and documents are never mixed in one grid.
 import { useEffect, useMemo } from "react"
 import {
+  ArrowDownUp,
+  ChevronDown,
   ChevronRight,
   Eye,
   FolderPlus,
@@ -28,6 +30,7 @@ import {
 } from "@/lib/folders"
 import { alt, isIPad, mod, openLabel, relativeTime, revealLabel, shift, trashAction } from "@/lib/format"
 import { baseName, folderTitle, isWithin, parentPath, rootShootOf, SECTION_TITLES, useLibrary, type LibrarySection } from "@/lib/library"
+import { SORT_KEYS, sortLabel, type SortKey } from "@/lib/sort"
 import { cn } from "@/lib/utils"
 import { continueReviewing, useOpenFolderProgress } from "@/lib/viewing"
 import { useStore, type FolderDoc, type FolderTab } from "@/store"
@@ -37,7 +40,15 @@ import { viewedSummary } from "@/components/ViewProgress"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { ContextMenu, ContextMenuTrigger } from "@/components/ui/context-menu"
-import { DropdownMenu, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty"
 import { Kbd } from "@/components/ui/kbd"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -120,6 +131,8 @@ export function FolderBar() {
         })}
       </nav>
 
+      {folderTab === "photos" && photoCount > 0 && <SortMenu />}
+
       <ToggleGroup
         type="single"
         size="sm"
@@ -175,6 +188,46 @@ export function FolderBar() {
       </DropdownMenu>
       {search && folderTab !== "photos" && <span className="sr-only">Filtered by “{search}”</span>}
     </div>
+  )
+}
+
+/** The contact sheet's order. Each shoot remembers its own. */
+function SortMenu() {
+  const sort = useStore((s) => s.sort)
+  const setSort = useStore((s) => s.setSort)
+  const directions = SORT_KEYS.find((k) => k.value === sort.key)!.directions
+  return (
+    <DropdownMenu>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="sm" className="shrink-0 gap-1" aria-label={`Sort by ${sortLabel(sort.key).toLowerCase()}`}>
+              <ArrowDownUp data-icon="inline-start" />
+              <span className="hidden @3xl/bar:inline">{sortLabel(sort.key)}</span>
+              <ChevronDown className="size-3 text-muted-foreground" />
+            </Button>
+          </DropdownMenuTrigger>
+        </TooltipTrigger>
+        <TooltipContent>Sort the photos · {directions[sort.reverse ? 1 : 0].toLowerCase()}</TooltipContent>
+      </Tooltip>
+      <DropdownMenuContent align="end" className="w-56">
+        <DropdownMenuLabel>Sort by</DropdownMenuLabel>
+        <DropdownMenuRadioGroup value={sort.key} onValueChange={(v) => setSort({ key: v as SortKey, reverse: false })}>
+          {SORT_KEYS.map((k) => (
+            <DropdownMenuRadioItem key={k.value} value={k.value}>
+              {k.label}
+            </DropdownMenuRadioItem>
+          ))}
+        </DropdownMenuRadioGroup>
+        <DropdownMenuSeparator />
+        <DropdownMenuRadioGroup value={sort.reverse ? "reverse" : "forward"} onValueChange={(v) => setSort({ ...sort, reverse: v === "reverse" })}>
+          <DropdownMenuRadioItem value="forward">{directions[0]}</DropdownMenuRadioItem>
+          <DropdownMenuRadioItem value="reverse">{directions[1]}</DropdownMenuRadioItem>
+        </DropdownMenuRadioGroup>
+        <DropdownMenuSeparator />
+        <p className="px-2 py-1.5 text-xs text-muted-foreground">Remembered for each shoot. RAW + JPG pairs stay together.</p>
+      </DropdownMenuContent>
+    </DropdownMenu>
   )
 }
 

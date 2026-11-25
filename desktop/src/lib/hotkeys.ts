@@ -66,6 +66,8 @@ export function useHotkeys() {
         if (e.code === "KeyA") return run(e, commands["auto-advance"])
       }
       if (cmd && (e.key === "Backspace" || e.key === "Delete")) return run(e, commands.trash)
+      if (cmd && !e.shiftKey && !e.altKey && e.code === "BracketLeft") return run(e, commands["rotate-left"])
+      if (cmd && !e.shiftKey && !e.altKey && e.code === "BracketRight") return run(e, commands["rotate-right"])
       if (cmd && key === "a") return run(e, commands["select-all"])
       if (cmd && key === "d") return run(e, commands.deselect)
       if (cmd && key === "e") return run(e, commands["open-default"])

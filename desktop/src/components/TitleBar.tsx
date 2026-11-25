@@ -26,6 +26,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { askTrash, copyOrMove, openExport, openFolderDialog, openTargets, revealTarget } from "@/lib/actions"
+import { commands } from "@/lib/commands"
 import { Input } from "@/components/ui/input"
 import { useUI } from "@/ui"
 import { SendQueue } from "@/components/SendDialog"
@@ -159,6 +160,16 @@ function PhotoFilters() {
           <TooltipContent>Filter by rating, label, viewed or file type</TooltipContent>
         </Tooltip>
         <DropdownMenuContent align="end" className="w-48">
+          <DropdownMenuLabel>Files</DropdownMenuLabel>
+          <DropdownMenuRadioGroup value={fileScope} onValueChange={(v) => setFilter({ fileScope: v as FileScope })}>
+            {FILE_SCOPES.map((f, i) => (
+              <DropdownMenuRadioItem key={f.value} value={f.value}>
+                {f.label}
+                <DropdownMenuShortcut>⌥{mod}{i + 4}</DropdownMenuShortcut>
+              </DropdownMenuRadioItem>
+            ))}
+          </DropdownMenuRadioGroup>
+          <DropdownMenuSeparator />
           <DropdownMenuLabel>Rating</DropdownMenuLabel>
           <DropdownMenuRadioGroup value={String(minRating)} onValueChange={(v) => setFilter({ minRating: Number(v) })}>
             <DropdownMenuRadioItem value="0">Any rating</DropdownMenuRadioItem>
@@ -189,16 +200,6 @@ function PhotoFilters() {
             Show unviewed only
             <DropdownMenuShortcut>⌥{mod}U</DropdownMenuShortcut>
           </DropdownMenuCheckboxItem>
-          <DropdownMenuSeparator />
-          <DropdownMenuLabel>Files</DropdownMenuLabel>
-          <DropdownMenuRadioGroup value={fileScope} onValueChange={(v) => setFilter({ fileScope: v as FileScope })}>
-            {FILE_SCOPES.map((f, i) => (
-              <DropdownMenuRadioItem key={f.value} value={f.value}>
-                {f.label}
-                <DropdownMenuShortcut>⌥{mod}{i + 4}</DropdownMenuShortcut>
-              </DropdownMenuRadioItem>
-            ))}
-          </DropdownMenuRadioGroup>
           {extra > 0 && (
             <>
               <DropdownMenuSeparator />
@@ -290,6 +291,13 @@ function PhotoActions() {
         </DropdownMenuItem>
         <DropdownMenuItem onSelect={() => copyOrMove("selected", false)}>Copy selected to…</DropdownMenuItem>
         <DropdownMenuItem onSelect={() => copyOrMove("selected", true)}>Move selected to…</DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => commands.rename()}>Rename photos…</DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => commands["rotate-left"]()}>
+          Rotate left <DropdownMenuShortcut>{mod}[</DropdownMenuShortcut>
+        </DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => commands["rotate-right"]()}>
+          Rotate right <DropdownMenuShortcut>{mod}]</DropdownMenuShortcut>
+        </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem onSelect={() => useUI.getState().openSend("tagged")}>
           Send tagged via FTP… <DropdownMenuShortcut>⇧{mod}U</DropdownMenuShortcut>

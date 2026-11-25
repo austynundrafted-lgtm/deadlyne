@@ -4,7 +4,7 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import { ChevronDown, CircleHelp, Settings2, UserRound, X } from "lucide-react"
 import { useShallow } from "zustand/react/shallow"
-import { FIELD_LABELS, IIM_LIMITS, JPEG_MODES, type CaptionField, type JpegMode } from "@/lib/api"
+import { FIELD_LABELS, IIM_LIMITS, JPEG_MODES, photoFileName, type CaptionField, type JpegMode } from "@/lib/api"
 import { expandLive, useCodes } from "@/lib/codes"
 import { mod, plural } from "@/lib/format"
 import { pref, setPref } from "@/lib/settings"
@@ -26,7 +26,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 export const CAPTION_PANEL_WIDTH = 340
 
 export function CaptionPanel() {
-  const { photos, selected, focus, loupe, setCaptionPanel, fillCredits, profile } = useStore(
+  const { photos, selected, focus, loupe, setCaptionPanel, fillCredits, profile, fileScope } = useStore(
     useShallow((s) => ({
       photos: s.photos,
       selected: s.selected,
@@ -35,12 +35,13 @@ export function CaptionPanel() {
       setCaptionPanel: s.setCaptionPanel,
       fillCredits: s.fillCredits,
       profile: s.profile,
+      fileScope: s.fileScope,
     })),
   )
   const targets = useMemo(() => targetPhotos({ photos, selected, focus, loupe }), [photos, selected, focus, loupe])
   const disabled = targets.length === 0
   const subtitle =
-    targets.length === 0 ? "Select photos to caption" : targets.length === 1 ? targets[0].name : `${plural(targets.length, "photo")} — edits apply to all`
+    targets.length === 0 ? "Select photos to caption" : targets.length === 1 ? photoFileName(targets[0], fileScope) : `${plural(targets.length, "photo")} — edits apply to all`
 
   return (
     <aside className="flex h-full shrink-0 flex-col border-l bg-panel" style={{ width: CAPTION_PANEL_WIDTH }}>

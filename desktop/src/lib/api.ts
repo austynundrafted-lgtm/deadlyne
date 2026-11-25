@@ -33,6 +33,9 @@ export interface Culling {
   rating: number
   label: Label | null
   tagged: boolean
+  /** Protected on the camera. It comes from the file, not the sidecar; a locked photo counts as
+   *  tagged until it's untagged here (the lock itself is never changed). */
+  locked?: boolean
 }
 
 export const CAPTION_FIELDS = [
@@ -81,7 +84,14 @@ export const JPEG_MODES: { value: JpegMode; label: string }[] = [
   { value: "off", label: "Don’t write into JPGs" },
 ]
 
-export type Photo = PhotoEntry & Culling & { meta?: Meta; captions: Captions }
+export type Photo = PhotoEntry & Culling & {
+  meta?: Meta
+  captions: Captions
+  /** A paired JPG's own orientation after it was rotated here (the loupe reads it). */
+  jpegOrientation?: number
+  /** How many times it was rotated this session: fresh thumbnail URLs after each turn. */
+  rotated?: number
+}
 
 export function scanFolder(path: string) {
   return invoke<{ folder: string; photos: PhotoEntry[] }>("scan_folder", { path })
@@ -117,16 +127,26 @@ export function saveCulling(photos: Photo[]) {
       rating: p.rating,
       label: p.label,
       tagged: p.tagged,
+      locked: p.locked,
     })),
   })
 }
 
-/** Small upright JPEG for the contact sheet, served by Rust over the `thumb` scheme. */
-export const thumbUrl = (p: PhotoEntry) => convertFileSrc(p.id, "thumb")
+/** Small upright JPEG for the contact sheet, served by Rust over the `thumb` scheme. A photo
+ *  rotated here passes its `rotated` count, so the webview fetches the new thumbnail. */
+export const thumbUrl = (path: string, rotated?: number) => `${convertFileSrc(path, "thumb")}${rotated ? `?r=${rotated}` : ""}`
+
+/** The camera's own little preview (about 160 px), shown softly while the thumbnail is made. */
+export const tinyThumbUrl = (path: string, rotated?: number) => `${convertFileSrc(path, "thumb")}?tiny${rotated ? `&r=${rotated}` : ""}`
+
+/** Tells Rust which photos the contact sheet has on screen, so they are made first. */
+export const thumbsWanted = (paths: string[]) => invoke("thumbs_wanted", { paths })
 
 /** Full embedded JPEG pixels; Rust neutralizes EXIF auto-rotation so the loupe applies
  * `meta.orientation` exactly once. Version the URL to bypass older auto-rotated cache entries. */
-export const previewUrl = (p: PhotoEntry) => `${convertFileSrc(p.id, "preview")}?v=2`
+export const previewUrl = (path: string) => `${convertFileSrc(path, "preview")}?v=2`
+
+export const previewOrientation = (path: string) => invoke<number>("preview_orientation", { path })
 
 // MARK: - Files
 
@@ -162,6 +182,30 @@ export function trashPhotos(photos: PhotoEntry[], scope: FileScope) {
   return invoke<FileOutcome>("trash_photos", { items })
 }
 
+export interface RenameOutcome {
+  renamed: { id: string; stem: string; files: [string, string][] }[]
+  errors: string[]
+}
+
+/** Renames each photo's files (RAW, JPG and sidecar together) to `stem` in its folder. */
+export function renamePhotos(folder: string, items: { photo: PhotoEntry; stem: string }[]) {
+  return invoke<RenameOutcome>("rename_photos", {
+    folder,
+    items: items.map(({ photo, stem }) => ({ id: photo.id, files: filesFor(photo, "both"), stem })),
+  })
+}
+
+export interface RotateOutcome {
+  rotated: { id: string; orientation: number; jpegOrientation: number | null }[]
+  errors: string[]
+}
+
+/** Turns photos a quarter turn: a RAW's sidecar records it, a JPG's orientation tag changes. */
+export function rotatePhotos(photos: PhotoEntry[], clockwise: boolean) {
+  const items = photos.map((p) => ({ id: p.id, raw: p.raw, jpeg: p.jpeg, sidecar: p.sidecar }))
+  return invoke<RotateOutcome>("rotate_photos", { items, clockwise })
+}
+
 /** Finder / Explorer with the file selected; the share sheet on iPad. */
 export const reveal = (path: string) => (isIPad ? share([path]) : invoke("reveal", { path }))
 /** The default app for each file; the share sheet on iPad. */
@@ -174,6 +218,12 @@ export function primaryFile(p: PhotoEntry, scope: FileScope): string {
   return p.id
 }
 
+/** The filename shown on the contact sheet, including the actual extension in single-format views. */
+export function photoFileName(p: PhotoEntry, scope: FileScope): string {
+  const path = primaryFile(p, scope)
+  return path === p.id ? p.name : path.split(/[\\/]/).pop() ?? p.name
+}
+
 // MARK: - Ingest
 
 export interface Card {
@@ -184,6 +234,9 @@ export interface SourceInfo {
   camera: string
   photos: number
   bytes: number
+  /** Photos protected on the camera, and their size. */
+  locked: number
+  lockedBytes: number
 }
 export interface IngestOptions {
   source: string
@@ -194,6 +247,8 @@ export interface IngestOptions {
   firstSeq: number
   skipExisting: boolean
   eject: boolean
+  /** Only the photos protected on the camera. */
+  lockedOnly: boolean
 }
 export interface IngestProgress {
   filesDone: number
