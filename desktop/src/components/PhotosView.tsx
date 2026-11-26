@@ -353,7 +353,8 @@ const PhotoCard = memo(function PhotoCard({ photo: p, width, selected, focused, 
       data-view-key={photoKey(p)}
       className={cn(
         "group/card relative flex shrink-0 flex-col overflow-hidden rounded-md bg-card shadow-edge",
-        selected ? "bg-accent ring-2 ring-(--workspace-photos)" : "hover:shadow-edge-hover",
+        // Amber means selected and nothing else: tag and stars stay neutral, so the three read apart.
+        selected ? "bg-accent ring-2 ring-(--workspace-photos) ring-offset-2 ring-offset-background" : "hover:shadow-edge-hover",
         focused && selected && "ring-3",
         className,
       )}
@@ -402,20 +403,28 @@ const PhotoCard = memo(function PhotoCard({ photo: p, width, selected, focused, 
           />
         )}
         {resume && <ResumeMarker />}
-      </div>
-      <div className="flex h-photo-footer shrink-0 items-center gap-1 px-1.5 text-xs shadow-[inset_0_1px_0_var(--edge-light-faint)]">
+        {/* Tagged: a white check on the photo. Untagged: an empty ring while pointing at it. */}
         <Button
           variant="ghost"
           size="icon-xs"
           static
           aria-label={p.tagged ? "Untag" : "Tag"}
           aria-pressed={p.tagged}
-          className={cn("rounded-sm", p.tagged ? "border-[color-mix(in_oklab,var(--workspace-photos)_58%,black)] bg-(--workspace-photos) text-workspace-foreground sheen-cap shadow-[inset_0_1px_0_var(--edge-light-cap)] hover:bg-(--workspace-photos)/85 hover:text-workspace-foreground" : "text-muted-foreground")}
+          className={cn(
+            "absolute top-2 left-2 size-[22px] rounded-full shadow-raised",
+            p.tagged
+              ? "bg-foreground text-background hover:bg-foreground/85 hover:text-background"
+              : "border-[1.5px] border-white/80 bg-black/35 text-transparent opacity-0 group-hover/card:opacity-100 hover:bg-black/50 hover:text-white/80 focus-visible:opacity-100 pointer-coarse:opacity-100",
+            !p.tagged && selected && "opacity-100",
+            resume && "hidden",
+          )}
           onPointerDown={(e) => e.stopPropagation()}
           onClick={onToggleTag}
         >
-          <Check className={cn(!p.tagged && "text-muted-foreground")} />
+          <Check className="size-3.5" strokeWidth={3} />
         </Button>
+      </div>
+      <div className="flex h-photo-footer shrink-0 items-center gap-1.5 px-2.5 text-xs shadow-[inset_0_1px_0_var(--edge-light-faint)]">
         {p.locked && (
           <Tooltip>
             <TooltipTrigger asChild>
@@ -427,7 +436,7 @@ const PhotoCard = memo(function PhotoCard({ photo: p, width, selected, focused, 
           </Tooltip>
         )}
         {p.label && <span className="size-2.5 shrink-0 rounded-full" style={{ background: labelColor(p.label) }} role="img" aria-label={`${p.label} label`} />}
-        <span className="min-w-0 flex-1 truncate font-medium text-foreground/90" title={name}>{name}</span>
+        <span className={cn("min-w-0 flex-1 truncate", p.tagged ? "font-semibold text-foreground" : "text-muted-foreground")} title={name}>{name}</span>
         {(p.captions.caption || p.captions.headline) && (
           <MessageSquareText className="size-3.5 shrink-0 text-muted-foreground" aria-label="Has a caption" />
         )}
@@ -470,7 +479,7 @@ function Stars({ rating, onRate }: { rating: number; onRate: (n: number) => void
           onClick={() => onRate(n)}
         >
           <Star
-            className={cn("size-3", n <= rating ? "fill-(--workspace-photos) text-(--workspace-photos)" : "text-muted-foreground group-hover/button:text-foreground")}
+            className={cn("size-3", n <= rating ? "fill-foreground text-foreground" : "text-muted-foreground group-hover/button:text-foreground")}
           />
         </Button>
       ))}

@@ -11,6 +11,7 @@ Read this before changing anything. It covers what the app is, who it's for, how
   - **Sort** lives in `lib/sort.ts`, persisted per folder in the `photoSort` pref; capture-time ascending must stay the zero-cost identity.
   - **Thumbnails** go through one priority worker queue in `images.rs`; `thumbs_wanted` reports on-screen paths, `?tiny` serves the embedded small preview. Call `images::forget` after changing a file's orientation.
   - Rename and rotate notices hold Undo for `UNDO_MS` (10 s).
+  - **Contact sheet tile states** (`PhotoCard` in `PhotosView.tsx`): amber (`--workspace-photos`) is the selection ring only, offset from the tile. Tagged is a white check `Button` on the photo's corner plus a bold foreground name; untagged names are muted and show an empty ring on hover, selection or touch. Tile stars fill with `foreground`. Don't tint tag or stars amber again.
 
 - November 18, 2026: the desktop contact sheet waits for the photo scan only. Folder contents, viewing records and full metadata load independently. RAW/JPG scope changes the actual thumbnail, filename and loupe source without changing the pair identity. A JPG paired with a RAW has its own orientation for the loupe. Apple file copies use a 256 KiB read buffer and still verify lengths and refuse to overwrite.
 
