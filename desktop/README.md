@@ -28,7 +28,7 @@ Gamification has been removed: no badges, achievements, milestone counters or un
 - **Photos:**
   - The contact sheet loads as soon as the photo files are listed. Capture times, captions, review history and folder contents load in the background.
   - Search (⌘F) across file names, captions and keywords. Use the clear button or Esc to clear the search; Esc again leaves the field.
-  - Filter → Files switches between RAW + JPG, RAW only and JPG only (⌥⌘4/5/6). A paired capture stays in one tile. In a single-format view, the grid and loupe show that file and its extension. The footer shows the current format.
+  - Filter → Files switches between RAW + JPG, RAW only and JPG only (⌥⌘4/5/6). Every shoot opens unfiltered on RAW + JPG, so a RAW-only view from one shoot never hides a new card's JPGs. A paired capture stays in one tile. In a single-format view, the grid and loupe show that file and its extension. The footer shows the current format.
   - Tiles keep three states apart: the amber ring marks the selection and nothing else; a tagged photo has a white check on its corner and a bright, bold name (untagged names are dimmed); stars are white. Point at an untagged photo and an empty ring on its corner tags it with a click.
   - **Sort** (next to the folder tabs): capture time, file name, rating, color label or tagged first, either direction. Each shoot remembers its order; ties keep capture order and RAW + JPG pairs stay together.
   - Thumbnails come from a priority queue: the photos on screen jump ahead of ones scrolled past, and a small embedded preview shows first while the full thumbnail decodes, so fast scrolling through thousands of frames settles in seconds.

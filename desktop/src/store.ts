@@ -286,13 +286,17 @@ export const useStore = create<State>((set, get) => ({
       const { folder, photos: entries } = await scanFolder(path)
       if (gen !== openGeneration) return
       const photos: Photo[] = entries.map((e) => ({ ...e, rating: 0, label: null, tagged: false, locked: false, captions: emptyCaptions() }))
-      const filters = { tagFilter: "all" as const, minRating: 0, labelFilter: null, search: "", unviewedOnly: false, unviewedSnapshot: null, sort: savedSort(folder) }
+      // A shoot opens unfiltered, RAW/JPG view included: a RAW-only choice made in one shoot
+      // must not hide a freshly ingested card's JPGs. Reloading the same shoot keeps the view.
+      const fileScope: FileScope = reopening ? get().fileScope : "both"
+      if (!reopening && get().fileScope !== "both") setPref("fileScope", "both")
+      const filters = { tagFilter: "all" as const, minRating: 0, labelFilter: null, search: "", unviewedOnly: false, unviewedSnapshot: null, sort: savedSort(folder), fileScope }
       const revision = ++contentsRevision
       const contents = readContents(folder)
       const initialTab = opts?.tab ?? (reopening ? get().folderTab : null)
       const initialContents = !photos.length && !initialTab ? await contents : { subfolders: [], documents: [] }
       if (gen !== openGeneration) return
-      const visible = visiblePhotos({ ...filters, photos, fileScope: get().fileScope })
+      const visible = visiblePhotos({ ...filters, photos })
       const wanted = opts?.select ? visible.find((p) => p.id === opts.select || p.raw === opts.select || p.jpeg === opts.select)?.id : null
       const first = wanted ?? visible[0]?.id ?? null
       const viewing = useViewing.getState().load(folder)
