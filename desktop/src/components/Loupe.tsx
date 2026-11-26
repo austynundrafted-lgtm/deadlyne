@@ -2,9 +2,9 @@
 // JPEG when it's decoded, and pre-loads the neighbours so flipping is instant. Click or Z zooms
 // to 100% at that point to check focus; drag or scroll pans, and another click fits it again.
 import { useEffect, useLayoutEffect, useRef, useState } from "react"
-import { Check, ChevronLeft, ChevronRight, FastForward, Star, X, ZoomIn } from "lucide-react"
+import { Check, ChevronLeft, ChevronRight, FastForward, RotateCcw, RotateCw, Star, X, ZoomIn } from "lucide-react"
 import { useShallow } from "zustand/react/shallow"
-import { previewUrl, thumbUrl } from "@/lib/api"
+import { photoFileName, previewOrientation, previewUrl, primaryFile, thumbUrl } from "@/lib/api"
 import { isIPad, labelColor, mod, orientationTransform } from "@/lib/format"
 import { PreviewCache } from "@/lib/preview-cache"
 import { cn } from "@/lib/utils"
@@ -22,6 +22,7 @@ export function Loupe() {
   const { focus, setLoupe, zoom, setZoom, autoAdvance, setAutoAdvance } = useStore(
     useShallow((s) => ({ focus: s.focus, setLoupe: s.setLoupe, zoom: s.zoom, setZoom: s.setZoom, autoAdvance: s.autoAdvance, setAutoAdvance: s.setAutoAdvance })),
   )
+  const scope = useStore((s) => s.fileScope)
   const list = useVisiblePhotos()
   const index = list.findIndex((p) => p.id === focus)
   const photo = list[index]
@@ -56,14 +57,30 @@ export function Loupe() {
   const [, refreshPreview] = useState(0)
   const previous = list[index - 1]
   const next = list[index + 1]
+  const path = photo ? primaryFile(photo, scope) : null
+  const current = path ? previewUrl(path) : null
+  const previousUrl = previous ? previewUrl(primaryFile(previous, scope)) : null
+  const nextUrl = next ? previewUrl(primaryFile(next, scope)) : null
+
+  const [fileOrientation, setFileOrientation] = useState<{ path: string; value: number }>()
+  // A rotation updates these right away (the sidecar for RAWs, the tag for JPGs), so the loupe
+  // never shows a stale orientation read before the turn.
+  const knownOrientation = !photo ? undefined : path === photo.id ? photo.meta?.orientation : path === photo.jpeg ? photo.jpegOrientation : undefined
+  useEffect(() => {
+    if (!path || knownOrientation !== undefined) return
+    let cancelled = false
+    previewOrientation(path).then((value) => {
+      if (!cancelled) setFileOrientation({ path, value })
+    }).catch(() => {})
+    return () => { cancelled = true }
+  }, [path, knownOrientation])
 
   // Finish the current photo before decoding neighbours. Reuse their pending/ready decodes
   // when an arrow reaches them, rather than starting another Image.decode at every step.
   useEffect(() => {
-    if (!photo) { previews.clear(); return }
+    if (!current) { previews.clear(); return }
     let cancelled = false
-    const current = previewUrl(photo)
-    const neighbours = [next, previous].filter((p) => !!p).map(previewUrl)
+    const neighbours = [nextUrl, previousUrl].filter((url) => url !== null)
     previews.retain([current, ...neighbours])
     previews.load(current)
       .then(() => {
@@ -75,16 +92,17 @@ export function Loupe() {
     return () => {
       cancelled = true
     }
-  }, [photo?.id, next?.id, previous?.id, previews]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [current, nextUrl, previousUrl, previews])
   useEffect(() => () => previews.clear(), [previews])
 
-  if (!photo) return null
+  if (!photo || !path || !current) return null
 
-  const full = previews.peek(previewUrl(photo))
+  const full = previews.peek(current)
+  const orientation = knownOrientation ?? (fileOrientation?.path === path ? fileOrientation.value : undefined)
   // The thumbnail is already upright. Keep it until both the full image and its orientation
   // are ready, so a fast decode cannot briefly display sensor-oriented pixels as landscape.
-  const showingFull = !!full && !!photo.meta
-  const { transform, swapsAxes } = orientationTransform(showingFull ? (photo.meta?.orientation ?? 1) : 1)
+  const showingFull = !!full && orientation !== undefined
+  const { transform, swapsAxes } = orientationTransform(showingFull ? orientation : 1)
 
   // Fit the (possibly rotated) image inside the box, or show it at 100% (one photo pixel per
   // screen pixel) around the zoom point, kept edge to edge when it's bigger than the view.
@@ -215,8 +233,8 @@ export function Loupe() {
         <img
           ref={imgRef}
           key={showingFull ? "full" : "thumb"}
-          src={showingFull ? previewUrl(photo) : thumbUrl(photo)}
-          alt={photo.name}
+          src={showingFull ? current : thumbUrl(path, photo.rotated)}
+          alt={photoFileName(photo, scope)}
           draggable={false}
           style={style}
           className={cn(showingFull ? "outline -outline-offset-1 outline-white/10" : "size-full")}
@@ -262,6 +280,29 @@ export function Loupe() {
           <span className="hidden shrink-0 items-center gap-1 whitespace-nowrap text-muted-foreground @[1000px]/loupe:flex">
             <Kbd>←</Kbd>
             <Kbd>→</Kbd> flip · <Kbd>T</Kbd> tag · <Kbd>1–5</Kbd> rate · <Kbd>Esc</Kbd> grid
+          </span>
+        )}
+        {!isIPad && (
+          <span className="flex shrink-0 items-center">
+            {([false, true] as const).map((clockwise) => (
+              <Tooltip key={String(clockwise)}>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon-xs"
+                    static
+                    className="text-muted-foreground"
+                    aria-label={clockwise ? "Rotate right" : "Rotate left"}
+                    onClick={() => void useStore.getState().rotate(clockwise)}
+                  >
+                    {clockwise ? <RotateCw /> : <RotateCcw />}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  {clockwise ? "Rotate right" : "Rotate left"} <Kbd>{mod}{clockwise ? "]" : "["}</Kbd>
+                </TooltipContent>
+              </Tooltip>
+            ))}
           </span>
         )}
         <Tooltip>

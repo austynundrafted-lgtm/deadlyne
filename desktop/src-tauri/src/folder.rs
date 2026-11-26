@@ -1,7 +1,7 @@
 //! Opening a shoot: list the folder and pair RAW+JPEG files into photos (instant, no file is
 //! opened), then read capture metadata and sidecars for every photo in parallel.
 
-use crate::{captions, exif, iptc::Captions, xmp};
+use crate::{captions, exif, fileops, iptc::Captions, xmp};
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -162,15 +162,24 @@ pub async fn load_details(photos: Vec<DetailsRequest>) -> Vec<Details> {
         photos
             .par_iter()
             .map(|p| {
-                let (culling, sidecar_captions) = match xmp::read_all(Path::new(&p.sidecar)) {
-                    Some((c, cap)) => (c, Some(cap)),
-                    None => (Default::default(), None),
-                };
-                Details {
-                    meta: exif::read(Path::new(&p.id)),
-                    culling,
-                    captions: captions::load(sidecar_captions, p.raw.is_some(), p.jpeg.as_deref()),
+                let sidecar = xmp::read_all(Path::new(&p.sidecar));
+                let locked = [p.raw.as_deref(), p.jpeg.as_deref()].into_iter().flatten().any(|f| fileops::is_locked(Path::new(f)));
+                let mut meta = exif::read(Path::new(&p.id));
+                if p.raw.is_some() {
+                    if let Some(o) = sidecar.as_ref().and_then(|s| s.orientation) {
+                        meta.orientation = o;
+                    }
                 }
+                let (mut culling, sidecar_captions) = match sidecar {
+                    Some(s) => {
+                        let mut c = s.culling;
+                        c.tagged = s.tag.unwrap_or(locked);
+                        (c, Some(s.captions))
+                    }
+                    None => (xmp::Culling { tagged: locked, ..Default::default() }, None),
+                };
+                culling.locked = locked;
+                Details { meta, culling, captions: captions::load(sidecar_captions, p.raw.is_some(), p.jpeg.as_deref()) }
             })
             .collect()
     })

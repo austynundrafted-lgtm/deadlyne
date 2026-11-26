@@ -10,11 +10,11 @@
 //! On Windows the same URLs arrive as `http://thumb.localhost/<path>`; `convertFileSrc` in the
 //! frontend builds the right form for each platform.
 
-use crate::{exif, jpeg_meta, raw};
+use crate::{jpeg_meta, raw};
 use percent_encoding::percent_decode_str;
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::Path;
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::{Arc, Condvar, Mutex, OnceLock};
 use tauri::http::{Request, Response};
 use tauri::UriSchemeResponder;
 
@@ -26,16 +26,84 @@ pub enum Kind {
 
 /// Long edge a thumbnail is decoded to (at least; DCT scaling picks the next size up).
 const THUMB_EDGE: u32 = 600;
+/// Long edge of the quick camera preview shown while the real thumbnail is made.
+const TINY_EDGE: u32 = 240;
 const THUMB_CACHE_BYTES: usize = 512 << 20;
 
-pub fn serve(request: Request<Vec<u8>>, responder: UriSchemeResponder, kind: Kind) {
-    let raw_path = request.uri().path().trim_start_matches('/').to_string();
-    rayon::spawn(move || {
-        let path = percent_decode_str(&raw_path).decode_utf8_lossy().to_string();
-        let _access = crate::data::access(Path::new(&path)).ok();
-        let body = match kind {
-            Kind::Thumb => thumbnail(&path),
-            Kind::Preview => preview(Path::new(&path)).map(Arc::new),
+/// What a request asks for. `?tiny` on a thumb URL asks for the camera's own small preview,
+/// shown softly while the real thumbnail is made.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Job {
+    Preview,
+    Tiny,
+    Thumb,
+}
+
+struct Pending {
+    job: Job,
+    path: String,
+    responder: UriSchemeResponder,
+}
+
+/// Requests waiting for a worker. Newest first: after a fast scroll through thousands of photos,
+/// the ones on screen now are made before the ones scrolled past. Loupe previews and the quick
+/// camera previews go ahead of full thumbnails, and photos the grid still shows go ahead of
+/// those it no longer does. Every request is still answered in the end.
+struct Queue {
+    pending: Mutex<Vec<Pending>>,
+    ready: Condvar,
+    /// Paths the contact sheet has on screen (see `thumbs_wanted`).
+    wanted: Mutex<HashSet<String>>,
+}
+
+fn queue() -> &'static Queue {
+    static QUEUE: OnceLock<Queue> = OnceLock::new();
+    QUEUE.get_or_init(|| {
+        let workers = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(4).clamp(2, 8);
+        for i in 0..workers {
+            let _ = std::thread::Builder::new().name(format!("deadlyne-images-{i}")).spawn(work);
+        }
+        Queue { pending: Mutex::new(Vec::new()), ready: Condvar::new(), wanted: Mutex::new(HashSet::new()) }
+    })
+}
+
+/// Which request to answer next, by the order described on `Queue`: an index into `jobs`,
+/// oldest first.
+fn pick<'a>(jobs: impl DoubleEndedIterator<Item = (Job, &'a str)> + ExactSizeIterator, wanted: &HashSet<String>) -> Option<usize> {
+    let rank = |job: Job, path: &str| match job {
+        Job::Preview => 0,
+        Job::Tiny if wanted.is_empty() || wanted.contains(path) => 1,
+        Job::Thumb if wanted.is_empty() || wanted.contains(path) => 2,
+        Job::Tiny => 3,
+        Job::Thumb => 4,
+    };
+    // `min_by_key` keeps the first of equal ranks, so walking from the end favors the newest.
+    jobs.enumerate().rev().min_by_key(|(_, (job, path))| rank(*job, path)).map(|(i, _)| i)
+}
+
+fn next(pending: &mut Vec<Pending>, wanted: &HashSet<String>) -> Option<Pending> {
+    let i = pick(pending.iter().map(|p| (p.job, p.path.as_str())), wanted)?;
+    Some(pending.remove(i))
+}
+
+fn work() {
+    let q = queue();
+    loop {
+        let request = {
+            let mut pending = q.pending.lock().unwrap_or_else(|e| e.into_inner());
+            loop {
+                let found = next(&mut pending, &q.wanted.lock().unwrap_or_else(|e| e.into_inner()));
+                if let Some(p) = found {
+                    break p;
+                }
+                pending = q.ready.wait(pending).unwrap_or_else(|e| e.into_inner());
+            }
+        };
+        let _access = crate::data::access(Path::new(&request.path)).ok();
+        let body = match request.job {
+            Job::Thumb => thumbnail(&request.path),
+            Job::Tiny => tiny(&request.path),
+            Job::Preview => preview(Path::new(&request.path)).map(Arc::new),
         };
         let response = match body {
             Some(bytes) => Response::builder()
@@ -45,8 +113,43 @@ pub fn serve(request: Request<Vec<u8>>, responder: UriSchemeResponder, kind: Kin
                 .body(bytes.to_vec()),
             None => Response::builder().status(404).body(Vec::new()),
         };
-        responder.respond(response.unwrap());
-    });
+        request.responder.respond(response.unwrap());
+    }
+}
+
+pub fn serve(request: Request<Vec<u8>>, responder: UriSchemeResponder, kind: Kind) {
+    let raw_path = request.uri().path().trim_start_matches('/');
+    let path = percent_decode_str(raw_path).decode_utf8_lossy().to_string();
+    let tiny = request.uri().query().is_some_and(|q| q.split('&').any(|p| p == "tiny"));
+    let job = match kind {
+        Kind::Preview => Job::Preview,
+        Kind::Thumb if tiny => Job::Tiny,
+        Kind::Thumb => Job::Thumb,
+    };
+    let q = queue();
+    q.pending.lock().unwrap_or_else(|e| e.into_inner()).push(Pending { job, path, responder });
+    q.ready.notify_one();
+}
+
+/// The contact sheet says which photos it has on screen, so those come first.
+#[tauri::command]
+pub fn thumbs_wanted(paths: Vec<String>) {
+    *queue().wanted.lock().unwrap_or_else(|e| e.into_inner()) = paths.into_iter().collect();
+    queue().ready.notify_all();
+}
+
+/// Drops a file's cached thumbnails after its orientation changes.
+pub fn forget(path: &str) {
+    let mut c = cache().lock().unwrap_or_else(|e| e.into_inner());
+    c.remove(path);
+    c.remove(&tiny_key(path));
+}
+
+/// The selected file's orientation, independent of the paired photo's metadata. A RAW's
+/// sidecar orientation (set by rotating it here or in Lightroom) wins over the camera's.
+#[tauri::command]
+pub async fn preview_orientation(path: String) -> u32 {
+    crate::jobs::blocking(move || crate::rotate::effective(Path::new(&path))).await
 }
 
 fn preview(path: &Path) -> Option<Vec<u8>> {
@@ -88,26 +191,44 @@ fn neutralize_orientation(jpeg: &mut [u8]) {
 }
 
 fn thumbnail(path: &str) -> Option<Arc<Vec<u8>>> {
-    if let Some(hit) = cache().lock().unwrap().get(path) {
+    if let Some(hit) = cache().lock().unwrap_or_else(|e| e.into_inner()).get(path) {
         return Some(hit);
     }
     let p = Path::new(path);
     let jpeg = raw::extract(p, raw::PreviewKind::Thumbnail)?;
-    let orientation = exif::read(p).orientation;
-    let bytes = Arc::new(render(&jpeg, orientation)?);
-    cache().lock().unwrap().insert(path.to_string(), bytes.clone());
+    let orientation = crate::rotate::effective(p);
+    let bytes = Arc::new(render(&jpeg, orientation, THUMB_EDGE)?);
+    cache().lock().unwrap_or_else(|e| e.into_inner()).insert(path.to_string(), bytes.clone());
+    Some(bytes)
+}
+
+fn tiny_key(path: &str) -> String {
+    format!("{path}\0tiny")
+}
+
+/// The small preview the camera already made (about 160 px), upright: a few kilobytes read
+/// from the start of the file, ready in a millisecond or two.
+fn tiny(path: &str) -> Option<Arc<Vec<u8>>> {
+    let key = tiny_key(path);
+    if let Some(hit) = cache().lock().unwrap_or_else(|e| e.into_inner()).get(&key) {
+        return Some(hit);
+    }
+    let p = Path::new(path);
+    let jpeg = raw::extract_tiny(p)?;
+    let bytes = Arc::new(render(&jpeg, crate::rotate::effective(p), TINY_EDGE)?);
+    cache().lock().unwrap_or_else(|e| e.into_inner()).insert(key, bytes.clone());
     Some(bytes)
 }
 
 /// Decodes at a reduced size, rotates upright and re-encodes.
-fn render(jpeg: &[u8], orientation: u32) -> Option<Vec<u8>> {
+fn render(jpeg: &[u8], orientation: u32, edge: u32) -> Option<Vec<u8>> {
     let mut decoder = jpeg_decoder::Decoder::new(std::io::Cursor::new(jpeg));
     decoder.read_info().ok()?;
     let info = decoder.info()?;
     // Both requested dimensions must be proportional: the decoder picks the smallest DCT scale
     // that satisfies either one.
     let long = info.width.max(info.height) as u32;
-    let fit = |edge: u16| ((edge as u32 * THUMB_EDGE.min(long)) / long).max(1) as u16;
+    let fit = |e: u16| ((e as u32 * edge.min(long)) / long).max(1) as u16;
     let (w, h) = decoder.scale(fit(info.width), fit(info.height)).ok()?;
     let pixels = decoder.decode().ok()?;
     let rgb = to_rgb(decoder.info()?.pixel_format, pixels);
@@ -160,6 +281,13 @@ impl ByteCache {
         self.map.get(key).cloned()
     }
 
+    fn remove(&mut self, key: &str) {
+        if let Some(v) = self.map.remove(key) {
+            self.bytes -= v.len();
+            self.order.retain(|k| k != key);
+        }
+    }
+
     fn insert(&mut self, key: String, value: Arc<Vec<u8>>) {
         self.bytes += value.len();
         if let Some(old) = self.map.insert(key.clone(), value) {
@@ -184,6 +312,7 @@ fn cache() -> &'static Mutex<ByteCache> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::exif;
 
     fn jpeg() -> Vec<u8> {
         let img = image::RgbImage::from_fn(96, 64, |x, y| image::Rgb([(x * 2) as u8, (y * 3) as u8, 80]));
@@ -217,6 +346,23 @@ mod tests {
         out.extend(tiff);
         out.extend(&jpeg()[2..]);
         out
+    }
+
+    #[test]
+    fn newest_on_screen_requests_go_first() {
+        let none = HashSet::new();
+        let jobs = [(Job::Thumb, "a"), (Job::Thumb, "b"), (Job::Thumb, "c")];
+        // After a fast scroll, the last photo asked for is made first.
+        assert_eq!(pick(jobs.iter().copied(), &none), Some(2));
+        // The loupe's preview and quick camera previews go ahead of full thumbnails.
+        let mixed = [(Job::Thumb, "a"), (Job::Preview, "p"), (Job::Tiny, "b"), (Job::Thumb, "c")];
+        assert_eq!(pick(mixed.iter().copied(), &none), Some(1));
+        let no_preview: Vec<_> = mixed.iter().copied().filter(|j| j.0 != Job::Preview).collect();
+        assert_eq!(pick(no_preview.iter().copied(), &none), Some(1));
+        // Photos still on screen beat newer ones the grid has scrolled away from.
+        let wanted: HashSet<String> = ["a".to_string()].into();
+        assert_eq!(pick(jobs.iter().copied(), &wanted), Some(0));
+        assert_eq!(pick(std::iter::empty::<(Job, &str)>(), &none), None);
     }
 
     #[test]

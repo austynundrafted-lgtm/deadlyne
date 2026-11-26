@@ -153,6 +153,67 @@ pub fn extract(path: &Path, kind: PreviewKind) -> Option<Vec<u8>> {
     r.read_exact(best.offset, best.length)
 }
 
+/// Long edge above which an "embedded thumbnail" is too big to be quick.
+const TINY_MAX_EDGE: u32 = 700;
+
+/// The camera's smallest preview: a RAW's embedded thumbnail, or the EXIF thumbnail inside a
+/// JPEG (about 160 × 120). `None` when the file has nothing that small.
+pub fn extract_tiny(path: &Path) -> Option<Vec<u8>> {
+    let _access = crate::data::access(path).ok()?;
+    let r = Reader::open(path)?;
+    let head = r.read(0, 2)?;
+    let best = if head == [0xFF, 0xD8] {
+        exif_thumbnail(&r)?
+    } else {
+        find_candidates(&r).into_iter().min_by_key(|c| c.area())?
+    };
+    if best.long_edge() > TINY_MAX_EDGE {
+        return None;
+    }
+    r.read_exact(best.offset, best.length)
+}
+
+/// IFD1's JPEG thumbnail in a JPEG's EXIF block.
+fn exif_thumbnail(r: &Reader) -> Option<Candidate> {
+    let head = r.read(0, 128 << 10)?;
+    let mut p = 2;
+    while p + 4 <= head.len() && head[p] == 0xFF {
+        let marker = head[p + 1];
+        let len = u16_at(&head, p + 2, false) as usize;
+        if marker == 0xDA || marker == 0xD9 || len < 2 {
+            return None;
+        }
+        let data = p + 4;
+        if marker == 0xE1 && head.get(data..data + 6) == Some(b"Exif\0\0") {
+            let tiff = data + 6;
+            let t = head.get(tiff..(p + 2 + len).min(head.len()))?;
+            let le = match t.get(..4)? {
+                b"II\x2a\0" => true,
+                b"MM\0\x2a" => false,
+                _ => return None,
+            };
+            let ifd0 = u32_at(t, 4, le) as usize;
+            let count = u16_at(t.get(ifd0..)?, 0, le) as usize;
+            let ifd1 = u32_at(t.get(ifd0 + 2 + count * 12..)?, 0, le) as usize;
+            if ifd1 == 0 {
+                return None;
+            }
+            let (mut offset, mut length) = (None, None);
+            for i in 0..u16_at(t.get(ifd1..)?, 0, le) as usize {
+                let e = t.get(ifd1 + 2 + i * 12..ifd1 + 14 + i * 12)?;
+                match u16_at(e, 0, le) {
+                    0x0201 => offset = Some(u32_at(e, 8, le) as u64),
+                    0x0202 => length = Some(u32_at(e, 8, le) as usize),
+                    _ => {}
+                }
+            }
+            return probe(r, Candidate::new(tiff as u64 + offset?, length?));
+        }
+        p += 2 + len;
+    }
+    None
+}
+
 pub fn find_candidates(r: &Reader) -> Vec<Candidate> {
     let Some(head) = r.read(0, 16) else { return vec![] };
     if head.len() < 16 {

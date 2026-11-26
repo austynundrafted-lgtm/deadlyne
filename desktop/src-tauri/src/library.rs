@@ -217,6 +217,26 @@ pub async fn viewing_transfer(from: String, to: String, keys: Vec<String>) -> Re
     .await
 }
 
+/// Photos renamed in place keep their viewed status: `pairs` are (old stem, new stem).
+pub fn rename_viewed(folder: &str, pairs: &[(String, String)]) -> Result<(), String> {
+    let folder = normalize(folder);
+    with_entry(&folder, |e| {
+        let mut changed = false;
+        for (old, new) in pairs {
+            let (old, new) = (old.to_lowercase(), new.to_lowercase());
+            if e.viewed.remove(&old) {
+                e.viewed.insert(new.clone());
+                changed = true;
+            }
+            if e.last.as_deref() == Some(old.as_str()) {
+                e.last = Some(new);
+                changed = true;
+            }
+        }
+        if changed { write_record(&folder, e) } else { Ok(()) }
+    })
+}
+
 /// A folder was renamed or found somewhere else: its progress (and its subfolders') follows it.
 pub fn relocate_records(from: &str, to: &str) {
     let (from, to) = (normalize(from), normalize(to));

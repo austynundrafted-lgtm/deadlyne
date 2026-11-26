@@ -2,7 +2,7 @@
 // clicks: the card is picked automatically and the last destination and naming are remembered.
 import { useEffect, useMemo, useState } from "react"
 import { listen } from "@tauri-apps/api/event"
-import { ChevronDown, FolderOpen, HardDrive } from "lucide-react"
+import { ChevronDown, FolderOpen, HardDrive, Lock } from "lucide-react"
 import { toast } from "sonner"
 import { create } from "zustand"
 import {
@@ -21,7 +21,7 @@ import {
 import { isIPad, plural } from "@/lib/format"
 import { pickFolder } from "@/lib/platform"
 import { getSetting, setSetting } from "@/lib/settings"
-import { cn } from "@/lib/utils"
+import { CHOICE, cn } from "@/lib/utils"
 import { useStore } from "@/store"
 import { useUI } from "@/ui"
 import { Button } from "@/components/ui/button"
@@ -33,6 +33,7 @@ import { Input } from "@/components/ui/input"
 import { Progress } from "@/components/ui/progress"
 import { Select, SelectContent, SelectItem, SelectSeparator, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 
 export interface IngestPrefs {
   destination: string | null
@@ -137,6 +138,9 @@ export function IngestDialog() {
   const [info, setInfo] = useState<SourceInfo | null>(null)
   const [space, setSpace] = useState<number | null>(null)
   const [firstSeq, setFirstSeq] = useState(1)
+  // Only the photos protected on the camera. Chosen per card, never remembered: a later card
+  // with nothing locked must not ingest nothing.
+  const [lockedOnly, setLockedOnly] = useState(false)
 
   const sources = useMemo(() => [...cards.map((c) => c.path), ...customSources.filter((s) => !cards.some((c) => c.path === s))], [cards, customSources])
 
@@ -151,6 +155,7 @@ export function IngestDialog() {
 
   useEffect(() => {
     setInfo(null)
+    setLockedOnly(false)
     if (source) inspectSource(source).then(setInfo)
   }, [source])
 
@@ -161,7 +166,9 @@ export function IngestDialog() {
 
   const close = () => useUI.getState().open("ingest", false)
   const example = names(prefs, firstSeq)
-  const tooBig = info && space !== null && info.bytes > space
+  const onlyLocked = lockedOnly && !!info?.locked
+  const needed = info ? (onlyLocked ? info.lockedBytes : info.bytes) : 0
+  const tooBig = info && space !== null && needed > space
   const sourceLabel = (p: string) => cards.find((c) => c.path === p)?.name ?? p
 
   const start = async () => {
@@ -175,6 +182,7 @@ export function IngestDialog() {
       firstSeq,
       skipExisting: prefs.skipExisting,
       eject: prefs.eject && !isIPad,
+      lockedOnly: onlyLocked,
     }
     // Mark it running first: a small card can finish before the start call even returns.
     useIngest.setState({ running: true, source, started: null, progress: null })
@@ -253,6 +261,28 @@ export function IngestDialog() {
                 </FieldDescription>
               </Field>
 
+              {!!info?.locked && (
+                <Field>
+                  <FieldLabel id="ingest-which-label">Photos</FieldLabel>
+                  <ToggleGroup
+                    type="single"
+                    variant="outline"
+                    value={lockedOnly ? "locked" : "all"}
+                    onValueChange={(v) => v && setLockedOnly(v === "locked")}
+                    className="w-full"
+                    aria-labelledby="ingest-which-label"
+                  >
+                    <ToggleGroupItem value="all" className={cn("flex-1", CHOICE)}>
+                      All ({info.photos.toLocaleString()})
+                    </ToggleGroupItem>
+                    <ToggleGroupItem value="locked" className={cn("flex-1", CHOICE)}>
+                      <Lock /> Locked on camera ({info.locked.toLocaleString()})
+                    </ToggleGroupItem>
+                  </ToggleGroup>
+                  <FieldDescription>The photos you protected on the camera. They arrive already tagged.</FieldDescription>
+                </Field>
+              )}
+
               <Field>
                 <FieldLabel>To</FieldLabel>
                 <Button
@@ -269,7 +299,7 @@ export function IngestDialog() {
                 </Button>
                 {space !== null && (
                   <FieldDescription className={cn(tooBig && "text-destructive")}>
-                    {tooBig ? `Not enough room: ${formatBytes(space)} free, ${formatBytes(info!.bytes)} needed.` : `${formatBytes(space)} free`}
+                    {tooBig ? `Not enough room: ${formatBytes(space)} free, ${formatBytes(needed)} needed.` : `${formatBytes(space)} free`}
                   </FieldDescription>
                 )}
               </Field>
@@ -330,7 +360,7 @@ export function IngestDialog() {
                 Cancel
               </Button>
               <Button type="submit" disabled={!source || !prefs.destination || !!tooBig}>
-                Ingest{info ? ` ${plural(info.photos, "photo")}` : ""}
+                Ingest{info ? (onlyLocked ? ` ${plural(info.locked, "locked photo")}` : ` ${plural(info.photos, "photo")}`) : ""}
               </Button>
             </DialogFooter>
           </form>

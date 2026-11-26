@@ -24,6 +24,7 @@ import { AddFilesDialog } from "@/components/AddFilesDialog"
 import { FolderIcon } from "@/components/FolderIcon"
 import { CodesView } from "@/components/CodesView"
 import { ExportDialog } from "@/components/ExportDialog"
+import { RenameDialog } from "@/components/RenameDialog"
 import { FtpServersDialog } from "@/components/FtpServersDialog"
 import { HomeView } from "@/components/HomeView"
 import { IngestDialog, initIngest } from "@/components/IngestDialog"
@@ -146,6 +147,7 @@ export default function App() {
       <ProfileDialog />
       <SendDialog />
       <ExportDialog />
+      <RenameDialog />
       <FtpServersDialog />
       <ShortcutsDialog />
       <AddFilesDialog />

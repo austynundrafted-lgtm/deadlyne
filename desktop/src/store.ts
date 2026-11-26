@@ -12,6 +12,9 @@ import {
   emptyCaptions,
   filesFor,
   loadDetails,
+  photoFileName,
+  renamePhotos as renameFiles,
+  rotatePhotos as rotateFiles,
   saveCaptions,
   saveCulling,
   scanFolder,
@@ -33,6 +36,7 @@ import { noteRecentShoot } from "@/lib/recents"
 import { DEFAULT_COPYRIGHT, getSetting, pref, setPref, setSetting, type Profile } from "@/lib/settings"
 import { expandVariables } from "@/lib/variables"
 import { photoKey, useViewing } from "@/lib/viewing"
+import { DEFAULT_SORT, saveSort, savedSort, sortPhotos, type SortOrder } from "@/lib/sort"
 import { confirm } from "@/lib/prompts"
 import { plural, trashAction, trashName } from "@/lib/format"
 
@@ -65,6 +69,8 @@ interface State {
   labelFilter: Label | null
   search: string
   fileScope: FileScope
+  /** The contact sheet's order, remembered per shoot. */
+  sort: SortOrder
   /** Show unviewed only. The viewed set is snapshotted when it's turned on, so photos don't vanish while you look. */
   unviewedOnly: boolean
   unviewedSnapshot: Set<string> | null
@@ -105,6 +111,7 @@ interface State {
   setUnviewedOnly: (on: boolean) => void
   showResume: (id: string) => void
   setFilter: (f: Partial<Pick<State, "tagFilter" | "minRating" | "labelFilter" | "search" | "fileScope">>) => void
+  setSort: (order: SortOrder) => void
   clearFilters: () => void
   click: (id: string, opts: { shift?: boolean; toggle?: boolean }) => void
   selectAll: () => void
@@ -130,15 +137,23 @@ interface State {
   /** Photographer, Credit and Copyright from the profile. False when there's no profile yet. */
   fillCredits: () => boolean
   transfer: (photos: Photo[], destination: string, moveFiles: boolean) => Promise<void>
+  /** Renames photos where they are; `stems` lines up with `photos`. Offers an undo. */
+  rename: (photos: Photo[], stems: string[], opts?: { undoing?: boolean }) => Promise<number>
+  /** Turns the target photos a quarter turn. Offers an undo. */
+  rotate: (clockwise: boolean, photos?: Photo[]) => Promise<void>
   trash: (photos: Photo[]) => Promise<void>
 }
 
 export const THUMB_MIN = 140
 export const THUMB_MAX = 420
 
-type FilterState = Pick<State, "photos" | "tagFilter" | "minRating" | "labelFilter" | "search" | "fileScope" | "unviewedSnapshot">
+type FilterState = Pick<State, "photos" | "tagFilter" | "minRating" | "labelFilter" | "search" | "fileScope" | "unviewedSnapshot" | "sort">
 
 export function visiblePhotos(s: FilterState): Photo[] {
+  return sortPhotos(filteredPhotos(s), s.sort)
+}
+
+function filteredPhotos(s: FilterState): Photo[] {
   const q = s.search.trim().toLowerCase()
   const seen = s.unviewedSnapshot
   if (s.tagFilter === "all" && s.minRating === 0 && !s.labelFilter && !q && s.fileScope === "both" && !seen) return s.photos
@@ -149,7 +164,7 @@ export function visiblePhotos(s: FilterState): Photo[] {
       p.rating >= s.minRating &&
       (!s.labelFilter || p.label === s.labelFilter) &&
       (s.fileScope === "both" || (s.fileScope === "raw" ? !!p.raw : !!p.jpeg)) &&
-      (!q || matchesSearch(p, q)),
+      (!q || matchesSearch(p, q, s.fileScope)),
   )
 }
 
@@ -158,15 +173,25 @@ export function useVisiblePhotos(): Photo[] {
   const f = useStore(
     useShallow((s) => ({
       photos: s.photos, tagFilter: s.tagFilter, minRating: s.minRating, labelFilter: s.labelFilter, search: s.search, fileScope: s.fileScope,
-      unviewedSnapshot: s.unviewedSnapshot,
+      unviewedSnapshot: s.unviewedSnapshot, sort: s.sort,
     })),
   )
-  return useMemo(() => visiblePhotos(f), [f.photos, f.tagFilter, f.minRating, f.labelFilter, f.search, f.fileScope, f.unviewedSnapshot]) // eslint-disable-line react-hooks/exhaustive-deps
+  return useMemo(() => visiblePhotos(f), [f.photos, f.tagFilter, f.minRating, f.labelFilter, f.search, f.fileScope, f.unviewedSnapshot, f.sort]) // eslint-disable-line react-hooks/exhaustive-deps
 }
 
-function matchesSearch(p: Photo, q: string) {
-  if (p.name.toLowerCase().includes(q)) return true
+function matchesSearch(p: Photo, q: string, scope: FileScope) {
+  if (photoFileName(p, scope).toLowerCase().includes(q)) return true
+  if (scope === "both" && p.jpeg && photoFileName(p, "jpeg").toLowerCase().includes(q)) return true
   return CAPTION_FIELDS.some((f) => captionValue(p.captions, f).toLowerCase().includes(q))
+}
+
+/** Keep the selection on files the new format view can actually show. */
+function selectionForScope(s: State): Partial<State> {
+  const visible = visiblePhotos(s)
+  const selected = new Set(visible.filter((p) => s.selected.has(p.id)).map((p) => p.id))
+  const focus = visible.find((p) => p.id === s.focus)?.id ?? selected.values().next().value ?? visible[0]?.id ?? null
+  if (focus !== s.focus && focus && !selected.size) selected.add(focus)
+  return { selected, focus, anchor: visible.some((p) => p.id === s.anchor) ? s.anchor : focus, loupe: s.loupe && !!focus, zoom: null }
 }
 
 export function targetPhotos(s: Pick<State, "loupe" | "focus" | "photos" | "selected">): Photo[] {
@@ -192,6 +217,7 @@ function updatePhotos(get: () => State, set: (p: Partial<State>) => void, ids: S
 }
 
 let openGeneration = 0
+let contentsRevision = 0
 let resumeTimer: ReturnType<typeof setTimeout> | undefined
 
 /** The folder's own documents plus the ones linked to it, sorted by name. */
@@ -199,7 +225,7 @@ async function readContents(folder: string): Promise<{ subfolders: SubFolder[]; 
   const links = useLibrary.getState().links.filter((l) => samePath(l.folder, folder))
   const [contents, linked] = await Promise.all([
     folderContents(folder).catch(() => ({ subfolders: [], documents: [] })),
-    links.length ? docsInfo(links.map((l) => l.path)) : Promise.resolve([]),
+    links.length ? docsInfo(links.map((l) => l.path)).catch(() => []) : Promise.resolve([]),
   ])
   const documents: FolderDoc[] = [
     ...contents.documents,
@@ -225,6 +251,7 @@ export const useStore = create<State>((set, get) => ({
   labelFilter: null,
   search: "",
   fileScope: pref<FileScope>("fileScope", "both"),
+  sort: DEFAULT_SORT,
   unviewedOnly: false,
   unviewedSnapshot: null,
   resumeMarker: null,
@@ -256,49 +283,63 @@ export const useStore = create<State>((set, get) => ({
     const reopening = !!get().folder && samePath(get().folder!, path)
     set({ loading: true, workspace: "photos", loupe: false, librarySection: null, ...(opts?.origin ? { origin: opts.origin } : {}) })
     try {
-      const [{ folder, photos: entries }] = await Promise.all([scanFolder(path), useViewing.getState().load(path.replace(/[\\/]+$/, ""))])
+      const { folder, photos: entries } = await scanFolder(path)
       if (gen !== openGeneration) return
-      const photos: Photo[] = entries.map((e) => ({ ...e, rating: 0, label: null, tagged: false, captions: emptyCaptions() }))
-      const wanted = opts?.select ? (photos.find((p) => p.id === opts.select || p.raw === opts.select || p.jpeg === opts.select)?.id ?? null) : null
-      const first = wanted ?? photos[0]?.id ?? null
-      const contents = await readContents(folder)
+      const photos: Photo[] = entries.map((e) => ({ ...e, rating: 0, label: null, tagged: false, locked: false, captions: emptyCaptions() }))
+      const filters = { tagFilter: "all" as const, minRating: 0, labelFilter: null, search: "", unviewedOnly: false, unviewedSnapshot: null, sort: savedSort(folder) }
+      const revision = ++contentsRevision
+      const contents = readContents(folder)
+      const initialTab = opts?.tab ?? (reopening ? get().folderTab : null)
+      const initialContents = !photos.length && !initialTab ? await contents : { subfolders: [], documents: [] }
       if (gen !== openGeneration) return
-      if (useViewing.getState().folder !== folder) await useViewing.getState().load(folder)
+      const visible = visiblePhotos({ ...filters, photos, fileScope: get().fileScope })
+      const wanted = opts?.select ? visible.find((p) => p.id === opts.select || p.raw === opts.select || p.jpeg === opts.select)?.id : null
+      const first = wanted ?? visible[0]?.id ?? null
+      const viewing = useViewing.getState().load(folder)
       set({
-        folder, photos, loading: false, detailsReady: false,
+        folder, photos, loading: false, detailsReady: !photos.length,
         selected: new Set(first ? [first] : []), anchor: first, focus: first, pristine: !wanted,
-        tagFilter: "all", minRating: 0, labelFilter: null, search: "",
-        unviewedOnly: false, unviewedSnapshot: null, resumeMarker: null,
-        ...contents,
-        selectedDoc: null,
-        folderTab: opts?.tab ?? (reopening ? get().folderTab : !photos.length && contents.subfolders.length ? "folders" : "photos"),
+        ...filters, ...initialContents, resumeMarker: null, selectedDoc: null,
+        folderTab: initialTab ?? (initialContents.subfolders.length ? "folders" : "photos"),
       })
       noteRecentShoot(folder, photos.length)
       useLibrary.getState().noteOpened(folder)
 
-      // Capture times, camera info, existing ratings and captions arrive a moment later.
-      const details = await loadDetails(entries)
-      if (gen !== openGeneration) return
-      // Keep anything the user already changed in the meantime; otherwise take what's on disk.
-      const untouched = (p: Photo) => p.rating === 0 && !p.label && !p.tagged
-      const loaded = get().photos.map((p, i) => ({
-        ...p,
-        meta: details[i]?.meta,
-        ...(untouched(p) ? details[i]?.culling : {}),
-        captions: details[i]?.captions ?? p.captions,
-      }))
-      loaded.sort((a, b) => (a.meta?.captured ?? "").localeCompare(b.meta?.captured ?? ""))
-      set({ photos: loaded, detailsReady: true })
-      // Sorting by capture time can move the first-named file (e.g. MCD_0001 after a counter
-      // rollover) to the end. Start on the first frame shot, unless the user has already moved.
-      const s = get()
-      if (s.pristine && !s.loupe && loaded[0]) {
-        const id = loaded[0].id
-        set({ selected: new Set([id]), anchor: id, focus: id })
-      }
+      // The grid can request thumbnails while the library and metadata catch up.
+      const details = entries.length ? loadDetails(entries) : Promise.resolve([])
+      const refreshContents = contents.then((result) => {
+        if (gen === openGeneration && revision === contentsRevision) set(result)
+      })
+      const restoreViewing = viewing.then(() => {
+        if (gen === openGeneration && get().unviewedOnly && !get().unviewedSnapshot && useViewing.getState().folder === folder) {
+          set({ unviewedSnapshot: new Set(useViewing.getState().viewed) })
+        }
+      })
+      const applyDetails = details.then((result) => {
+        if (gen !== openGeneration || !entries.length) return
+        const byId = new Map(entries.map((p, i) => [p.id, { details: result[i], initial: photos[i] }]))
+        const loaded = get().photos.map((p) => {
+          const record = byId.get(p.id)
+          if (!record?.details) return p
+          const { details, initial } = record
+          const untouched = p.rating === initial.rating && p.label === initial.label && p.tagged === initial.tagged
+          return {
+            ...p,
+            meta: details.meta,
+            // The camera lock comes from the file, whatever was culled while details loaded.
+            ...(untouched ? details.culling : { locked: details.culling.locked }),
+            captions: p.captions === initial.captions ? details.captions : p.captions,
+          }
+        })
+        loaded.sort((a, b) => (a.meta?.captured ?? "").localeCompare(b.meta?.captured ?? ""))
+        const s = get()
+        const id = s.pristine && !s.loupe ? visiblePhotos({ ...s, photos: loaded })[0]?.id : null
+        set({ photos: loaded, detailsReady: true, ...(id ? { selected: new Set([id]), anchor: id, focus: id } : {}) })
+      })
+      await Promise.all([refreshContents, restoreViewing, applyDetails])
     } catch (e) {
       if (gen !== openGeneration) return
-      set({ loading: false })
+      set({ loading: false, detailsReady: true })
       toast.error("Couldn’t open that folder", { description: String(e) })
       // If it has gone missing, the library says so (and offers to locate it) from now on.
       void useLibrary.getState().refreshStats([path])
@@ -308,8 +349,9 @@ export const useStore = create<State>((set, get) => ({
   refreshContents: async () => {
     const folder = get().folder
     if (!folder) return
+    const revision = ++contentsRevision
     const contents = await readContents(folder)
-    if (get().folder !== folder) return
+    if (get().folder !== folder || revision !== contentsRevision) return
     const selectedDoc = contents.documents.some((d) => d.path === get().selectedDoc) ? get().selectedDoc : null
     set({ ...contents, selectedDoc })
     useLibrary.getState().refreshStats([folder])
@@ -317,7 +359,11 @@ export const useStore = create<State>((set, get) => ({
 
   selectDoc: (selectedDoc) => set({ selectedDoc }),
 
-  setUnviewedOnly: (on) => set({ unviewedOnly: on, unviewedSnapshot: on ? new Set(useViewing.getState().viewed) : null }),
+  setUnviewedOnly: (on) => {
+    const viewing = useViewing.getState()
+    const ready = viewing.ready && viewing.folder === get().folder
+    set({ unviewedOnly: on, unviewedSnapshot: on && ready ? new Set(viewing.viewed) : null })
+  },
 
   showResume: (id) => {
     clearTimeout(resumeTimer)
@@ -328,13 +374,22 @@ export const useStore = create<State>((set, get) => ({
     resumeTimer = setTimeout(() => set({ resumeMarker: null }), 6000)
   },
 
+  setSort: (sort) => {
+    const folder = get().folder
+    if (folder) saveSort(folder, sort)
+    set({ sort })
+  },
+
   setFilter: (f) => {
     if (f.fileScope) setPref("fileScope", f.fileScope)
-    set(f)
+    const s = get()
+    set(f.fileScope && f.fileScope !== s.fileScope ? { ...f, ...selectionForScope({ ...s, ...f }) } : f)
   },
   clearFilters: () => {
     setPref("fileScope", "both")
-    set({ tagFilter: "all", minRating: 0, labelFilter: null, search: "", fileScope: "both", unviewedOnly: false, unviewedSnapshot: null })
+    const f = { tagFilter: "all", minRating: 0, labelFilter: null, search: "", fileScope: "both", unviewedOnly: false, unviewedSnapshot: null } as const
+    const s = get()
+    set(s.fileScope === "both" ? f : { ...f, ...selectionForScope({ ...s, ...f }) })
   },
 
   click: (id, { shift, toggle }) => {
@@ -454,7 +509,7 @@ export const useStore = create<State>((set, get) => ({
     const p = targetPhotos(get())[0]
     if (!p) return
     set({ captionClipboard: p.captions })
-    toast(`Copied caption info from ${p.name}`)
+    toast(`Copied caption info from ${photoFileName(p, get().fileScope)}`)
   },
 
   pasteCaptions: () => {
@@ -539,7 +594,7 @@ export const useStore = create<State>((set, get) => ({
     // the approved action to another photo or the other half of a RAW+JPG pair.
     const targets = photos.filter((p) => filesFor(p, fileScope).length).map((p) => ({ ...p }))
     if (!targets.length) return
-    const names = targets.slice(0, 3).map((p) => `“${p.name}”`).join(", ") + (targets.length > 3 ? "…" : "")
+    const names = targets.slice(0, 3).map((p) => `“${photoFileName(p, fileScope)}”`).join(", ") + (targets.length > 3 ? "…" : "")
     const scope = fileScope === "both" ? "The photo and sidecar files" : fileScope === "raw" ? "Only the RAW files and sidecars" : "Only the JPG files"
     if (!await confirm({
       title: targets.length === 1 ? "Are you sure you want to delete this photo?" : `Are you sure you want to delete ${plural(targets.length, "photo")}?`,
@@ -574,7 +629,96 @@ export const useStore = create<State>((set, get) => ({
       set({ busy: null })
     }
   },
+
+  rename: async (photos, stems, opts) => {
+    const folder = get().folder
+    const items = photos.map((photo, i) => ({ photo, stem: (stems[i] ?? "").trim() })).filter((i) => i.stem)
+    if (!folder || !items.length || get().busy) return 0
+    set({ busy: `Renaming ${plural(items.length, "photo")}…` })
+    try {
+      const r = await renameFiles(folder, items)
+      if (get().folder !== folder) return 0
+      const moved = new Map<string, string>()
+      for (const x of r.renamed) for (const [from, to] of x.files) moved.set(from, to)
+      const done = new Map(r.renamed.filter((x) => x.files.length).map((x) => [x.id, x]))
+      const newIds = new Map<string, string>()
+      const oldStems = new Map<string, string>()
+      const to = (path: string | null) => (path ? moved.get(path) ?? path : null)
+      set((s) => {
+        const photos = s.photos.map((p) => {
+          const x = done.get(p.id)
+          if (!x) return p
+          const id = to(p.id)!
+          newIds.set(p.id, id)
+          oldStems.set(id, baseName(p.name))
+          const dir = p.sidecar.slice(0, p.sidecar.length - fileName(p.sidecar).length)
+          return { ...p, id, name: fileName(id), raw: to(p.raw), jpeg: to(p.jpeg), sidecar: `${dir}${x.stem}.xmp` }
+        })
+        const re = (id: string | null) => (id ? newIds.get(id) ?? id : id)
+        return { photos, selected: new Set([...s.selected].map((id) => re(id)!)), anchor: re(s.anchor), focus: re(s.focus) }
+      })
+      // Rust moved the viewed marks to the new names: read them again.
+      void useViewing.getState().load(folder)
+      const count = done.size
+      if (r.errors.length) toast.error(`Renamed ${plural(count, "photo")}, with problems`, { description: r.errors.slice(0, 4).join("\n") })
+      else if (count && !opts?.undoing) {
+        toast.success(`Renamed ${plural(count, "photo")}`, {
+          duration: UNDO_MS,
+          action: {
+            label: "Undo",
+            onClick: () => {
+              const now = get().photos.filter((p) => oldStems.has(p.id))
+              void get().rename(now, now.map((p) => oldStems.get(p.id)!), { undoing: true })
+            },
+          },
+        })
+      } else if (count) toast.success(`Put back ${plural(count, "original name")}`)
+      return count
+    } catch (error) {
+      toast.error("Couldn’t rename the photos", { description: String(error) })
+      return 0
+    } finally {
+      set({ busy: null })
+    }
+  },
+
+  rotate: async (clockwise, photos) => {
+    const targets = photos ?? targetPhotos(get())
+    if (!targets.length || get().busy) return
+    try {
+      const r = await rotateFiles(targets, clockwise)
+      const turned = new Map(r.rotated.map((x) => [x.id, x]))
+      set((s) => ({
+        photos: s.photos.map((p) => {
+          const x = turned.get(p.id)
+          if (!x) return p
+          return {
+            ...p,
+            meta: p.meta && { ...p.meta, orientation: x.orientation },
+            jpegOrientation: x.jpegOrientation ?? p.jpegOrientation,
+            rotated: (p.rotated ?? 0) + 1,
+          }
+        }),
+      }))
+      if (r.errors.length) toast.error("Some photos couldn’t be rotated", { description: r.errors.slice(0, 4).join("\n") })
+      if (!turned.size) return
+      const ids = new Set(turned.keys())
+      toast.success(`Rotated ${clockwise ? "right" : "left"}`, {
+        id: "rotate",
+        duration: UNDO_MS,
+        description: "Saved in the XMP sidecar for RAWs and the orientation tag for JPGs. Pixels aren’t re-encoded.",
+        action: { label: "Undo", onClick: () => void get().rotate(!clockwise, get().photos.filter((p) => ids.has(p.id))) },
+      })
+    } catch (error) {
+      toast.error("Couldn’t rotate the photos", { description: String(error) })
+    }
+  },
 }))
+
+/** Rename and rotate notices carry Undo; give the photographer time to reach it. */
+const UNDO_MS = 10_000
+const fileName = (path: string) => path.split(/[\\/]/).pop() ?? path
+const baseName = (name: string) => name.replace(/\.[^.]+$/, "")
 
 /** Loads settings kept in the store file (called once at launch). */
 export async function loadSettings() {

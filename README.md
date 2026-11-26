@@ -93,7 +93,7 @@ Measured on this Mac (M-series, 18 cores) with a 2,192-frame Canon R3 football s
   - **Delimiter**: `=` by default, or `\` `;` `~` `` ` `` `|` `^`. You can also turn off expanding as you type, so codes expand only when you leave the field. **Try it** checks a code and shows which file and column it came from.
   - Files live in `~/Library/Application Support/Deadlyne/Code Replacements/`. Edits made in a text editor are picked up when you switch back to Deadlyne.
 - **Search** (⌘F) filters by filename, caption, headline, keywords or any other caption field.
-- **Files: RAW + JPG / RAW Only / JPG Only** (⌥⌘4/5/6). Shows pairs, or only photos that have that file type. Copy, move, drag, open and trash then act **only on that file type**. For example, JPG Only followed by Copy Tagged sends a client just the JPGs.
+- **Files: RAW + JPG / RAW Only / JPG Only** (⌥⌘4/5/6). Shows pairs or the selected file type. In the desktop app, single-format views display that file in the grid and loupe. Copy, move, drag, open and trash then act **only on that file type**. For example, JPG Only followed by Copy Tagged sends a client just the JPGs.
 - **Copy/Move tagged.** Sends RAW, JPEG and sidecar together (or just the chosen file type) and never overwrites.
 - **Move to Trash** is always recoverable. In the desktop app, deleting photos or removing saved items asks “Are you sure?” first, with Cancel selected. Photo confirmations show the filenames, count and RAW/JPG scope.
 - **Uncluttered photo viewing (desktop):** filenames appear under grid thumbnails, without repeating in the loupe controls or status bar.
@@ -116,6 +116,7 @@ Measured on this Mac (M-series, 18 cores) with a 2,192-frame Canon R3 football s
 | ⌘⌫ | Move to Trash |
 | ⇧⌘C / ⇧⌘M | Copy / Move tagged photos to… |
 | ⇧⌘T | Select tagged |
+| ⌘[ / ⌘] | Rotate left / right (desktop) |
 | ⌥⌘1 / 2 / 3 | Show all / tagged / untagged |
 | ⌘= / ⌘- | Bigger / smaller thumbnails |
 | ⇧⌘I | Ingest from card |

@@ -23,6 +23,7 @@ mod store_bridge;
 #[cfg(all(target_os = "macos", feature = "mac-app-store"))]
 mod mac_store;
 mod raw;
+mod rotate;
 mod xmp;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -62,10 +63,10 @@ pub fn run() {
         .register_asynchronous_uri_scheme_protocol("preview", |_ctx, request, responder| {
             images::serve(request, responder, images::Kind::Preview)
         })
-        .invoke_handler(tauri::generate_handler![folder::scan_folder, folder::load_details, xmp::save_culling, captions::save_captions,
+        .invoke_handler(tauri::generate_handler![folder::scan_folder, folder::load_details, images::preview_orientation, images::thumbs_wanted, rotate::rotate_photos, xmp::save_culling, captions::save_captions,
             codes::code_lists, codes::save_code_list, codes::create_code_list, codes::import_code_lists,
             codes::rename_code_list, codes::trash_code_list, codes::code_lists_folder,
-            fileops::transfer_photos, fileops::trash_photos, fileops::reveal, fileops::open_files,
+            fileops::transfer_photos, fileops::rename_photos, fileops::trash_photos, fileops::reveal, fileops::open_files,
             export::export_photos, export::export_cancel,
             ingest::memory_cards, ingest::inspect_source, ingest::free_space, ingest::start_ingest, ingest::cancel_ingest,
             ftp::ftp_set_password, ftp::ftp_has_password, ftp::ftp_test, ftp::ftp_send, ftp::ftp_cancel,

@@ -3,12 +3,11 @@
 // keyboard-first (see lib/hotkeys.ts); the mouse and right-click menus can do everything too.
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 import { useVirtualizer } from "@tanstack/react-virtual"
-import { Check, Eye, MessageSquareText, Play, Star, X } from "lucide-react"
+import { Check, Eye, Lock, MessageSquareText, Play, RotateCcw, RotateCw, Star, X } from "lucide-react"
 import { useShallow } from "zustand/react/shallow"
-import { thumbUrl, type Photo } from "@/lib/api"
+import { FILE_SCOPES, LABELS, photoFileName, primaryFile, thumbsWanted, thumbUrl, tinyThumbUrl, type Photo } from "@/lib/api"
 import { askTrash, copyOrMove, openExport, openTargets, revealTarget } from "@/lib/actions"
 import { captureTime, exposureLine, isIPad, labelColor, mod, openLabel, plural, revealLabel, trashAction } from "@/lib/format"
-import { LABELS } from "@/lib/api"
 import { cn } from "@/lib/utils"
 import { photoKey, useViewTracker } from "@/lib/viewing"
 import { THUMB_MAX, THUMB_MIN, useStore, useVisiblePhotos } from "@/store"
@@ -33,6 +32,7 @@ import { Button } from "@/components/ui/button"
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
 import { Progress } from "@/components/ui/progress"
 import { Slider } from "@/components/ui/slider"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 
 const GAP = 8
 const PAD = 12
@@ -52,7 +52,6 @@ export function PhotosView() {
           <Empty className="h-full flex-1">
             <EmptyHeader>
               <EmptyTitle>Opening…</EmptyTitle>
-              <EmptyDescription>Deadlyne reads the previews already inside your RAW files, so even thousand-frame shoots open instantly.</EmptyDescription>
             </EmptyHeader>
           </Empty>
         ) : (
@@ -128,6 +127,18 @@ function Grid() {
     paddingEnd: PAD,
   })
   useEffect(() => virtualizer.measure(), [rowHeight, virtualizer])
+
+  // Rust makes the thumbnails on screen first: tell it which those are as the sheet scrolls.
+  const scope = useStore((s) => s.fileScope)
+  const items = virtualizer.getVirtualItems()
+  const firstRow = items[0]?.index ?? 0
+  const lastRow = items[items.length - 1]?.index ?? -1
+  useEffect(() => {
+    const shown = list.slice(firstRow * columns, (lastRow + 1) * columns).map((p) => primaryFile(p, scope))
+    const timer = setTimeout(() => void thumbsWanted(shown).catch(() => {}), 60)
+    return () => clearTimeout(timer)
+  }, [list, firstRow, lastRow, columns, scope])
+  useEffect(() => () => void thumbsWanted([]).catch(() => {}), [])
 
   // Keep the focused photo on screen as the keyboard moves it; Continue reviewing centers it.
   const focusIndex = useMemo(() => list.findIndex((p) => p.id === focus), [list, focus])
@@ -286,6 +297,13 @@ function PhotoMenu({ photo, selected, children }: { photo: Photo; selected: bool
           </ContextMenuSubContent>
         </ContextMenuSub>
         <ContextMenuSeparator />
+        <ContextMenuItem onSelect={() => void s().rotate(false)}>
+          <RotateCcw /> Rotate left <ContextMenuShortcut>{mod}[</ContextMenuShortcut>
+        </ContextMenuItem>
+        <ContextMenuItem onSelect={() => void s().rotate(true)}>
+          <RotateCw /> Rotate right <ContextMenuShortcut>{mod}]</ContextMenuShortcut>
+        </ContextMenuItem>
+        <ContextMenuSeparator />
         <ContextMenuItem onSelect={() => s().copyCaptions()}>
           Copy caption info <ContextMenuShortcut>⌥{mod}C</ContextMenuShortcut>
         </ContextMenuItem>
@@ -295,6 +313,9 @@ function PhotoMenu({ photo, selected, children }: { photo: Photo; selected: bool
         <ContextMenuSeparator />
         <ContextMenuItem onSelect={() => openExport("selected")}>
           Export {them}… <ContextMenuShortcut>⇧{mod}E</ContextMenuShortcut>
+        </ContextMenuItem>
+        <ContextMenuItem onSelect={() => useUI.getState().openRename("selected")}>
+          Rename {them}…
         </ContextMenuItem>
         <ContextMenuItem onSelect={() => copyOrMove("selected", false)}>Copy {them} to…</ContextMenuItem>
         <ContextMenuItem onSelect={() => copyOrMove("selected", true)}>Move {them} to…</ContextMenuItem>
@@ -315,7 +336,16 @@ function PhotoMenu({ photo, selected, children }: { photo: Photo; selected: bool
 }
 
 const PhotoCard = memo(function PhotoCard({ photo: p, width, selected, focused, resume, onPointerDown, onOpen, onToggleTag, onRate, ref, className, style, ...rest }: CardProps) {
-  const [failed, setFailed] = useState(false)
+  const scope = useStore((s) => s.fileScope)
+  const file = primaryFile(p, scope)
+  const src = thumbUrl(file, p.rotated)
+  const tiny = tinyThumbUrl(file, p.rotated)
+  const name = photoFileName(p, scope)
+  const kind = scope === "both" ? p.kind : name.split(".").pop()?.toUpperCase()
+  const [failedSrc, setFailedSrc] = useState<string | null>(null)
+  // The camera's little preview shows at once; the real thumbnail covers it when it's ready.
+  const [loadedSrc, setLoadedSrc] = useState<string | null>(null)
+  const [failedTiny, setFailedTiny] = useState<string | null>(null)
   return (
     <div
       {...rest}
@@ -323,7 +353,8 @@ const PhotoCard = memo(function PhotoCard({ photo: p, width, selected, focused, 
       data-view-key={photoKey(p)}
       className={cn(
         "group/card relative flex shrink-0 flex-col overflow-hidden rounded-md bg-card shadow-edge",
-        selected ? "bg-accent ring-2 ring-(--workspace-photos)" : "hover:shadow-edge-hover",
+        // Amber means selected and nothing else: tag and stars stay neutral, so the three read apart.
+        selected ? "bg-accent ring-2 ring-(--workspace-photos) ring-offset-2 ring-offset-background" : "hover:shadow-edge-hover",
         focused && selected && "ring-3",
         className,
       )}
@@ -347,37 +378,69 @@ const PhotoCard = memo(function PhotoCard({ photo: p, width, selected, focused, 
       }}
     >
       <div className="relative min-h-0 flex-1 bg-photo-canvas">
-        {!failed && (
+        {loadedSrc !== src && failedTiny !== tiny && failedSrc !== src && (
           <img
-            src={thumbUrl(p)}
-            alt={p.name}
+            key={tiny}
+            src={tiny}
+            alt=""
+            aria-hidden
+            draggable={false}
+            className="absolute inset-0 size-full object-contain"
+            onError={() => setFailedTiny(tiny)}
+          />
+        )}
+        {failedSrc !== src && (
+          <img
+            key={src}
+            src={src}
+            alt={name}
             draggable={false}
             decoding="async"
-            className="size-full object-contain"
-            onError={() => setFailed(true)}
+            fetchPriority={focused ? "high" : undefined}
+            className="relative size-full object-contain"
+            onLoad={() => setLoadedSrc(src)}
+            onError={() => setFailedSrc(src)}
           />
         )}
         {resume && <ResumeMarker />}
-      </div>
-      <div className="flex h-photo-footer shrink-0 items-center gap-1 px-1.5 text-xs shadow-[inset_0_1px_0_var(--edge-light-faint)]">
+        {/* Tagged: a white check on the photo. Untagged: an empty ring while pointing at it. */}
         <Button
           variant="ghost"
           size="icon-xs"
           static
           aria-label={p.tagged ? "Untag" : "Tag"}
           aria-pressed={p.tagged}
-          className={cn("rounded-sm", p.tagged ? "border-[color-mix(in_oklab,var(--workspace-photos)_58%,black)] bg-(--workspace-photos) text-workspace-foreground sheen-cap shadow-[inset_0_1px_0_var(--edge-light-cap)] hover:bg-(--workspace-photos)/85 hover:text-workspace-foreground" : "text-muted-foreground")}
+          className={cn(
+            "absolute top-2 left-2 size-[22px] rounded-full shadow-raised",
+            p.tagged
+              ? "bg-foreground text-background hover:bg-foreground/85 hover:text-background"
+              : "border-[1.5px] border-white/80 bg-black/35 text-transparent opacity-0 group-hover/card:opacity-100 hover:bg-black/50 hover:text-white/80 focus-visible:opacity-100 pointer-coarse:opacity-100",
+            !p.tagged && selected && "opacity-100",
+            resume && "hidden",
+          )}
           onPointerDown={(e) => e.stopPropagation()}
           onClick={onToggleTag}
         >
-          <Check className={cn(!p.tagged && "text-muted-foreground")} />
+          <Check className="size-3.5" strokeWidth={3} />
         </Button>
+      </div>
+      <div className="flex h-photo-footer shrink-0 items-center gap-1.5 px-2.5 text-xs shadow-[inset_0_1px_0_var(--edge-light-faint)]">
+        {p.locked && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Lock className="size-3 shrink-0 text-muted-foreground" aria-label="Locked on the camera" />
+            </TooltipTrigger>
+            <TooltipContent className="max-w-56">
+              Locked on the camera. It counts as tagged; T untags it here, and the file stays locked.
+            </TooltipContent>
+          </Tooltip>
+        )}
         {p.label && <span className="size-2.5 shrink-0 rounded-full" style={{ background: labelColor(p.label) }} role="img" aria-label={`${p.label} label`} />}
-        <span className="min-w-0 flex-1 truncate font-medium text-foreground/90" title={p.name}>{p.name}</span>
+        <span className={cn("min-w-0 flex-1 truncate", p.tagged ? "font-semibold text-foreground" : "text-muted-foreground")} title={name}>{name}</span>
         {(p.captions.caption || p.captions.headline) && (
           <MessageSquareText className="size-3.5 shrink-0 text-muted-foreground" aria-label="Has a caption" />
         )}
-        {width > 260 && <span className="text-micro text-muted-foreground">{p.kind}</span>}
+        {width > 260 && <span className="text-micro text-muted-foreground">{kind}</span>}
         {/* Less is more: stars show once rated, or while pointing at the photo. */}
         <div className={cn(p.rating === 0 && !selected && "opacity-0 group-hover/card:opacity-100 focus-within:opacity-100 pointer-coarse:opacity-100")}>
           <Stars rating={p.rating} onRate={onRate} />
@@ -416,7 +479,7 @@ function Stars({ rating, onRate }: { rating: number; onRate: (n: number) => void
           onClick={() => onRate(n)}
         >
           <Star
-            className={cn("size-3", n <= rating ? "fill-(--workspace-photos) text-(--workspace-photos)" : "text-muted-foreground group-hover/button:text-foreground")}
+            className={cn("size-3", n <= rating ? "fill-foreground text-foreground" : "text-muted-foreground group-hover/button:text-foreground")}
           />
         </Button>
       ))}
@@ -440,6 +503,8 @@ function StatusBar() {
   const focused = useMemo(() => photos.find((p) => p.id === focus), [photos, focus])
   const tagged = useMemo(() => photos.reduce((n, p) => n + (p.tagged ? 1 : 0), 0), [photos])
   const shown = useVisiblePhotos().length
+  const fileScope = useStore((s) => s.fileScope)
+  const format = fileScope === "both" ? null : FILE_SCOPES.find((item) => item.value === fileScope)?.label
 
   const left = busy
     ? busy
@@ -478,6 +543,7 @@ function StatusBar() {
         className="w-24"
       />
       <span className="flex shrink-0 items-center gap-1 tabular-nums">
+        {format && <span className="text-foreground">{format} ·</span>}
         {shown < photos.length ? (
           <>
             {shown.toLocaleString()} of {plural(photos.length, "photo")}

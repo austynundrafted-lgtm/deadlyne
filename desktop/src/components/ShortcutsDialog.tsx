@@ -13,6 +13,7 @@ const GROUPS: { title: string; keys: [string[], string][] }[] = [
       [["6", "7", "8", "9"], "Red, yellow, green, blue label"],
       [[`${shift}${mod}A`], "Auto-advance in the loupe"],
       [[`${shift}${mod}T`], "Select tagged"],
+      [[`${mod}[`, `${mod}]`], "Rotate left, right"],
     ],
   },
   {
